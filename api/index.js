@@ -1,4 +1,4 @@
-// /api/index.js (Final and Secure Version with Limit-Based Reset)
+// /api/index.js (Final and Secure Version with Limit-Based Reset and GetTasks)
 
 /**
  * SHIB Ads WebApp Backend API
@@ -26,10 +26,9 @@ const ACTION_ID_EXPIRY_MS = 60000; // 60 seconds for Action ID to be valid
 const SPIN_SECTORS = [5, 10, 15, 20, 5];
 
 // ------------------------------------------------------------------
-// NEW Task Constants
+// Task Constants (القيم الثابتة للمهام تم حذفها - يتم جلبها من قاعدة البيانات)
 // ------------------------------------------------------------------
-const TASK_REWARD = 50;
-const TELEGRAM_CHANNEL_USERNAME = '@botbababab'; // يجب أن يكون هذا هو اسم المستخدم للقناة لبدء التحقق
+const TASK_COMPLETIONS_TABLE = 'user_task_completions'; // اسم افتراضي لجدول حفظ إكمال المهام
 
 
 /**
@@ -326,7 +325,7 @@ function generateStrongId() {
 
 /**
  * HANDLER: type: "generateActionId"
- * The client requests an action ID before starting a critical action (ad/spin/withdraw).
+ * The client requests an action ID before starting a critical action (ad/spin/withdraw/task).
  */
 async function handleGenerateActionId(req, res, body) {
     const { user_id, action_type } = body;
@@ -414,7 +413,7 @@ async function validateAndUseActionId(res, userId, actionId, actionType) {
 
 /**
  * HANDLER: type: "getUserData"
- * ⚠️ Fix: Now selects new limit columns and task_completed.
+ * ⚠️ Fix: Now selects new limit columns and task_completed (kept for backward compatibility).
  */
 async function handleGetUserData(req, res, body) {
     const { user_id } = body;
@@ -469,6 +468,44 @@ async function handleGetUserData(req, res, body) {
     }
 }
 
+/**
+ * NEW HANDLER: type: "getTasks"
+ * ⚠️ يجلب المهام المتاحة من جدول tasks وحالة إكمالها من جدول user_task_completions.
+ */
+async function handleGetTasks(req, res, body) {
+    const { user_id } = body;
+    const id = parseInt(user_id);
+    
+    try {
+        // 1. جلب قائمة المهام المتاحة من جدول tasks
+        const availableTasks = await supabaseFetch('tasks', 'GET', null, `?select=id,name,link,reward,max_participants`);
+
+        // 2. جلب المهام التي أكملها المستخدم
+        const completedTasks = await supabaseFetch(TASK_COMPLETIONS_TABLE, 'GET', null, `?user_id=eq.${id}&select=task_id`);
+        const completedTaskIds = Array.isArray(completedTasks) ? new Set(completedTasks.map(t => t.task_id)) : new Set();
+        
+        // 3. فلترة وتجهيز قائمة المهام
+        const tasksList = Array.isArray(availableTasks) ? availableTasks.map(task => {
+            const isCompleted = completedTaskIds.has(task.id);
+            
+            return {
+                task_id: task.id,
+                name: task.name,
+                link: task.link,
+                reward: task.reward,
+                max_participants: task.max_participants,
+                is_completed: isCompleted,
+            };
+        }) : [];
+
+        sendSuccess(res, { tasks: tasksList });
+
+    } catch (error) {
+        console.error('GetTasks failed:', error.message);
+        sendError(res, `Failed to retrieve tasks: ${error.message}`, 500);
+    }
+}
+
 
 /**
  * 1) type: "register"
@@ -492,7 +529,7 @@ async function handleRegister(req, res, body) {
         ref_by: ref_by ? parseInt(ref_by) : null,
         last_activity: new Date().toISOString(), // ⬅️ يبقى هنا للـ Rate Limit فقط
         is_banned: false,
-        task_completed: false, // ⬅️ NEW: Default value for the task
+        task_completed: false, // ⬅️ Default value for the original task (can be safely ignored by dynamic logic)
         // الأعمدة الجديدة ستحتوي على NULL بشكل افتراضي
       };
       await supabaseFetch('users', 'POST', newUser, '?select=id');
@@ -710,60 +747,96 @@ async function handleSpinResult(req, res, body) {
 
 /**
  * 7) NEW HANDLER: type: "completeTask"
- * ⚠️ Handles the one-time channel join reward task.
+ * 🟢 تم التعديل: أصبح ديناميكياً ويستخدم جدول tasks و user_task_completions
  */
 async function handleCompleteTask(req, res, body) {
-    const { user_id, action_id } = body;
+    // 1. Get task_id from request body
+    const { user_id, action_id, task_id } = body; 
     const id = parseInt(user_id);
-    const reward = TASK_REWARD;
-
-    // 1. Check and Consume Action ID (Security Check)
-    if (!await validateAndUseActionId(res, id, action_id, 'completeTask')) return;
+    const taskId = parseInt(task_id);
+    
+    // Ensure task_id is valid
+    if (isNaN(taskId)) {
+        return sendError(res, 'Missing or invalid task_id.', 400);
+    }
+    
+    // 2. Check and Consume Action ID (Security Check) - use task_id in action_type
+    // ⚠️ تم تغيير action_type ليصبح فريداً لكل مهمة لزيادة الأمان
+    if (!await validateAndUseActionId(res, id, action_id, `completeTask_${taskId}`)) return;
 
     try {
-        // 2. Fetch current user data
-        const users = await supabaseFetch('users', 'GET', null, `?id=eq.${id}&select=balance,is_banned,task_completed`);
-        if (!Array.isArray(users) || users.length === 0) {
-            return sendError(res, 'User not found.', 404);
+        // 3. Fetch Task Details (Reward, Link, Max Participants)
+        const tasks = await supabaseFetch('tasks', 'GET', null, `?id=eq.${taskId}&select=link,reward,max_participants`);
+        if (!Array.isArray(tasks) || tasks.length === 0) {
+            return sendError(res, 'Task not found.', 404);
         }
-        
-        const user = users[0];
+        const task = tasks[0];
+        const reward = task.reward;
+        const taskLink = task.link;
+        const maxParticipants = task.max_participants; // يمكن استخدامها للتحقق من الحد الأقصى مستقبلاً
 
-        // 3. Banned Check
-        if (user.is_banned) {
-            return sendError(res, 'User is banned.', 403);
+        // 4. Check if task is already completed for the user (باستخدام الجدول الوسيط)
+        const completions = await supabaseFetch(TASK_COMPLETIONS_TABLE, 'GET', null, `?user_id=eq.${id}&task_id=eq.${taskId}&select=id`);
+        if (Array.isArray(completions) && completions.length > 0) {
+            return sendError(res, 'Task already completed by this user.', 403);
         }
-        
-        // 4. Check if task is already completed
-        if (user.task_completed) {
-            return sendError(res, 'Task already completed.', 403);
-        }
-        
-        // 5. Check Rate Limit (Good practice for anti-spam)
+
+        // 5. Rate Limit Check 
         const rateLimitResult = await checkRateLimit(id);
         if (!rateLimitResult.ok) {
             return sendError(res, rateLimitResult.message, 429); 
         }
+        
+        // 6. Extract Channel Username from Link (للتأكد من أنها مهمة Telegram)
+        const channelUsernameMatch = taskLink.match(/t\.me\/([a-zA-Z0-9_]+)/);
+        
+        let isMember = false;
+        if (channelUsernameMatch) {
+            const channelUsername = `@${channelUsernameMatch[1]}`;
+            // 7. 🚨 CRITICAL: Check Channel Membership using Telegram API
+            isMember = await checkChannelMembership(id, channelUsername);
 
-        // 6. 🚨 CRITICAL: Check Channel Membership using Telegram API
-        const isMember = await checkChannelMembership(id, TELEGRAM_CHANNEL_USERNAME);
-
-        if (!isMember) {
-            return sendError(res, 'User has not joined the required channel.', 400);
+            if (!isMember) {
+                 return sendError(res, `User has not joined the required channel: ${channelUsername}`, 400);
+            }
+        } else {
+             // إذا لم يكن الرابط في صيغة t.me/username، نرفض الإكمال
+             return sendError(res, 'Task verification failed: The link is not a supported Telegram channel format for join tasks.', 400);
         }
 
-        // 7. Process Reward and Update User Data
+        // 8. Fetch balance and referrer ID 
+        const users = await supabaseFetch('users', 'GET', null, `?id=eq.${id}&select=balance,ref_by,is_banned`);
+        const user = users[0];
+        
+        if (user.is_banned) {
+            return sendError(res, 'User is banned.', 403);
+        }
+        
+        const referrerId = user.ref_by;
         const newBalance = user.balance + reward;
         
-        const updatePayload = {
-            balance: newBalance,
-            task_completed: true, // Mark as completed
-            last_activity: new Date().toISOString() // Update for Rate Limit
-        };
+        // 9. Update balance and last_activity
+        await supabaseFetch('users', 'PATCH', 
+            { 
+                balance: newBalance, 
+                last_activity: new Date().toISOString() 
+                // ⚠️ لم نعد نحدث task_completed هنا
+            }, 
+            `?id=eq.${id}`);
+            
+        // 10. Mark task as completed (INSERT into the junction table)
+        await supabaseFetch(TASK_COMPLETIONS_TABLE, 'POST', 
+            { user_id: id, task_id: taskId, reward_amount: reward }, 
+            '?select=user_id');
 
-        await supabaseFetch('users', 'PATCH', updatePayload, `?id=eq.${id}`);
+        // 11. Commission Call (اختياري)
+        if (referrerId) {
+            processCommission(referrerId, id, reward).catch(e => {
+                console.error(`Task Completion Commission failed silently for referrer ${referrerId}:`, e.message);
+            });
+        }
           
-        // 8. Success
+        // 12. Success
         sendSuccess(res, { new_balance: newBalance, actual_reward: reward, message: 'Task completed successfully.' });
 
     } catch (error) {
@@ -888,6 +961,9 @@ module.exports = async (req, res) => {
     case 'getUserData':
       await handleGetUserData(req, res, body);
       break;
+    case 'getTasks': // ⬅️ NEW: Added handler to get tasks list
+      await handleGetTasks(req, res, body);
+      break;
     case 'register':
       await handleRegister(req, res, body);
       break;
@@ -906,7 +982,7 @@ module.exports = async (req, res) => {
     case 'withdraw':
       await handleWithdraw(req, res, body);
       break;
-    case 'completeTask': // ⬅️ NEW: Handle the new task logic
+    case 'completeTask':
       await handleCompleteTask(req, res, body);
       break;
     case 'generateActionId': 
