@@ -583,98 +583,11 @@
 
         /* Specific styles for Error/Warning */
         .custom-alert-box.error .alert-title { color: #dc3545; }
-        .custom-alert-box.error .alert-icon::before { content: '🔔'; }
+        .custom-alert-box.error .alert-icon::before { content: '🤦'; }
 
         /* Specific styles for Warning/Info - Using Yellow/Brown for Pencil/Paper Theme */
         .custom-alert-box.warning .alert-title { color: #8B4513; } /* Brown */
         .custom-alert-box.warning .alert-icon::before { content: '✍️'; } /* Pencil/Writing Icon */
-
-        /* ===== Task Link Progress (NEW, COMPACT) ===== */
-        .task-link-container {
-            width: 100%;
-            max-width: 360px;
-            background: #fff;
-            padding: 8px;
-            border-radius: 10px;
-            box-shadow: 0 6px 18px rgba(0,0,0,0.06);
-            border: 1px solid #e6e6e6;
-            margin-bottom: 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            align-items: stretch;
-            font-size: 13px;
-        }
-        .task-link-title {
-            font-size: 14px;
-            color: #333;
-            font-weight: 700;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .task-link-progress-bar {
-            width: 100%;
-            height: 10px;
-            background: rgba(0,0,0,0.06);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        .task-link-progress-fill {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg,#ff9a00,#ff5a5a);
-            border-radius: 8px;
-            transition: width .4s ease;
-        }
-
-        /* 3D push button style for task link - smaller */
-        .task-link-button {
-            margin-top: 6px;
-            align-self: center;
-            background: linear-gradient(145deg,#ff7a7a,#ff3b3b);
-            color: #fff;
-            border: none;
-            padding: 8px 14px;
-            border-radius: 10px;
-            font-size: 13px;
-            font-weight: 700;
-            cursor: pointer;
-            box-shadow: 0 6px 0 #b02323, 0 12px 30px rgba(0,0,0,0.12);
-            transform: translateY(0);
-            transition: all .12s ease;
-            letter-spacing: 0.4px;
-            text-transform: none;
-        }
-        .task-link-button:active {
-            transform: translateY(4px);
-            box-shadow: 0 4px 0 #b02323, 0 10px 25px rgba(0,0,0,0.10);
-        }
-        .task-link-button[disabled] {
-            background: #ddd;
-            color: #888;
-            box-shadow: none;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        /* small helper text removed to keep it minimal as requested */
-        .task-link-small {
-            font-size: 12px;
-            color: #666;
-            text-align: center;
-        }
-
-        .no-channel-tasks {
-            margin-top: 12px;
-            font-size: 13px;
-            color: #666;
-            text-align: center;
-            background: rgba(255,255,255,0.6);
-            padding: 8px 12px;
-            border-radius: 8px;
-            border: 1px solid rgba(0,0,0,0.04);
-        }
 
     </style>
 </head>
@@ -688,7 +601,7 @@
         </span>
         <span class="o">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 16 18" height="18" width="16" class="letter">
-            <path fill="currentColor" d="M8.94 17.24C8.84667 17.2533 8.74667 17.26 8.64 17.26C8.54667 17.26 8.45333 17.26 8.36 17.26C7.66667 17.26 7.02667 17.16 6.44 16.96C5.86667 16.7733 5.30667 16.5533 4.76 16.3C3.33333 15.5933 2.28667 14.6 1.62 13.32C0.966667 12.0267 0.64 10.4933 0.64 8.72C0.64 7.68 0.766667 6.67333 1.02 5.7C1.28667 4.71333 1.68 3.82667 2.2 3.04C2.72 2.24 3.36667 1.58667 4.14 1.08C4.92667 0.573332 5.84667 0.273333 6.9 0.18C7.00667 0.166666 7.10667 0.159999 7.2 0.159999C7.29333 0.159999 7.38667 0.159999 7.48 0.159999C8.14667 0.159999 8.74 0.246666 9.26 0.419999C9.78 0.579999 10.3067 0.766666 10.84 0.979999C11.8 1.36667 12.6 1.94 13.24 2.7C13.88 3.46 14.36 4.35333 14.68 5.38C15 6.39333 15.16 7.48 15.16 8.64C15.16 9.72 15.0333 10.7533 14.78 11.74C14.5267 12.7267 14.14 13.62 13.62 14.42C13.1133 15.2067 12.4667 15.8467 11.68 16.34C10.9067 16.8467 9.99333 17.1467 8.94 17.24ZM6.92 16.04C7.94667 15.96 8.84 15.68 9.6 15.2C10.36 14.7067 10.9867 14.0733 11.48 13.3C11.9733 12.5133 12.34 11.64 12.58 10.68C12.8333 9.70667 12.96 8.69333 12.96 7.64C12.96 6.68 12.8467 5.76667 12.62 4.9C12.4067 4.02 12.0733 3.24 11.62 2.56C11.1667 1.88 10.5933 1.34667 9.9 0.959999C9.22 0.559999 8.41333 0.359999 7.48 0.359999C7.38667 0.359999 7.29333 0.359999 7.2 0.359999C7.12 0.359999 7.02667 0.366666 6.92 0.38C5.89333 0.473333 5.0 0.766666 4.24 1.26C3.48 1.74 2.84667 2.37333 2.34 3.16C1.83333 3.93333 1.45333 4.8 1.2 5.76C0.96 6.70667 0.84 7.69333 0.84 8.72C0.84 9.72 0.953333 10.6667 1.18 11.56C1.40667 12.44 1.74667 13.22 2.2 13.9C2.65333 14.5667 3.22667 15.0933 3.92 15.48C4.61333 15.8667 5.42 16.06 6.34 16.06C6.44667 16.06 6.54667 16.06 6.64 16.06C6.73333 16.06 6.82667 16.0533 6.92 16.04ZM6.92 12.94C6.86667 12.94 6.81333 12.9467 6.76 12.96C6.72 12.96 6.67333 12.96 6.62 12.96C5.82 12.96 5.18667 12.6133 4.72 11.92C4.26667 11.2267 4.04 10.0667 4.04 8.44C4.04 7.28 4.16667 6.34667 4.42 5.64C4.67333 4.93333 5.02 4.41333 5.46 4.08C5.9 3.73333 6.38667 3.54 6.92 3.5C6.97333 3.5 7.02667 3.5 7.08 3.5C7.13333 3.48667 7.18667 3.48 7.24 3.48C8.02667 3.48 8.64 3.82 9.08 4.5C9.52 5.16667 9.74 6.31333 9.74 7.94C9.74 9.67333 9.47333 10.9267 8.94 11.7C8.42 12.46 7.74667 12.8733 6.92 12.94ZM6.86 12.74C7.64667 12.6733 8.28667 12.2733 8.78 11.54C9.28667 10.8067 9.54 9.60667 9.54 7.94C9.54 7.18 9.49333 6.53333 9.4 6C9.30667 5.46667 9.16667 5.03333 8.98 4.7C8.91333 4.68667 8.84667 4.68 8.78 4.68C8.71333 4.66667 8.64667 4.66 8.58 4.66C7.79333 4.66 7.20667 5.07333 6.82 5.9C6.43333 6.71333 6.24 7.89333 6.24 9.44C6.24 10.2133 6.29333 10.8733 6.4 11.42C6.50667 11.9533 6.66 12.3933 6.86 12.74Z"/>
+            <path fill="currentColor" d="M8.94 17.24C8.84667 17.2533 8.74667 17.26 8.64 17.26C8.54667 17.26 8.45333 17.26 8.36 17.26C7.66667 17.26 7.02667 17.16 6.44 16.96C5.86667 16.7733 5.30667 16.5533 4.76 16.3C3.33333 15.5933 2.28667 14.6 1.62 13.32C0.966667 12.0267 0.64 10.4933 0.64 8.72C0.64 7.68 0.766667 6.67333 1.02 5.7C1.28667 4.71333 1.68 3.82667 2.2 3.04C2.72 2.24 3.36667 1.58667 4.14 1.08C4.92667 0.573332 5.84667 0.273333 6.9 0.18C7.00667 0.166666 7.10667 0.159999 7.2 0.159999C7.29333 0.159999 7.38667 0.159999 7.48 0.159999C8.14667 0.159999 8.74 0.246666 9.26 0.419999C9.78 0.579999 10.3067 0.766666 10.84 0.979999C11.8 1.36667 12.6 1.94 13.24 2.7C13.88 3.46 14.36 4.35333 14.68 5.38C15 6.39333 15.16 7.48 15.16 8.64C15.16 9.72 15.0333 10.7533 14.78 11.74C14.5267 12.7267 14.14 13.62 13.62 14.42C13.1133 15.2067 12.4667 15.8467 11.68 16.34C10.9067 16.8467 9.99333 17.1467 8.94 17.24ZM6.92 16.04C7.94667 15.96 8.84 15.68 9.6 15.2C10.36 14.7067 10.9867 14.0733 11.48 13.3C11.9733 12.5133 12.34 11.64 12.58 10.68C12.8333 9.70667 12.96 8.69333 12.96 7.64C12.96 6.68 12.8467 5.76667 12.62 4.9C12.4067 4.02 12.0733 3.24 11.62 2.56C11.1667 1.88 10.5933 1.34667 9.9 0.959999C9.22 0.559999 8.41333 0.359999 7.48 0.359999C7.38667 0.359999 7.29333 0.359999 7.2 0.359999C7.12 0.359999 7.02667 0.366666 6.92 0.38C5.89333 0.473333 5 0.766666 4.24 1.26C3.48 1.74 2.84667 2.37333 2.34 3.16C1.83333 3.93333 1.45333 4.8 1.2 5.76C0.96 6.70667 0.84 7.69333 0.84 8.72C0.84 9.72 0.953333 10.6667 1.18 11.56C1.40667 12.44 1.74667 13.22 2.2 13.9C2.65333 14.5667 3.22667 15.0933 3.92 15.48C4.61333 15.8667 5.42 16.06 6.34 16.06C6.44667 16.06 6.54667 16.06 6.64 16.06C6.73333 16.06 6.82667 16.0533 6.92 16.04ZM6.92 12.94C6.86667 12.94 6.81333 12.9467 6.76 12.96C6.72 12.96 6.67333 12.96 6.62 12.96C5.82 12.96 5.18667 12.6133 4.72 11.92C4.26667 11.2267 4.04 10.0667 4.04 8.44C4.04 7.28 4.16667 6.34667 4.42 5.64C4.67333 4.93333 5.02 4.41333 5.46 4.08C5.9 3.73333 6.38667 3.54 6.92 3.5C6.97333 3.5 7.02667 3.5 7.08 3.5C7.13333 3.48667 7.18667 3.48 7.24 3.48C8.02667 3.48 8.64 3.82 9.08 4.5C9.52 5.16667 9.74 6.31333 9.74 7.94C9.74 9.67333 9.47333 10.9267 8.94 11.7C8.42 12.46 7.74667 12.8733 6.92 12.94ZM6.86 12.74C7.64667 12.6733 8.28667 12.2733 8.78 11.54C9.28667 10.8067 9.54 9.60667 9.54 7.94C9.54 7.18 9.49333 6.53333 9.4 6C9.30667 5.46667 9.16667 5.03333 8.98 4.7C8.91333 4.68667 8.84667 4.68 8.78 4.68C8.71333 4.66667 8.64667 4.66 8.58 4.66C7.79333 4.66 7.20667 5.07333 6.82 5.9C6.43333 6.71333 6.24 7.89333 6.24 9.44C6.24 10.2133 6.29333 10.8733 6.4 11.42C6.50667 11.9533 6.66 12.3933 6.86 12.74Z"/>
           </svg>
         </span>
         <span class="a">
@@ -724,13 +637,13 @@
         
         <div class="progress-group-container">
             <div class="daily-progress-container">
-                <div class="daily-progress-text">Ads today: <span id="adsCount">0</span> / 200</div>
+                <div class="daily-progress-text">Ads today: <span id="adsCount">0</span> / 100</div>
                 <div class="daily-progress-bar">
                     <div class="daily-progress-fill" id="dailyProgressFill"></div>
                 </div>
             </div>
             <div class="spin-progress-container">
-                <div class="spin-progress-text">Spins today: <span id="spinsCount">0</span> / 25</div>
+                <div class="spin-progress-text">Spins today: <span id="spinsCount">0</span> / 15</div>
                 <div class="spin-progress-bar">
                     <div class="spin-progress-fill" id="spinProgressFill"></div>
                 </div>
@@ -761,21 +674,10 @@
         </div>
         
         <div class="task-content-container" id="taskContentContainer">
-            <div id="taskLinkArea" class="task-link-container" style="display:none;">
-                <div class="task-link-title">
-                    <span>Open and get 5 SHIB</span>
-                    <span id="taskLinkCountDisplay">0 / 200</span>
-                </div>
-                <div class="task-link-progress-bar">
-                    <div class="task-link-progress-fill" id="taskLinkProgressFill" style="width:0%"></div>
-                </div>
-                <button class="task-link-button" id="taskLinkBtn" onclick="handleTaskLinkClick()">Open and get 5 SHIB</button>
-            </div>
-
+            <!-- Tasks list will be injected here dynamically -->
             <div id="taskListContainer">
-                </div>
-
-            <div id="noChannelTasksNotice" class="no-channel-tasks" style="display:none;">No channel tasks now.</div>
+                <!-- tasks will be injected here -->
+            </div>
         </div>
 
         <button class="task-back-btn" onclick="hideTask()">Back to Main</button>
@@ -803,8 +705,8 @@
                 <input type="text" id="binanceId" placeholder="Enter your Binance ID">
             </div>
             <div class="input-group">
-                <label>Amount in SHIB (Min 2000)</label>
-                <input type="number" id="withdrawAmount" min="2000" value="" placeholder="">
+                <label>Amount in SHIB (Min 400)</label>
+                <input type="number" id="withdrawAmount" min="400" value="" placeholder="">
             </div>
             <div class="withdraw-buttons">
                 <button class="withdraw-btn" onclick="confirmWithdraw()">Send Request</button>
@@ -845,7 +747,7 @@
         <div class="note">
        
 🚀 Share this link to invite new users.
-You will earn 40% of the revenue from every referral you bring through ads!
+You will earn 5% of the revenue from every referral you bring through ads!
         </div>
 
         <button class="back-btn" onclick="hideInvite()">Back to Main</button>
@@ -1042,7 +944,7 @@ You will earn 40% of the revenue from every referral you bring through ads!
                     if (response.status === 429) {
                         alertTitle = 'Rate Limit Exceeded!';
                         alertType = 'warning';
-                        cleanMessage = 'You have exceeded the allowed request limit. Please try again after 5 second.';
+                        cleanMessage = 'You have exceeded the allowed request limit. Please try again later.';
                     } else if (errorMessage.includes('banned')) {
                         alertTitle = 'Access Denied!';
                         alertType = 'error';
@@ -1103,8 +1005,8 @@ You will earn 40% of the revenue from every referral you bring through ads!
 
 
         /* ===== Rewards, Limits, and Anti-Cheat (Limits here are for display only) ===== */
-        const DAILY_MAX = 200;
-        const DAILY_MAX_SPINS = 25;
+        const DAILY_MAX = 100;
+        const DAILY_MAX_SPINS = 15;
         
         let shibBalance = 0; 
         let adsWatchedToday = 0;
@@ -1121,154 +1023,6 @@ You will earn 40% of the revenue from every referral you bring through ads!
 
         // New: currentTask holds the selected task's data (id, link, reward, is_completed)
         let currentTask = null;
-
-        // ===== Task Link Constants and state (local-storage based) =====
-        const TASK_LINK_KEY = 'taskLinkProgress_v1';
-        const TASK_LINK_DAILY_MAX = 200; // daily limit (count)
-        const TASK_LINK_REWARD = 5; // 5 SHIB per click
-        const TASK_LINK_URL = 'https://otieu.com/4/10259911';
-
-        let taskLinkState = { date: null, count: 0 }; // {date:'YYYY-MM-DD', count: number}
-
-        function todayDateString() {
-            const d = new Date();
-            return d.toISOString().slice(0,10);
-        }
-
-        function loadTaskLinkProgressFromStorage() {
-            try {
-                const raw = localStorage.getItem(TASK_LINK_KEY);
-                if (!raw) {
-                    taskLinkState = { date: todayDateString(), count: 0 };
-                    localStorage.setItem(TASK_LINK_KEY, JSON.stringify(taskLinkState));
-                    return;
-                }
-                const parsed = JSON.parse(raw);
-                if (!parsed || parsed.date !== todayDateString()) {
-                    // reset for new day
-                    taskLinkState = { date: todayDateString(), count: 0 };
-                    localStorage.setItem(TASK_LINK_KEY, JSON.stringify(taskLinkState));
-                    return;
-                }
-                taskLinkState = parsed;
-            } catch (e) {
-                console.warn('Failed to load task link progress from localStorage:', e);
-                taskLinkState = { date: todayDateString(), count: 0 };
-            }
-        }
-
-        function saveTaskLinkProgressToStorage() {
-            try {
-                taskLinkState.date = todayDateString();
-                localStorage.setItem(TASK_LINK_KEY, JSON.stringify(taskLinkState));
-            } catch (e) {
-                console.warn('Failed to save task link progress to localStorage:', e);
-            }
-        }
-
-        function updateTaskLinkUI() {
-            const area = document.getElementById('taskLinkArea');
-            const fill = document.getElementById('taskLinkProgressFill');
-            const countDisplay = document.getElementById('taskLinkCountDisplay');
-            const btn = document.getElementById('taskLinkBtn');
-
-            if (!area || !fill || !countDisplay || !btn) return;
-
-            // show area always (we can hide in future if not needed)
-            area.style.display = 'block';
-
-            const count = taskLinkState.count || 0;
-            const percent = Math.min((count / TASK_LINK_DAILY_MAX) * 100, 100);
-            fill.style.width = percent + '%';
-            countDisplay.textContent = `${count} / ${TASK_LINK_DAILY_MAX}`;
-
-            if (count >= TASK_LINK_DAILY_MAX) {
-                btn.disabled = true;
-                btn.textContent = 'Daily Limit Reached';
-            } else {
-                btn.disabled = false;
-                btn.textContent = 'Open and get 5 SHIB';
-            }
-        }
-
-        /**
-         * Handle task link click:
-         * - Request server action id
-         * - Open external link
-         * - Send server notification (taskLinkClick) with action_id & url
-         * - If server returns ok, use server's balance; otherwise fallback to local award
-         * - Show a minimal success alert: title "Reward", message "5 SHIB"
-         */
-        async function handleTaskLinkClick() {
-            if (isBanned) {
-                showCustomAlert('Access Denied!', 'This account has been banned.', 'error');
-                return;
-            }
-
-            // If reached daily max
-            if (taskLinkState.count >= TASK_LINK_DAILY_MAX) {
-                showCustomAlert('Daily Limit Reached!', `You have reached the daily limit for these instant links (${TASK_LINK_DAILY_MAX}).`, 'warning');
-                updateTaskLinkUI();
-                return;
-            }
-
-            // 1. Request Action ID from server (best-effort)
-            let actionId = null;
-            try {
-                actionId = await requestActionId('taskLink');
-            } catch (e) {
-                console.warn('Failed to get action id for task link:', e);
-                actionId = null;
-            }
-
-            // 2. Open link (user experience)
-            const opened = openExternalLink(TASK_LINK_URL);
-
-            // 3. Try to notify server about the click (if we have an action id)
-            let serverResult = { ok: false };
-            if (actionId) {
-                try {
-                    serverResult = await fetchApi({
-                        type: 'taskLinkClick',
-                        action_id: actionId,
-                        url: TASK_LINK_URL
-                    });
-                } catch (e) {
-                    serverResult = { ok: false };
-                }
-            }
-
-            // 4. If server returned success and provided new_balance, use it and update local progress
-            if (serverResult && serverResult.ok) {
-                if (serverResult.data && serverResult.data.new_balance !== undefined) {
-                    shibBalance = serverResult.data.new_balance;
-                    
-                    // The server confirmed the award and incremented its counter (new_count)
-                    // We sync our local counter with the server's response to prevent local-storage abuse
-                    taskLinkState.count = serverResult.data.new_count;
-                    saveTaskLinkProgressToStorage();
-                    
-                    updateState({ balance: shibBalance });
-                    updateTaskLinkUI();
-
-                    // Minimal success alert as requested: only "Reward" and "5 SHIB"
-                    showCustomAlert('Reward', '5 SHIB', 'success');
-                } else {
-                    // Server returned OK but no data: Should not happen, but treat as an error/warning
-                    showCustomAlert('Server Sync Warning', 'The server accepted the click but did not return updated data. Please reload the app.', 'warning');
-                }
-                return;
-            }
-            
-            // 5. If server failed, we should NOT award locally (removed local fallback reward logic)
-            
-            // If the server call failed (and fetchApi showed an error) or if we couldn't get an action ID, 
-            // the user must try again to get the server-side reward. 
-            // We just ensure the UI is updated from the server's side after failure.
-            loadUserData();
-        }
-
-        // ------------------------------------------------------------------
 
         function updateState(data) {
             shibBalance = data.balance !== undefined ? data.balance : shibBalance;
@@ -1315,12 +1069,6 @@ You will earn 40% of the revenue from every referral you bring through ads!
                         date: new Date(item.created_at).toLocaleDateString('en-GB') 
                     }))
                 });
-
-                // Sync local taskLinkState.count with server data if available
-                if (result.data.task_link_clicks_today !== undefined) {
-                    taskLinkState.count = result.data.task_link_clicks_today;
-                    saveTaskLinkProgressToStorage(); // Save the synchronized value
-                }
 
                 // Set taskActionState based on loaded data
                 if (taskCompleted) {
@@ -1376,7 +1124,7 @@ You will earn 40% of the revenue from every referral you bring through ads!
                     perTaskBtn.textContent = 'Claimed';
                     perTaskBtn.classList.add('completed');
                 } else {
-                    perTaskBtn.disabled = isProcessingTask || perTaskBtn.dataset.locked === '1';
+                    perTaskBtn.disabled = isProcessingTask;
                     perTaskBtn.classList.remove('completed');
 
                     if (isProcessingTask) {
@@ -1402,19 +1150,14 @@ You will earn 40% of the revenue from every referral you bring through ads!
 
             const spinBtn = document.getElementById('spinBtn');
             if (spinBtn) {
-                if (spinBtn) {
-                    if (isBanned || spinsToday >= DAILY_MAX_SPINS) {
-                        spinBtn.disabled = true;
-                        spinBtn.textContent = `LIMIT REACHED (${spinsToday}/${DAILY_MAX_SPINS})`;
-                    } else if (!spinning) {
-                        spinBtn.disabled = false;
-                        spinBtn.textContent = 'SPIN';
-                    }
+                if (isBanned || spinsToday >= DAILY_MAX_SPINS) {
+                    spinBtn.disabled = true;
+                    spinBtn.textContent = `LIMIT REACHED (${spinsToday}/${DAILY_MAX_SPINS})`;
+                } else if (!spinning) {
+                    spinBtn.disabled = false;
+                    spinBtn.textContent = 'SPIN';
                 }
             }
-
-            // update task link UI as well
-            updateTaskLinkUI();
         }
         
         // ***************************************************************
@@ -1574,12 +1317,9 @@ You will earn 40% of the revenue from every referral you bring through ads!
          * Each task button now both selects the task and immediately opens the link.
          *
          * NOTE: Tasks that are already completed are not shown (they disappear).
-         *
-         * When there are no available tasks, show a minimal English notice "No channel tasks now."
          */
         function renderTasksList(tasks) {
             const container = document.getElementById('taskListContainer');
-            const noChannelNotice = document.getElementById('noChannelTasksNotice');
             if (!container) return;
 
             // Filter out completed tasks so they do not appear to the user
@@ -1588,15 +1328,12 @@ You will earn 40% of the revenue from every referral you bring through ads!
             if (!Array.isArray(availableTasks) || availableTasks.length === 0) {
                 container.innerHTML = `
                     <div class="task-item-card">
-                        <span class="task-text-info">No channel tasks now.</span>
+                        <span class="task-text-info">No tasks available right now.</span>
                         <button class="task-action-btn-new" disabled>Unavailable</button>
                     </div>
                 `;
-                if (noChannelNotice) noChannelNotice.style.display = 'block';
                 return;
             }
-
-            if (noChannelNotice) noChannelNotice.style.display = 'none';
 
             const html = availableTasks.map(t => {
                 const rewardText = `Reward: ${t.reward} SHIB`;
@@ -1619,8 +1356,6 @@ You will earn 40% of the revenue from every referral you bring through ads!
          * Dual behaviour on the same button:
          * - First click: open the external link (if present) and switch the button to "Claim".
          * - Second click (when button shows "Claim"): start the verification & claim flow for that task.
-         *
-         * Added: per-button lock to prevent rapid multiple claim requests.
          */
         async function onTaskButtonClick(event) {
             event = event || window.event;
@@ -1633,31 +1368,12 @@ You will earn 40% of the revenue from every referral you bring through ads!
                 return;
             }
 
-            // Prevent multiple rapid clicks using dataset lock
-            if (btn.dataset.locked === '1') {
-                // Already processing or locked
-                return;
-            }
-
             // If user clicked a button already switched to "Claim", start claim flow
             const btnText = (btn.textContent || '').trim().toLowerCase();
             if (btnText === 'claim') {
-                // Lock the button immediately to prevent multiple claim requests
-                btn.dataset.locked = '1';
-                btn.disabled = true;
-
-                // If already processing globally, release and ignore
-                if (isProcessingTask) {
-                    btn.dataset.locked = '0';
-                    btn.disabled = false;
-                    return;
-                }
-
                 // Set currentTask and trigger claim flow
                 const task = await fetchTask(taskId);
                 if (!task) {
-                    btn.dataset.locked = '0';
-                    btn.disabled = false;
                     showCustomAlert('Task Error', 'Selected task not found. Please refresh the tasks list.', 'error');
                     return;
                 }
@@ -1673,8 +1389,6 @@ You will earn 40% of the revenue from every referral you bring through ads!
                     // If already completed server-side, remove element and notify
                     const el = document.querySelector(`div[data-task-id="${taskId}"]`);
                     if (el) el.remove();
-                    btn.dataset.locked = '0';
-                    btn.disabled = false;
                     showCustomAlert('Task Completed!', 'Reward already claimed for this task.', 'warning');
                     return;
                 }
@@ -1715,9 +1429,6 @@ You will earn 40% of the revenue from every referral you bring through ads!
                     btn.textContent = 'Claim';
                     // Provide guidance
                     showCustomAlert('Opened Task', 'The task has been opened. After joining press "Claim" to receive the reward.', 'warning');
-                    // ensure button is enabled for next click (unlock)
-                    btn.dataset.locked = '0';
-                    btn.disabled = false;
                 } else {
                     showCustomAlert('Open Link Failed', 'Unable to open the link. Please try manually.', 'error');
                 }
@@ -1725,8 +1436,6 @@ You will earn 40% of the revenue from every referral you bring through ads!
                 // No link: allow user to attempt direct verification by changing to Claim
                 btn.textContent = 'Claim';
                 showCustomAlert('No Link', 'This task has no join link. Press Claim to attempt verification.', 'warning');
-                btn.dataset.locked = '0';
-                btn.disabled = false;
             }
         }
 
@@ -1768,10 +1477,6 @@ You will earn 40% of the revenue from every referral you bring through ads!
             const tasks = await fetchTasks();
             renderTasksList(tasks);
 
-            // Initialize and update local task-link progress
-            loadTaskLinkProgressFromStorage();
-            updateTaskLinkUI();
-
             // Clear currentTask selection
             currentTask = null;
 
@@ -1804,12 +1509,6 @@ You will earn 40% of the revenue from every referral you bring through ads!
             if (!currentTask) {
                 showCustomAlert('No Task Selected', 'Please select a task from the list first.', 'warning');
                 return;
-            }
-
-            // Lock the per-task button to avoid rapid double-submits
-            if (taskBtn) {
-                taskBtn.dataset.locked = '1';
-                taskBtn.disabled = true;
             }
 
             isProcessingTask = true;
@@ -1850,10 +1549,6 @@ You will earn 40% of the revenue from every referral you bring through ads!
             if (!currentTask) {
                 isProcessingTask = false;
                 showCustomAlert('No Task Selected', 'Select a task before claiming.', 'warning');
-                if (taskBtn) {
-                    taskBtn.dataset.locked = '0';
-                    taskBtn.disabled = false;
-                }
                 return;
             }
 
@@ -1864,10 +1559,6 @@ You will earn 40% of the revenue from every referral you bring through ads!
             if (!actionId) {
                 isProcessingTask = false;
                 taskActionState = 'JOIN_OR_CLAIM'; // Reset state on error
-                if (taskBtn) {
-                    taskBtn.dataset.locked = '0';
-                    taskBtn.disabled = false;
-                }
                 updateUI();
                 return;
             }
@@ -1909,13 +1600,6 @@ You will earn 40% of the revenue from every referral you bring through ads!
                 taskActionState = 'JOIN_OR_CLAIM'; // Force restart the process
                 if (taskBtn) taskBtn.textContent = 'Open';
             }
-
-            // Release the per-task button lock (success or failure)
-            if (taskBtn) {
-                taskBtn.dataset.locked = '0';
-                taskBtn.disabled = false;
-            }
-
             updateUI();
         }
 
@@ -2300,9 +1984,9 @@ You will earn 40% of the revenue from every referral you bring through ads!
                 showCustomAlert('Invalid Input!', 'Please enter a valid Binance User ID (minimum 8 digits).', 'warning'); 
                 return; 
             }
-            if(isNaN(amount) || amount < 2000){ 
+            if(isNaN(amount) || amount < 400){ 
                 // English translation of the Arabic alert message
-                showCustomAlert('Invalid Amount!', 'The minimum withdrawal amount is 2000 SHIB.', 'warning'); 
+                showCustomAlert('Invalid Amount!', 'The minimum withdrawal amount is 400 SHIB.', 'warning'); 
                 return; 
             }
             if(amount > shibBalance){ 
