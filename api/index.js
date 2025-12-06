@@ -1,5 +1,5 @@
 // /api/index.js (Final and Secure Version with Limit-Based Reset and GetTasks)
-// Modified: added Task Link click handler and task-link limit fields
+// Modified: added Task Link click handler and task-link limit fields, AND dynamic task type handling
 
 const crypto = require('crypto');
 
@@ -26,7 +26,7 @@ const TASK_LINK_REWARD = 5; // 5 SHIB per task-link click
 const TASK_LINK_DAILY_MAX = 200; // daily max clicks tracked server-side
 
 // ------------------------------------------------------------------
-// Task Constants (القيم الثابتة للمهام تم حذفها - يتم جلبها من قاعدة البيانات)
+// Task Constants
 // ------------------------------------------------------------------
 const TASK_COMPLETIONS_TABLE = 'user_task_completions'; // اسم افتراضي لجدول حفظ إكمال المهام
 
@@ -113,7 +113,7 @@ async function checkChannelMembership(userId, channelUsername) {
     try {
         const response = await fetch(url);
         if (!response.ok) {
-            const errorData = await response.json();
+            const errorData = await response.json().catch(() => ({}));
             console.error('Telegram API error (getChatMember):', errorData.description || response.statusText);
             return false;
         }
@@ -141,13 +141,12 @@ async function checkChannelMembership(userId, channelUsername) {
 
 /**
  * Limit-Based Reset Logic: Resets counters if the limit was reached AND the interval (6 hours) has passed since.
- * ⚠️ هذا هو التعديل الرئيسي: يعتمد على أعمدة الوصول للحد الأقصى وليس على آخر نشاط عام.
  */
 async function resetDailyLimitsIfExpired(userId) {
     const now = Date.now();
 
     try {
-        // 1. Fetch current limits and the time they were reached
+        // 1. Fetch current limits and the time they were reached (including new task link fields)
         const users = await supabaseFetch('users', 'GET', null, `?id=eq.${userId}&select=ads_watched_today,spins_today,ads_limit_reached_at,spins_limit_reached_at,task_link_clicks_today,task_link_limit_reached_at`);
         if (!Array.isArray(users) || users.length === 0) {
             return;
@@ -160,9 +159,8 @@ async function resetDailyLimitsIfExpired(userId) {
         if (user.ads_limit_reached_at && user.ads_watched_today >= DAILY_MAX_ADS) {
             const adsLimitTime = new Date(user.ads_limit_reached_at).getTime();
             if (now - adsLimitTime > RESET_INTERVAL_MS) {
-                // ⚠️ تم مرور 6 ساعات على الوصول للحد الأقصى، يتم إعادة التعيين
                 updatePayload.ads_watched_today = 0;
-                updatePayload.ads_limit_reached_at = null; // إزالة الوقت لانتهاء فترة القفل
+                updatePayload.ads_limit_reached_at = null; 
                 console.log(`Ads limit reset for user ${userId}.`);
             }
         }
@@ -171,9 +169,8 @@ async function resetDailyLimitsIfExpired(userId) {
         if (user.spins_limit_reached_at && user.spins_today >= DAILY_MAX_SPINS) {
             const spinsLimitTime = new Date(user.spins_limit_reached_at).getTime();
             if (now - spinsLimitTime > RESET_INTERVAL_MS) {
-                // ⚠️ تم مرور 6 ساعات على الوصول للحد الأقصى، يتم إعادة التعيين
                 updatePayload.spins_today = 0;
-                updatePayload.spins_limit_reached_at = null; // إزالة الوقت لانتهاء فترة القفل
+                updatePayload.spins_limit_reached_at = null; 
                 console.log(`Spins limit reset for user ${userId}.`);
             }
         }
@@ -201,7 +198,6 @@ async function resetDailyLimitsIfExpired(userId) {
 
 /**
  * Rate Limiting Check for Ad/Spin Actions
- * ⚠️ تم تعديلها: لم تعد تحدث last_activity، بل فقط تفحص الفارق الزمني الأخير
  */
 async function checkRateLimit(userId) {
     try {
@@ -211,7 +207,6 @@ async function checkRateLimit(userId) {
         }
 
         const user = users[0];
-        // إذا كان last_activity غير موجود، يمكن اعتباره 0 لضمان السماح بالمرور
         const lastActivity = user.last_activity ? new Date(user.last_activity).getTime() : 0; 
         const now = Date.now();
         const timeElapsed = now - lastActivity;
@@ -224,7 +219,6 @@ async function checkRateLimit(userId) {
                 remainingTime: remainingTime
             };
         }
-        // تحديث last_activity سيتم لاحقاً في دوال watchAd/spinResult
         return { ok: true };
     } catch (error) {
         console.error(`Rate limit check failed for user ${userId}:`, error.message);
@@ -233,7 +227,7 @@ async function checkRateLimit(userId) {
 }
 
 // ------------------------------------------------------------------
-// **initData Security Validation Function** (No change)
+// **initData Security Validation Function**
 // ------------------------------------------------------------------
 function validateInitData(initData) {
     if (!initData || !BOT_TOKEN) {
@@ -282,7 +276,7 @@ function validateInitData(initData) {
 }
 
 // ------------------------------------------------------------------
-// 🔑 Commission Helper Function (No change)
+// 🔑 Commission Helper Function
 // ------------------------------------------------------------------
 /**
  * Processes the commission for the referrer and updates their balance.
@@ -323,7 +317,7 @@ async function processCommission(referrerId, refereeId, sourceReward) {
 
 
 // ------------------------------------------------------------------
-// 🔒 Action ID Security System (No change)
+// 🔒 Action ID Security System
 // ------------------------------------------------------------------
 
 /**
@@ -335,7 +329,6 @@ function generateStrongId() {
 
 /**
  * HANDLER: type: "generateActionId"
- * The client requests an action ID before starting a critical action (ad/spin/withdraw/task).
  */
 async function handleGenerateActionId(req, res, body) {
     const { user_id, action_type } = body;
@@ -423,7 +416,6 @@ async function validateAndUseActionId(res, userId, actionId, actionType) {
 
 /**
  * HANDLER: type: "getUserData"
- * ⚠️ Fix: Now selects new limit columns and task_completed (kept for backward compatibility).
  */
 async function handleGetUserData(req, res, body) {
     const { user_id } = body;
@@ -436,7 +428,7 @@ async function handleGetUserData(req, res, body) {
         // 1. Check and reset daily limits (if 6 hours passed since limit reached)
         await resetDailyLimitsIfExpired(id);
 
-        // 2. Fetch user data (including new limit columns AND task_completed)
+        // 2. Fetch user data (including new task link fields)
         const users = await supabaseFetch('users', 'GET', null, `?id=eq.${id}&select=balance,ads_watched_today,spins_today,is_banned,ref_by,ads_limit_reached_at,spins_limit_reached_at,task_completed,task_link_clicks_today,task_link_limit_reached_at`);
 
         if (!users || users.length === 0 || users.success) {
@@ -479,16 +471,15 @@ async function handleGetUserData(req, res, body) {
 }
 
 /**
- * NEW HANDLER: type: "getTasks"
- * ⚠️ يجلب المهام المتاحة من جدول tasks وحالة إكمالها من جدول user_task_completions.
+ * HANDLER: type: "getTasks"
  */
 async function handleGetTasks(req, res, body) {
     const { user_id } = body;
     const id = parseInt(user_id);
     
     try {
-        // 1. جلب قائمة المهام المتاحة من جدول tasks
-        const availableTasks = await supabaseFetch('tasks', 'GET', null, `?select=id,name,link,reward,max_participants`);
+        // 1. جلب قائمة المهام المتاحة من جدول tasks (بما في ذلك نوع المهمة)
+        const availableTasks = await supabaseFetch('tasks', 'GET', null, `?select=id,name,link,reward,max_participants,type`);
 
         // 2. جلب المهام التي أكملها المستخدم
         const completedTasks = await supabaseFetch(TASK_COMPLETIONS_TABLE, 'GET', null, `?user_id=eq.${id}&select=task_id`);
@@ -505,6 +496,7 @@ async function handleGetTasks(req, res, body) {
                 reward: task.reward,
                 max_participants: task.max_participants,
                 is_completed: isCompleted,
+                type: task.type || 'channel', // إرجاع النوع، الافتراضي 'channel'
             };
         }) : [];
 
@@ -519,7 +511,6 @@ async function handleGetTasks(req, res, body) {
 
 /**
  * 1) type: "register"
- * ⚠️ Fix: Includes task_completed: false for new users and initializes task_link fields.
  */
 async function handleRegister(req, res, body) {
   const { user_id, ref_by } = body;
@@ -537,13 +528,12 @@ async function handleRegister(req, res, body) {
         ads_watched_today: 0,
         spins_today: 0,
         ref_by: ref_by ? parseInt(ref_by) : null,
-        last_activity: new Date().toISOString(), // ⬅️ يبقى هنا للـ Rate Limit فقط
+        last_activity: new Date().toISOString(), 
         is_banned: false,
-        task_completed: false, // ⬅️ Default value for the original task (can be safely ignored by dynamic logic)
+        task_completed: false, 
         // Task-link fields initialization
         task_link_clicks_today: 0,
         task_link_limit_reached_at: null,
-        // الأعمدة الجديدة ستحتوي على NULL بشكل افتراضي
       };
       await supabaseFetch('users', 'POST', newUser, '?select=id');
     } else {
@@ -561,7 +551,6 @@ async function handleRegister(req, res, body) {
 
 /**
  * 2) type: "watchAd"
- * ⚠️ Fix: Updates ads_limit_reached_at when the limit is hit.
  */
 async function handleWatchAd(req, res, body) {
     const { user_id, action_id } = body;
@@ -606,10 +595,10 @@ async function handleWatchAd(req, res, body) {
         const updatePayload = {
             balance: newBalance,
             ads_watched_today: newAdsCount,
-            last_activity: new Date().toISOString() // ⬅️ تحديث لـ Rate Limit
+            last_activity: new Date().toISOString() 
         };
 
-        // 8. ⚠️ NEW LOGIC: Check if the limit is reached NOW
+        // 8. NEW LOGIC: Check if the limit is reached NOW
         if (newAdsCount >= DAILY_MAX_ADS) {
             updatePayload.ads_limit_reached_at = new Date().toISOString();
         }
@@ -634,7 +623,7 @@ async function handleWatchAd(req, res, body) {
 }
 
 /**
- * 3) type: "commission" (No change)
+ * 3) type: "commission"
  */
 async function handleCommission(req, res, body) {
     const { referrer_id, referee_id, source_reward } = body;
@@ -653,7 +642,7 @@ async function handleCommission(req, res, body) {
 }
 
 /**
- * 4) type: "preSpin" (No change)
+ * 4) type: "preSpin"
  */
 async function handlePreSpin(req, res, body) {
     const { user_id, action_id } = body;
@@ -682,7 +671,6 @@ async function handlePreSpin(req, res, body) {
 
 /**
  * 5) type: "spinResult"
- * ⚠️ Fix: Updates spins_limit_reached_at when the limit is hit.
  */
 async function handleSpinResult(req, res, body) {
     const { user_id, action_id } = body; 
@@ -728,10 +716,10 @@ async function handleSpinResult(req, res, body) {
         const updatePayload = {
             balance: newBalance,
             spins_today: newSpinsCount,
-            last_activity: new Date().toISOString() // ⬅️ تحديث لـ Rate Limit
+            last_activity: new Date().toISOString() 
         };
 
-        // 7. ⚠️ NEW LOGIC: Check if the limit is reached NOW
+        // 7. NEW LOGIC: Check if the limit is reached NOW
         if (newSpinsCount >= DAILY_MAX_SPINS) {
             updatePayload.spins_limit_reached_at = new Date().toISOString();
         }
@@ -759,15 +747,13 @@ async function handleSpinResult(req, res, body) {
 }
 
 /**
- * NEW HANDLER: type: "taskLinkClick"
- * Handles secure server-side counting and awarding for instant task-link clicks.
- * Uses action_type 'taskLink' for Action ID validation.
+ * 6) type: "taskLinkClick"
  */
 async function handleTaskLinkClick(req, res, body) {
     const { user_id, action_id, url } = body;
     const id = parseInt(user_id);
 
-    // 1. Validate action id
+    // 1. Validate action id (using a general 'taskLink' action type)
     if (!await validateAndUseActionId(res, id, action_id, 'taskLink')) return;
 
     try {
@@ -786,7 +772,7 @@ async function handleTaskLinkClick(req, res, body) {
             return sendError(res, 'User is banned.', 403);
         }
 
-        // 5. Rate limit check
+        // 5. Rate limit check (using the main last_activity)
         const rateLimitResult = await checkRateLimit(id);
         if (!rateLimitResult.ok) {
             return sendError(res, rateLimitResult.message, 429);
@@ -817,11 +803,10 @@ async function handleTaskLinkClick(req, res, body) {
         // 9. Update user record
         await supabaseFetch('users', 'PATCH', updatePayload, `?id=eq.${id}`);
 
-        // 10. Optionally record the click to a table for audit (non-mandatory)
+        // 10. Record the click to a table for audit (optional but recommended)
         try {
             await supabaseFetch('task_link_clicks', 'POST', { user_id: id, url: url || null, reward, created_at: new Date().toISOString() }, '?select=user_id');
         } catch (e) {
-            // non-fatal: auditing failed
             console.warn('Failed to record task_link click audit:', e.message);
         }
 
@@ -843,8 +828,7 @@ async function handleTaskLinkClick(req, res, body) {
 
 
 /**
- * 7) NEW HANDLER: type: "completeTask"
- * 🟢 تم التعديل: أصبح ديناميكياً ويستخدم جدول tasks و user_task_completions
+ * 7) type: "completeTask" (For dynamic task types: channel, bot, etc.)
  */
 async function handleCompleteTask(req, res, body) {
     // 1. Get task_id from request body
@@ -858,19 +842,19 @@ async function handleCompleteTask(req, res, body) {
     }
     
     // 2. Check and Consume Action ID (Security Check) - use task_id in action_type
-    // ⚠️ تم تغيير action_type ليصبح فريداً لكل مهمة لزيادة الأمان
     if (!await validateAndUseActionId(res, id, action_id, `completeTask_${taskId}`)) return;
 
     try {
-        // 3. Fetch Task Details (Reward, Link, Max Participants)
-        const tasks = await supabaseFetch('tasks', 'GET', null, `?id=eq.${taskId}&select=link,reward,max_participants`);
+        // 3. Fetch Task Details (Reward, Link, Max Participants, AND TYPE)
+        const tasks = await supabaseFetch('tasks', 'GET', null, `?id=eq.${taskId}&select=link,reward,max_participants,type`);
         if (!Array.isArray(tasks) || tasks.length === 0) {
             return sendError(res, 'Task not found.', 404);
         }
         const task = tasks[0];
         const reward = task.reward;
         const taskLink = task.link;
-        const maxParticipants = task.max_participants; // يمكن استخدامها للتحقق من الحد الأقصى مستقبلاً
+        // افتراض: إذا لم يكن هناك نوع، نعتبره 'channel' للتحقق من الانضمام
+        const taskType = (task.type || 'channel').toLowerCase(); 
 
         // 4. Check if task is already completed for the user (باستخدام الجدول الوسيط)
         const completions = await supabaseFetch(TASK_COMPLETIONS_TABLE, 'GET', null, `?user_id=eq.${id}&task_id=eq.${taskId}&select=id`);
@@ -884,22 +868,24 @@ async function handleCompleteTask(req, res, body) {
             return sendError(res, rateLimitResult.message, 429); 
         }
         
-        // 6. Extract Channel Username from Link (للتأكد من أنها مهمة Telegram)
-        const channelUsernameMatch = taskLink.match(/t\.me\/([a-zA-Z0-9_]+)/);
-        
-        let isMember = false;
-        if (channelUsernameMatch) {
-            const channelUsername = `@${channelUsernameMatch[1]}`;
-            // 7. 🚨 CRITICAL: Check Channel Membership using Telegram API
-            isMember = await checkChannelMembership(id, channelUsername);
+        // 6. التحقق من الانضمام بناءً على نوع المهمة
+        if (taskType === 'channel') {
+            const channelUsernameMatch = taskLink.match(/t\.me\/([a-zA-Z0-9_]+)/);
+            
+            if (channelUsernameMatch) {
+                const channelUsername = `@${channelUsernameMatch[1]}`;
+                // 7. 🚨 CRITICAL: Check Channel Membership using Telegram API
+                const isMember = await checkChannelMembership(id, channelUsername);
 
-            if (!isMember) {
-                 return sendError(res, `User has not joined the required channel: ${channelUsername}`, 400);
+                if (!isMember) {
+                     return sendError(res, `User has not joined the required channel: ${channelUsername}`, 400);
+                }
+            } else {
+                 // قناة ولكن الرابط غير صحيح
+                 return sendError(res, 'Task verification failed: Invalid Telegram channel link format for a channel task.', 400);
             }
-        } else {
-             // إذا لم يكن الرابط في صيغة t.me/username، نرفض الإكمال
-             return sendError(res, 'Task verification failed: The link is not a supported Telegram channel format for join tasks.', 400);
-        }
+        } 
+        // ⚠️ إذا كان taskType === 'bot' أو غير ذلك، يتم تخطي التحقق من الانضمام
 
         // 8. Fetch balance and referrer ID 
         const users = await supabaseFetch('users', 'GET', null, `?id=eq.${id}&select=balance,ref_by,is_banned`);
@@ -917,7 +903,6 @@ async function handleCompleteTask(req, res, body) {
             { 
                 balance: newBalance, 
                 last_activity: new Date().toISOString() 
-                // ⚠️ لم نعد نحدث task_completed هنا
             }, 
             `?id=eq.${id}`);
             
@@ -926,7 +911,7 @@ async function handleCompleteTask(req, res, body) {
             { user_id: id, task_id: taskId, reward_amount: reward }, 
             '?select=user_id');
 
-        // 11. Commission Call (اختياري)
+        // 11. Commission Call
         if (referrerId) {
             processCommission(referrerId, id, reward).catch(e => {
                 console.error(`Task Completion Commission failed silently for referrer ${referrerId}:`, e.message);
@@ -944,7 +929,7 @@ async function handleCompleteTask(req, res, body) {
 
 
 /**
- * 6) type: "withdraw" (No change, only uses last_activity for rate limit check in checkRateLimit)
+ * 8) type: "withdraw"
  */
 async function handleWithdraw(req, res, body) {
     const { user_id, binanceId, amount, action_id } = body;
@@ -985,7 +970,7 @@ async function handleWithdraw(req, res, body) {
         await supabaseFetch('users', 'PATCH',
           { 
               balance: newBalance,
-              last_activity: new Date().toISOString() // ⬅️ تحديث لـ Rate Limit
+              last_activity: new Date().toISOString() 
           },
           `?id=eq.${id}`);
 
@@ -1044,7 +1029,7 @@ module.exports = async (req, res) => {
     return sendError(res, 'Missing "type" field in the request body.', 400);
   }
 
-  // ⬅️ initData Security Check
+  // initData Security Check
   if (body.type !== 'commission' && (!body.initData || !validateInitData(body.initData))) {
       return sendError(res, 'Invalid or expired initData. Security check failed.', 401);
   }
@@ -1058,7 +1043,7 @@ module.exports = async (req, res) => {
     case 'getUserData':
       await handleGetUserData(req, res, body);
       break;
-    case 'getTasks': // ⬅️ NEW: Added handler to get tasks list
+    case 'getTasks':
       await handleGetTasks(req, res, body);
       break;
     case 'register':
@@ -1085,7 +1070,7 @@ module.exports = async (req, res) => {
     case 'generateActionId': 
       await handleGenerateActionId(req, res, body);
       break;
-    case 'taskLinkClick': // NEW handler for task-link clicks
+    case 'taskLinkClick': 
       await handleTaskLinkClick(req, res, body);
       break;
     default:
