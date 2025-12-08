@@ -365,19 +365,31 @@
             background: rgba(255, 255, 255, 0.9);
             padding: 15px;
             border-radius: 15px;
+            display:flex;
+            flex-direction:column;
+            gap:10px;
+            align-items:center;
+        }
+        .withdraw-header-top {
+            width:100%;
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            gap:8px;
         }
         .withdraw-title{
-            font-size:28px;color:#ff2a2a;font-weight:700; text-shadow: 0 1px 1px rgba(0,0,0,.1);
+            font-size:22px;color:#ff2a2a;font-weight:700; text-shadow: 0 1px 1px rgba(0,0,0,.1);
+            margin:0;
         }
         .current-balance-info{
             font-size: 16px;
             color: #555;
-            margin-top: 10px;
+            margin-top: 0;
             font-weight: bold;
         }
         .input-form-container {
             width: 100%;
-            max-width: 400px;
+            max-width: 420px;
             background: #fff;
             padding: 25px;
             border-radius: 15px;
@@ -391,12 +403,13 @@
         .input-group label{display:block;margin-bottom:8px;font-size:14px;color:#555;font-weight:600;}
         .input-group input{width:100%;padding:12px 15px;border:1px solid #ddd;border-radius:10px;font-size:16px;transition:border-color .3s ease, box-shadow .3s ease;outline:none;}
         .input-group input:focus{border-color:#ff8c00;box-shadow:0 0 0 3px rgba(255,140,0,0.2);}
-        .withdraw-buttons{display:flex;gap:15px;margin-top:20px;justify-content: center;}
+        .withdraw-buttons{display:flex;gap:15px;margin-top:20px;justify-content: center;flex-wrap:wrap}
         .withdraw-btn{
             background:linear-gradient(145deg, #28a745, #1e7e34);
             color:#fff;border:none;padding:12px 30px;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer;
             box-shadow:0 5px 0 #1c6d32;transition:all .1s ease;
             width: 100%;
+            max-width: 220px;
         }
         .withdraw-btn:active{transform:translateY(3px);box-shadow:0 2px 0 #1c6d32}
         .back-btn{
@@ -676,6 +689,40 @@
             border: 1px solid rgba(0,0,0,0.04);
         }
 
+        /* ===== Withdraw method toggle ===== */
+        .withdraw-method-toggle {
+            display:flex;
+            gap:8px;
+            background:#fff;padding:8px;border-radius:12px;border:1px solid #eee;
+            align-items:center;justify-content:center;width:100%;
+        }
+        .method-option {
+            display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;cursor:pointer;border:1px solid transparent;
+            transition:all .12s ease;
+            background:linear-gradient(180deg,#fafafa,#fff);
+        }
+        .method-option input{display:none}
+        .method-option.active{border-color:#ff8c00;box-shadow:0 6px 0 rgba(255,140,0,0.12)}
+        .method-option .label {font-weight:700;color:#333;font-size:14px}
+
+        /* ===== Fullscreen withdrawal history page ===== */
+        .withdraw-history-full {
+            display:flex;flex-direction:column;padding:20px 20px;overflow-y:auto;background:#fff;
+        }
+        .withdraw-history-header {
+            display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;
+        }
+        .history-list {
+            width:100%;max-width:720px;margin:0 auto;padding-bottom:40px;
+        }
+        .history-item {
+            display:flex;justify-content:space-between;align-items:center;padding:12px;border-radius:10px;background:#f8f8f8;margin-bottom:10px;border:1px solid #eee;
+        }
+        .history-item .left {display:flex;flex-direction:column;gap:6px}
+        .history-item .right {text-align:right}
+        .history-item .amount {font-weight:800;color:#ff2a2a}
+        .history-empty {text-align:center;color:#777;padding:30px}
+
     </style>
 </head>
 <body>
@@ -793,35 +840,68 @@
 
     <div class="app-screen withdraw-screen" id="withdrawScreen">
         <div class="withdraw-header">
-            <h2 class="withdraw-title">💰 Request SHIB Withdrawal</h2>
+            <div class="withdraw-header-top">
+                <h3 class="withdraw-title">💰 Request SHIB Withdrawal</h3>
+            </div>
             <div class="current-balance-info">Your Balance: <span id="withdrawBalanceDisplay">0 SHIB</span></div>
         </div>
         
         <div class="input-form-container">
             <div class="input-group">
-                <label>Binance User ID</label>
-                <input type="text" id="binanceId" placeholder="FaucetPay or Binance ID">
+                <label>Choose Withdrawal Method</label>
+                <div class="withdraw-method-toggle" id="withdrawMethodToggle">
+                    <label class="method-option active" id="methodBinance">
+                        <input type="radio" name="withdrawMethod" value="binance" checked>
+                        <span class="label">Binance ID</span>
+                    </label>
+                    <label class="method-option" id="methodFaucetpay">
+                        <input type="radio" name="withdrawMethod" value="faucetpay">
+                        <span class="label">FaucetPay Email</span>
+                    </label>
+                </div>
             </div>
+
+            <div class="input-group" id="binanceGroup">
+                <label>Binance User ID</label>
+                <input type="text" id="binanceId" placeholder=" Binance ID">
+            </div>
+
+            <div class="input-group" id="faucetpayGroup" style="display:none;">
+                <label>FaucetPay Email</label>
+                <input type="email" id="faucetpayEmail" placeholder="your@email.com">
+            </div>
+
             <div class="input-group">
                 <label>Amount in SHIB (Min 2000)</label>
                 <input type="number" id="withdrawAmount" min="2000" value="" placeholder="">
             </div>
             <div class="withdraw-buttons">
                 <button class="withdraw-btn" onclick="confirmWithdraw()">Send Request</button>
+                <button class="back-btn" onclick="displayWithdrawalsFull()" style="max-width:220px">Open History</button>
             </div>
         </div>
         
         <div class="note">
-            ⚠️ **Important:** The withdrawal will be processed manually within **24 hours**. Ensure your Binance ID is correct.
-        </div>
-        
-        <div class="history-section">
-            <h3 class="history-title">Withdrawal History</h3>
-            <div id="withdrawalHistoryContainer">
-                </div>
+            ⚠️ **Important:** The withdrawal will be processed manually within **24 hours**. Ensure your Binance ID or FaucetPay email is correct.
         </div>
 
         <button class="back-btn" onclick="hideWithdraw()">Back to Main</button>
+    </div>
+
+    <!-- Fullscreen Withdrawal History (opened from History button) -->
+    <div class="app-screen withdraw-history-screen" id="withdrawHistoryScreen" style="background:#f7f7fb">
+        <div class="withdraw-history-full" id="withdrawHistoryFull">
+            <div class="withdraw-history-header">
+                <h2 style="margin:0">Withdrawal History</h2>
+                <div>
+                    <button class="back-btn" onclick="closeWithdrawHistory()">Back</button>
+                </div>
+            </div>
+
+            <div class="history-list" id="withdrawHistoryList">
+                <!-- items injected here -->
+            </div>
+        </div>
     </div>
 
     <div class="app-screen invite-screen" id="inviteScreen">
@@ -908,39 +988,38 @@ You will earn 40% of the revenue from every referral you bring through ads!
         const bgPlaylist = ['audio.mp3', 'audio2.mp3', 'audio3.mp3', 'audio4.mp3'];
         let currentBgIndex = -1;
 
-        function getRandomBgIndex(excludeIndex = -1) {
-            if (!Array.isArray(bgPlaylist) || bgPlaylist.length === 0) return -1;
-            if (bgPlaylist.length === 1) return 0;
-            let idx;
-            // Avoid immediate repeat when possible
-            do {
-                idx = Math.floor(Math.random() * bgPlaylist.length);
-            } while (idx === excludeIndex && bgPlaylist.length > 1);
-            return idx;
-        }
-
+        /**
+         * Sequentially play the next background track.
+         * Ensures each track completes fully before the next is started.
+         */
         function playNextBg() {
-            const next = getRandomBgIndex(currentBgIndex);
-            if (next === -1) return;
-            currentBgIndex = next;
-            // set src and play
+            if (!Array.isArray(bgPlaylist) || bgPlaylist.length === 0) return;
+            // advance index sequentially (looping)
+            currentBgIndex = (currentBgIndex + 1) % bgPlaylist.length;
+            const nextSrc = bgPlaylist[currentBgIndex];
             try {
-                // Some browsers require setting src on the audio element
-                bgPlayer.src = bgPlaylist[next];
+                bgPlayer.src = nextSrc;
                 bgPlayer.load();
                 bgPlayer.volume = 0.4;
+                // Only attempt to play; browsers may block until user interaction
                 bgPlayer.play().catch(e => {
-                    // Will often fail until user interacts; log and continue
-                    console.log("bgPlayer play failed (will wait for user interaction):", e);
+                    console.log("bgPlayer play blocked (will wait for user interaction):", e);
                 });
             } catch (e) {
                 console.warn("Failed to set bgPlayer source:", e);
             }
         }
 
-        // When a track ends, play another randomly as requested
+        // When a track ends, play the next track in sequence
         bgPlayer.addEventListener('ended', () => {
-            // Play next random track
+            // play next sequential track
+            playNextBg();
+        });
+
+        // If an error occurs, skip to the next track to maintain continuity
+        bgPlayer.addEventListener('error', (e) => {
+            console.warn('bgPlayer error, advancing to next track', e);
+            // proceed to next track to avoid stopping playback loop
             playNextBg();
         });
 
@@ -948,11 +1027,18 @@ You will earn 40% of the revenue from every referral you bring through ads!
          * Plays background music. Must be called after user interaction.
          */
         function playBGAudio() {
-            // Attempt to play only if it's paused or not playing
             try {
-                if (bgPlayer.paused || !bgPlayer.currentSrc) {
-                    playNextBg();
+                // If we haven't started yet, start from the first track
+                if (currentBgIndex === -1) {
+                    currentBgIndex = 0;
+                    bgPlayer.src = bgPlaylist[currentBgIndex];
+                    bgPlayer.load();
                 }
+                // Try to play (may be blocked until user gesture)
+                bgPlayer.volume = 0.4;
+                bgPlayer.play().catch(e => {
+                    console.log("Background audio play failed, waiting for user click:", e);
+                });
             } catch (e) {
                 console.log("Background audio play failed, waiting for user click:", e);
             }
@@ -1355,7 +1441,9 @@ You will earn 40% of the revenue from every referral you bring through ads!
                     withdrawal_history: (result.data.withdrawal_history || []).map(item => ({
                         amount: item.amount,
                         status: item.status,
-                        date: new Date(item.created_at).toLocaleDateString('en-GB') 
+                        date: new Date(item.created_at).toLocaleDateString('en-GB'),
+                        binance_id: item.binance_id || null,
+                        faucetpay_email: item.faucetpay_email || null
                     }))
                 });
 
@@ -1458,6 +1546,9 @@ You will earn 40% of the revenue from every referral you bring through ads!
 
             // update task link UI as well
             updateTaskLinkUI();
+
+            // update withdrawal summary only if the container is present (we removed the inline recent summary)
+            displayWithdrawals();
         }
         
         // ***************************************************************
@@ -2299,7 +2390,13 @@ You will earn 40% of the revenue from every referral you bring through ads!
         }
         
         function displayWithdrawals() {
+            // The inline "Recent Withdrawal Summary" was intentionally removed from the withdraw screen.
+            // This function will only update if the old container exists (defensive).
             const container = document.getElementById('withdrawalHistoryContainer');
+            if (!container) {
+                // Container removed from withdraw screen — user should open the full history via "Open History" button.
+                return;
+            }
             if (!withdrawalHistory || withdrawalHistory.length === 0) {
                 // English translation of the Arabic alert message
                 container.innerHTML = '<div class="no-records">No withdrawal requests currently.</div>';
@@ -2311,10 +2408,11 @@ You will earn 40% of the revenue from every referral you bring through ads!
             tableHTML += '<thead><tr><th>Date</th><th>Amount (SHIB)</th><th>Status</th></tr></thead>';
             tableHTML += '<tbody>';
 
-            withdrawalHistory.forEach(record => {
+            withdrawalHistory.slice(0,5).forEach(record => {
                 // English translation of the Arabic alert message
                 const statusText = record.status === 'pending' ? 'Pending' : 'Completed';
                 const statusClass = record.status === 'pending' ? 'status-pending' : 'status-completed';
+                const dest = record.binance_id ? record.binance_id : (record.faucetpay_email ? record.faucetpay_email : '-');
                 tableHTML += `
                     <tr>
                         <td>${record.date}</td>
@@ -2328,6 +2426,44 @@ You will earn 40% of the revenue from every referral you bring through ads!
             container.innerHTML = tableHTML;
         }
 
+        function displayWithdrawalsFull() {
+            // open the full-screen history page and populate with full records
+            mainScreen.classList.remove('visible');
+            document.getElementById('withdrawScreen').classList.remove('visible');
+            const screen = document.getElementById('withdrawHistoryScreen');
+            const list = document.getElementById('withdrawHistoryList');
+            screen.classList.add('visible');
+
+            if (!withdrawalHistory || withdrawalHistory.length === 0) {
+                list.innerHTML = `<div class="history-empty">No withdrawal records.</div>`;
+                return;
+            }
+
+            const html = withdrawalHistory.map(rec => {
+                const dest = rec.binance_id ? rec.binance_id : (rec.faucetpay_email ? rec.faucetpay_email : '-');
+                const statusText = rec.status === 'pending' ? 'Pending' : 'Completed';
+                return `
+                    <div class="history-item">
+                        <div class="left">
+                            <div><strong>Date:</strong> ${rec.date}</div>
+                            <div><strong>Dest:</strong> ${dest}</div>
+                        </div>
+                        <div class="right">
+                            <div class="amount">${rec.amount.toLocaleString()} SHIB</div>
+                            <div class="${rec.status === 'pending' ? 'status-pending' : 'status-completed'}">${statusText}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            list.innerHTML = html;
+        }
+
+        function closeWithdrawHistory(){
+            document.getElementById('withdrawHistoryScreen').classList.remove('visible');
+            document.getElementById('withdrawScreen').classList.add('visible');
+            displayWithdrawals(); 
+        }
+
         async function confirmWithdraw(){
             if (isBanned) {
                  // English translation of the Arabic alert message
@@ -2335,14 +2471,25 @@ You will earn 40% of the revenue from every referral you bring through ads!
                  return;
             }
             
+            // Determine selected method
+            const selectedMethod = document.querySelector('input[name="withdrawMethod"]:checked') ? document.querySelector('input[name="withdrawMethod"]:checked').value : 'binance';
             const binanceId = document.getElementById('binanceId').value.trim();
-            const amount = parseInt(document.getElementById('withdrawAmount').value);
+            const faucetpayEmail = document.getElementById('faucetpayEmail').value.trim();
+            const amount = parseFloat(document.getElementById('withdrawAmount').value);
             
-            if(!binanceId || binanceId.length < 8){ 
-                // English translation of the Arabic alert message
-                showCustomAlert('Invalid Input!', 'Please enter a valid Binance User ID (minimum 8 digits).', 'warning'); 
-                return; 
+            if(selectedMethod === 'binance') {
+                if(!binanceId || binanceId.length < 4){ 
+                    showCustomAlert('Invalid Input!', 'Please enter a valid Binance User ID.', 'warning'); 
+                    return; 
+                }
+            } else {
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if(!faucetpayEmail || !emailRegex.test(faucetpayEmail)){
+                    showCustomAlert('Invalid Input!', 'Please enter a valid FaucetPay email address.', 'warning'); 
+                    return;
+                }
             }
+
             if(isNaN(amount) || amount < 2000){ 
                 // English translation of the Arabic alert message
                 showCustomAlert('Invalid Amount!', 'The minimum withdrawal amount is 2000 SHIB.', 'warning'); 
@@ -2358,27 +2505,52 @@ You will earn 40% of the revenue from every referral you bring through ads!
             const actionId = await requestActionId('withdraw');
             if (!actionId) return;
 
-            // 2. Send withdrawal request via API
-            const result = await fetchApi({
+            // 2. Prepare payload depending on selected method
+            const payload = {
                 type: 'withdraw',
-                binanceId: binanceId,
                 amount: amount,
-                action_id: actionId // ⬅️ إرسال Action ID
-            });
+                action_id: actionId
+            };
+            if (selectedMethod === 'faucetpay') {
+                payload.faucetpay_email = faucetpayEmail;
+            } else {
+                payload.binanceId = binanceId;
+            }
+
+            // 3. Send withdrawal request via API
+            const result = await fetchApi(payload);
 
             if (result.ok) {
-                // 3. Update balance with trusted server value
+                // 4. Update balance with trusted server value
                 updateState({ balance: result.data.new_balance });
                 
-                // 4. Reload withdrawal history with new data
+                // 5. Reload withdrawal history with new data
                 await loadUserData(); 
                 displayWithdrawals(); 
                 
                 // English translation of the Arabic alert message
-                showCustomAlert('Request Sent!', `Details:\nBinance ID: ${binanceId}\nAmount: ${amount.toLocaleString()} SHIB\n\nThe transfer will be processed within 24 hours.`, 'success');
+                const destText = selectedMethod === 'faucetpay' ? `FaucetPay: ${faucetpayEmail}` : `Binance ID: ${binanceId}`;
+                showCustomAlert('Request Sent!', `Details:\n${destText}\nAmount: ${amount.toLocaleString()} SHIB\n\nThe transfer will be processed within 24 hours.`, 'success');
             }
         }
         
+        // Method toggle behavior
+        document.addEventListener('click', (e) => {
+            const mBin = document.getElementById('methodBinance');
+            const mFaucet = document.getElementById('methodFaucetpay');
+            if (e.target.closest('#methodBinance')) {
+                mBin.classList.add('active');
+                mFaucet.classList.remove('active');
+                document.getElementById('binanceGroup').style.display = 'block';
+                document.getElementById('faucetpayGroup').style.display = 'none';
+            } else if (e.target.closest('#methodFaucetpay')) {
+                mFaucet.classList.add('active');
+                mBin.classList.remove('active');
+                document.getElementById('binanceGroup').style.display = 'none';
+                document.getElementById('faucetpayGroup').style.display = 'block';
+            }
+        });
+
         // Final event listener to ensure background audio starts on the first user interaction
         document.addEventListener('click', function handler() {
             playBGAudio();
