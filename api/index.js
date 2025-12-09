@@ -1,6 +1,3 @@
-// /api/index.js (Final and Secure Version with Limit-Based Reset and GetTasks)
-// Modified: added Task Link click handler and task-link limit fields, AND dynamic task type handling
-
 const crypto = require('crypto');
 
 // Load environment variables for Supabase connection
@@ -450,8 +447,32 @@ async function handleGetUserData(req, res, body) {
         const referralsCount = Array.isArray(referrals) ? referrals.length : 0;
 
         // 5. Fetch withdrawal history
-        const history = await supabaseFetch('withdrawals', 'GET', null, `?user_id=eq.${id}&select=amount,status,created_at&order=created_at.desc`);
-        const withdrawalHistory = Array.isArray(history) ? history : [];
+        //    - Binance withdrawals in 'withdrawals' table (binance_id)
+        //    - FaucetPay withdrawals in separate 'faucet_pay' table (faucetpay_email)
+        const binanceRecords = await supabaseFetch('withdrawals', 'GET', null, `?user_id=eq.${id}&select=amount,status,created_at,binance_id&order=created_at.desc`);
+        const faucetPayRecords = await supabaseFetch('faucet_pay', 'GET', null, `?user_id=eq.${id}&select=amount,status,created_at,faucetpay_email&order=created_at.desc`);
+
+        // Normalize results into a unified withdrawal history array
+        const normalizedBinance = Array.isArray(binanceRecords) ? binanceRecords.map(r => ({
+            amount: r.amount,
+            status: r.status,
+            created_at: r.created_at,
+            binance_id: r.binance_id || null,
+            faucetpay_email: null,
+            source: 'binance'
+        })) : [];
+
+        const normalizedFaucet = Array.isArray(faucetPayRecords) ? faucetPayRecords.map(r => ({
+            amount: r.amount,
+            status: r.status,
+            created_at: r.created_at,
+            binance_id: null,
+            faucetpay_email: r.faucetpay_email || null,
+            source: 'faucetpay'
+        })) : [];
+
+        // Merge and sort by created_at descending
+        const withdrawalHistory = [...normalizedBinance, ...normalizedFaucet].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
         // 6. Update last_activity (only for Rate Limit purposes now)
         await supabaseFetch('users', 'PATCH',
@@ -930,17 +951,24 @@ async function handleCompleteTask(req, res, body) {
 
 /**
  * 8) type: "withdraw"
+ *
+ * Supports two destination types:
+ * - binanceId (string) -> saved into 'withdrawals' table
+ * - faucetpay_email (string, email) -> saved into separate 'faucet_pay' table
+ *
+ * The request should include action_id (validateAndUseActionId).
+ * At least one of binanceId or faucetpay_email must be provided.
  */
 async function handleWithdraw(req, res, body) {
-    const { user_id, binanceId, amount, action_id } = body;
+    const { user_id, binanceId, faucetpay_email, amount, action_id } = body;
     const id = parseInt(user_id);
     const withdrawalAmount = parseFloat(amount);
-    const MIN_WITHDRAW = 400;
+    const MIN_WITHDRAW = 2000; // Match client-side minimum
 
     // 1. Check and Consume Action ID (Security Check)
     if (!await validateAndUseActionId(res, id, action_id, 'withdraw')) return;
 
-    if (withdrawalAmount < MIN_WITHDRAW) {
+    if (isNaN(withdrawalAmount) || withdrawalAmount < MIN_WITHDRAW) {
         return sendError(res, `Minimum withdrawal amount is ${MIN_WITHDRAW} SHIB.`, 400);
     }
 
@@ -963,10 +991,27 @@ async function handleWithdraw(req, res, body) {
             return sendError(res, 'Insufficient balance.', 400);
         }
 
-        // 5. Calculate new balance
+        // 5. Validate destination: prefer faucetpay_email if provided, otherwise binanceId
+        let destinationBinance = null;
+        let destinationFaucetpay = null;
+
+        if (faucetpay_email && typeof faucetpay_email === 'string' && faucetpay_email.trim() !== '') {
+            const email = faucetpay_email.trim();
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                return sendError(res, 'Invalid FaucetPay email address.', 400);
+            }
+            destinationFaucetpay = email;
+        } else if (binanceId && typeof binanceId === 'string' && binanceId.trim() !== '') {
+            destinationBinance = binanceId.trim();
+        } else {
+            return sendError(res, 'Missing withdrawal destination. Provide binanceId or faucetpay_email.', 400);
+        }
+
+        // 6. Calculate new balance
         const newBalance = user.balance - withdrawalAmount;
 
-        // 6. Update user balance
+        // 7. Update user balance
         await supabaseFetch('users', 'PATCH',
           { 
               balance: newBalance,
@@ -974,12 +1019,33 @@ async function handleWithdraw(req, res, body) {
           },
           `?id=eq.${id}`);
 
-        // 7. Record the withdrawal request
-        await supabaseFetch('withdrawals', 'POST',
-          { user_id: id, amount: withdrawalAmount, binance_id: binanceId, status: 'pending' },
-          '?select=user_id');
+        // 8. Record the withdrawal request
+        if (destinationFaucetpay) {
+            // FaucetPay-specific table insertion
+            const faucetPayload = {
+                user_id: id,
+                amount: withdrawalAmount,
+                faucetpay_email: destinationFaucetpay,
+                status: 'pending',
+                created_at: new Date().toISOString()
+            };
 
-        // 8. Success
+            await supabaseFetch('faucet_pay', 'POST', faucetPayload, '?select=user_id');
+        } else {
+            // Binance withdrawals stored in the general withdrawals table
+            const withdrawalPayload = {
+                user_id: id,
+                amount: withdrawalAmount,
+                binance_id: destinationBinance || null,
+                faucetpay_email: null,
+                status: 'pending',
+                created_at: new Date().toISOString()
+            };
+
+            await supabaseFetch('withdrawals', 'POST', withdrawalPayload, '?select=user_id');
+        }
+
+        // 9. Success
         sendSuccess(res, { new_balance: newBalance });
 
     } catch (error) {
