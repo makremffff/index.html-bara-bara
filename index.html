@@ -154,9 +154,10 @@
 
         /* Balance with small image in front (plain image, not inside a circular button) */
         .balance {
-            position:absolute;top:20px;right:20px;
-            background:#fff;border:1px solid #ff5a5a;border-radius:12px;padding:8px 12px;font-family:'Courier New',monospace;font-size:16px;color:#ff2a2a;text-shadow:0 0 2px #ffbbbb;letter-spacing:1px;z-index:101;box-shadow:0 4px 6px rgba(0,0,0,.05);
+            position:absolute;top:20px;right: 3px;
+            background:#fff;border:1px solid #ff5a5a;border-radius:12px;padding:8px 12px;font-family:'Courier New',monospace;font-size:4px;color:#ff2a2a;text-shadow:0 0 2px #ffbbbb;letter-spacing:1px;z-index:101;box-shadow:0 4px 6px rgba(0,0,0,.05);
             display:flex;align-items:center;gap:8px;
+            color: grey;
         }
         .balance img#shibIcon { width:15px; height:15px; object-fit:cover; display:inline-block; border-radius: 50%; }
 
@@ -176,16 +177,15 @@
             position: absolute;
             top: 70px;
             right: 20px;
-            background: linear-gradient(145deg, var(--primary-start), var(--primary-end));
+            background: transparent;
             color: #fff;
             border: none;
-            width: 45px;
-            height: 45px;
+            width: 55px;
+            height: 55px;
             border-radius: 50%;
             font-size: 18px;
             font-weight: bold;
             cursor: pointer;
-            box-shadow: 0 4px 0 var(--primary-shadow), 0 6px 10px rgba(0,0,0,.15);
             transition: all .1s ease;
             z-index: 101;
             display:flex;
@@ -206,7 +206,7 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
-            border-radius: 50%;
+            border-radius: 20%;
             display: block;
             pointer-events: none; /* allow click to be handled by button */
         }
@@ -700,8 +700,12 @@
             gap:8px;
         }
         .withdraw-title{
-            font-size:22px;color:#ff2a2a;font-weight:700; text-shadow: 0 1px 1px rgba(0,0,0,.1);
-            margin:0;
+            background: url(with.png) center;
+            background-size: cover;
+            width: 280px;
+            height: 230px;
+            border-radius: 50px;
+            margin-left: 30px;
         }
         .current-balance-info{
             font-size: 16px;
@@ -798,7 +802,14 @@
             border-radius: 15px;
         }
         .invite-title{ 
-             font-size:28px;color:#4a90e2;font-weight:700; text-shadow: 0 1px 1px rgba(0,0,0,.1);
+             background: url(refal.png) center;
+            background-size: cover;
+            width: 200px;
+            height: 150px;
+            padding: 10px; 
+            border-radius: 25px;
+            border: solid transparent;
+            margin-left: 50px;
         }
         .referrals-count-info{
             font-size: 18px;
@@ -1652,7 +1663,7 @@
         <div class="main-content"></div>
         
         <div class="button-container">
-            <button class="nav-button" onclick="watchAds()"><span>Ads</span></button>
+            <button class="nav-button" onclick="watchAds()"><span>Watch</span></button>
             <button class="nav-button task-btn" onclick="showTask()"><span>Task</span></button>
             <button class="nav-button" onclick="showSpin()"><span>Spin</span></button>
             <button class="nav-button withdraw-btn-nav" onclick="showWithdraw()"><span>Withdraw</span></button>
@@ -1699,7 +1710,7 @@
     <div class="app-screen withdraw-screen" id="withdrawScreen">
         <div class="withdraw-header">
             <div class="withdraw-header-top">
-                <h3 class="withdraw-title">💰 Request SHIB Withdrawal</h3>
+                <h3 class="withdraw-title"></h3>
             </div>
             <div class="current-balance-info">Your Balance: <span id="withdrawBalanceDisplay">0 SHIB</span></div>
         </div>
@@ -1730,8 +1741,8 @@
             </div>
 
             <div class="input-group">
-                <label>Amount in SHIB (Min 2000)</label>
-                <input type="number" id="withdrawAmount" min="2000" value="" placeholder="">
+                <label>Amount in SHIB (Min 4000)</label>
+                <input type="number" id="withdrawAmount" min="4000" value="" placeholder="">
             </div>
             <div class="withdraw-buttons">
                 <button class="withdraw-btn" onclick="confirmWithdraw()">Send Request</button>
@@ -1764,7 +1775,7 @@
 
     <div class="app-screen invite-screen" id="inviteScreen">
         <div class="invite-header">
-            <h2 class="invite-title">🤝 Invite Friends & Earn SHIB</h2>
+            <h2 class="invite-title"></h2>
             <div class="referrals-count-info">
                 Your Referrals: <span id="referralsCountDisplay">0</span>
             </div>
