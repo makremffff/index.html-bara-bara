@@ -39,7 +39,7 @@
         .app-screen {
             position: fixed;
             inset: 0;
-            background: url('img.png') no-repeat center center;
+            background: url('https://app.crybblewars.org/main/back_map/map.webp?v=2.0.3.14') no-repeat center center;
             background-size: cover;
             transition: opacity .5s ease-in;
             display: flex;
@@ -164,9 +164,9 @@
         /* Improved balance number typography */
         .balance #shibBalanceText {
             font-family: 'Orbitron', 'Courier New', monospace;
-            font-size: 18px;
+            font-size: 10px;
             font-weight: 900;
-            color: #111;
+            color: grey;
             letter-spacing: 0.6px;
             text-shadow: 0 1px 0 rgba(255,255,255,0.6);
             -webkit-font-smoothing:antialiased;
@@ -374,7 +374,7 @@
             display:grid; /* Change to grid for better control */
             grid-template-columns: repeat(5, 1fr); /* 5 equal columns (UPDATED) */
             gap: 8px; /* Slightly reduced gap */
-            background:rgba(240,240,240,.9);padding:10px 10px; /* Reduced padding */
+            background: transparent;padding:10px 10px; /* Reduced padding */
             border-radius:20px;box-shadow:0 4px 15px rgba(0,0,0,.1);backdrop-filter:blur(10px);
             width: 95%; /* Increased width for more space */
             max-width: 450px;
@@ -702,10 +702,10 @@
         .withdraw-title{
             background: url(with.png) center;
             background-size: cover;
-            width: 280px;
-            height: 230px;
+            width: 200px;
+            height: 170px;
             border-radius: 50px;
-            margin-left: 30px;
+            margin-left: 45px;
         }
         .current-balance-info{
             font-size: 16px;
@@ -1631,11 +1631,11 @@
     
     <div class="app-screen main-screen" id="mainScreen">
         <div class="balance" id="shibBalance">
-            <img id="shibIcon" src="https://files.catbox.moe/4se3k0.jpg" alt="shib">
+            <img id="shibIcon" src="https://files.catbox.moe/19ugek.png" alt="shib">
             <span id="shibBalanceText">0 SHIB</span>
         </div>
         <button class="contest-btn-under-balance" onclick="showContest()" aria-label="Open Contest">
-            <img src="https://giftgogame.com/static/thumbnails/5168043875654172773.webp" alt="Contest">
+            <img src="https://app.crybblewars.org/main/leader_button/main-icon-top.webp" alt="Contest">
         </button>
         
         <div class="progress-group-container" aria-hidden="false">
@@ -1685,7 +1685,7 @@
                 <div class="task-link-progress-bar">
                     <div class="task-link-progress-fill" id="taskLinkProgressFill" style="width:0%"></div>
                 </div>
-                <button class="task-link-button" id="taskLinkBtn" onclick="handleTaskLinkClick()">Open and get 5 SHIB</button>
+                <button class="task-link-button" id="taskLinkBtn" onclick="handleTaskLinkClick()">get 5 SHIB</button>
             </div>
 
             <div id="taskListContainer">
@@ -1818,14 +1818,14 @@ You will earn 40% of the revenue from every referral you bring through ads!
         <div class="contest-tickets-container" role="region" aria-label="Contest Tickets Summary">
             <div class="contest-ticket-row">
                 <span class="contest-ticket-label">
-                    <img src="https://files.catbox.moe/ut2ljl.png" class="contest-ticket-img" alt="ticket">
+                    <img src="https://app.crybblewars.org/main/voucher_button/cards-icon.webp" class="contest-ticket-img" alt="ticket">
                     My Tickets
                 </span>
                 <span class="contest-ticket-value" id="myTickets">0</span>
             </div>
             <div class="contest-ticket-row" style="align-items:flex-end;">
                 <span class="contest-ticket-label">
-                    <img src="https://files.catbox.moe/ut2ljl.png" class="contest-ticket-img" alt="ticket">
+                    <img src="https://app.crybblewars.org/main/voucher_button/cards-icon.webp" class="contest-ticket-img" alt="ticket">
                     All Tickets
                 </span>
                 <span class="contest-ticket-value" id="allTickets">0</span>
