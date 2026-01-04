@@ -1,15 +1,19 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SHIB Ads WebApp</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SHIB Ads WebApp</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap'); 
 
-        :root{
+        
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+:root{
             --glass-bg: rgba(255,255,255,0.04);
             --glass-border: rgba(255,255,255,0.12);
             --neon-start: #00f2fe;
@@ -34,7 +38,7 @@
         }
 
         *{margin:0;padding:0;box-sizing:border-box}
-        body{font-family:'Vazirmatn', Arial, Helvetica, sans-serif;overflow:hidden;background: #0d0c1d;color:#111; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;}
+        body{font-family:'Plus Jakarta Sans','Inter',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;overflow:hidden;background: #0d0c1d;color:#111; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;}
         
         .app-screen {
             position: fixed;
@@ -121,21 +125,69 @@
         
         .main-content{flex:1;display:flex;justify-content:center;align-items:center}
         
-        /* User Circle */
+        /* User Circle (PRO) */
         .user-circle{
-            position:absolute;top:10px;left:15px;width:60px;height:60px;border:2px dashed #ccc;
-            border-radius:50%;display:flex;flex-direction:column;justify-content:center;
-            align-items:center;cursor:pointer;transition:all .3s ease;z-index:100;overflow:hidden
+            position:absolute;
+            top:12px;
+            left:12px;
+            width:60px;
+            height:60px;
+            border:none;
+            border-radius:50%;
+            display:flex;
+            flex-direction:column;
+            justify-content:center;
+            align-items:center;
+            cursor:pointer;
+            transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+            z-index:100;
+            overflow:hidden;
+
+            /* glass */
+            background: rgba(255,255,255,0.06);
+            backdrop-filter: blur(10px) saturate(130%);
+            -webkit-backdrop-filter: blur(10px) saturate(130%);
+            box-shadow: 0 14px 34px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.16);
         }
-        .user-circle:hover{border-color:#4a90e2;background:rgba(74,144,226,.05)}
+
+        /* Gradient ring (avoids "dashed/cut" look) */
+        .user-circle::before{
+            content:"";
+            position:absolute;
+            inset:-1px;
+            border-radius:50%;
+            padding:2px;
+            background: conic-gradient(from 120deg, var(--neon-start), var(--neon-mid), var(--neon-end), var(--neon-start));
+            -webkit-mask:
+              linear-gradient(#000 0 0) content-box,
+              linear-gradient(#000 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events:none;
+            opacity: 0.92;
+        }
+        .user-circle:hover{transform: translateY(-1px) scale(1.02); box-shadow: 0 18px 44px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,0.18);} 
+        .user-circle:active{transform: translateY(1px) scale(0.995);}
+
         .user-circle img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:none}
-        .user-circle .placeholder{color:#999;font-size:12px;text-align:center}
+        .user-circle .placeholder{
+            width:100%;height:100%;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-weight: 900;
+            font-size: 18px;
+            letter-spacing: 0.2px;
+            color: rgba(255,255,255,0.88);
+            text-shadow: 0 1px 0 rgba(0,0,0,0.35);
+            user-select:none;
+        }
         
         .user-username{
             position: absolute;
-            top: 70px;
-            left: 10px;
-            width: 70px;
+            top: 74px;
+            left: 6px;
+            width: 84px;
             font-size:13px;color:#555;white-space:nowrap;
             text-align: center;
             overflow: hidden;
@@ -143,9 +195,9 @@
         }
         .user-id{
             position: absolute;
-            top: 85px;
-            left: 10px;
-            width: 70px;
+            top: 90px;
+            left: 6px;
+            width: 84px;
             font-size:11px;color:#888;white-space:nowrap;
             text-align: center;
             overflow: hidden;
@@ -155,7 +207,7 @@
         /* Balance with small image in front (plain image, not inside a circular button) */
         .balance {
             position:absolute;top:20px;right: 3px;
-            background:#fff;border:1px solid #ff5a5a;border-radius:12px;padding:8px 12px;font-family:'Courier New',monospace;font-size:2px;color: grey;text-shadow:0 0 2px #ffbbbb;letter-spacing:1px;z-index:101;box-shadow:0 4px 6px rgba(0,0,0,.05);
+            background:#fff;border:1px solid #ff5a5a;border-radius:12px;padding:8px 12px;font-family:'Inter','Vazirmatn', Arial, Helvetica, sans-serif;font-size:12px;color: grey;text-shadow:0 0 2px #ffbbbb;letter-spacing:1px;z-index:101;box-shadow:0 4px 6px rgba(0,0,0,.05);
             display:flex;align-items:center;gap:8px;
             
         }
@@ -163,7 +215,8 @@
 
         /* Improved balance number typography */
         .balance #shibBalanceText {
-            font-family: 'Orbitron', 'Courier New', monospace;
+            font-family: 'Inter','Orbitron', 'Courier New', monospace;
+            font-variant-numeric: tabular-nums;
             font-size: 10px;
             font-weight: 900;
             color: grey;
@@ -527,119 +580,216 @@
             box-shadow: 0 3px 0 #4e555b;
         }
 
-        /* ===== Task Screen - REDESIGNED STYLING ===== */
+        /* ===== Task Screen - Professional glass UI ===== */
         .task-screen{
             display:flex;
             flex-direction:column;
             align-items:center;
-            justify-content: flex-start; 
-            padding-top: 50px; 
-            padding-bottom: 120px; 
-            overflow-y: auto;
-            background: #ffffed; /* Light, paper-like background */
+            justify-content:flex-start;
+            padding-top: 12px;
+            padding-bottom: 140px;
+            overflow-y:auto;
+            background:
+              radial-gradient(1000px 700px at 10% 0%, rgba(122,92,255,0.28), transparent 55%),
+              radial-gradient(900px 700px at 110% 20%, rgba(255,90,162,0.20), transparent 55%),
+              linear-gradient(180deg, rgba(6,12,24,0.92), rgba(5,11,22,0.94));
         }
-        .task-header{ 
-            text-align: center;
-            margin-bottom: 30px;
-            width: 90%;
-            max-width: 350px;
+        .task-header{
+            width: 92%;
+            max-width: 420px;
+            margin: 10px 0 12px;
+            padding: 14px 14px;
+            border-radius: 18px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12);
+            backdrop-filter: blur(10px) saturate(130%);
+            -webkit-backdrop-filter: blur(10px) saturate(130%);
+            box-shadow: 0 18px 52px rgba(0,0,0,0.36);
+            position: sticky;
+            top: 10px;
+            z-index: 300;
+            text-align: left;
         }
-        .task-title{ 
-             font-family: 'Vazirmatn', sans-serif; 
-             font-size:24px; 
-             color:#333; /* Dark pencil color */
-             font-weight:700; 
-             text-shadow: 1px 1px 0 #fff; 
-             border-bottom: 2px dashed #a0a0a0;
-             padding-bottom: 10px;
-        }
-        
-        /* New Task Card Style based on user's input (Paper Style) */
-        .task-content-container {
-            width: 100%;
-            padding: 0 10px;
-            max-width: 400px;
+        .task-title{
+            font-family: 'Orbitron','Inter','Vazirmatn', sans-serif;
+            font-size: 18px;
+            font-weight: 900;
+            color: rgba(255,255,255,0.95);
+            letter-spacing: 0.4px;
+            margin: 0;
+            text-shadow: 0 8px 24px rgba(0,0,0,0.35);
         }
 
-        .task-item-card {
-            background:#ffffff; /* White card */
-            margin:10px 0;
-            padding:18px;
-            border-radius:10px;
+        .task-content-container{
+            width: 92%;
+            max-width: 420px;
+            padding: 0;
+        }
+
+        .task-link-container{
+            width: 100%;
+            max-width: none;
+            background: rgba(11,20,42,0.78);
+            padding: 12px;
+            border-radius: 18px;
+            box-shadow: 0 16px 46px rgba(0,0,0,0.34);
+            border: 1px solid rgba(255,255,255,0.10);
+            margin-bottom: 12px;
+            display:flex;
+            flex-direction:column;
+            gap: 8px;
+            align-items: stretch;
+            font-size: 13px;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .task-link-title{
+            font-size: 13px;
+            color: rgba(255,255,255,0.88);
+            font-weight: 800;
             display:flex;
             justify-content:space-between;
             align-items:center;
-            border: 1px solid #ddd; 
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            gap: 10px;
+        }
+        .task-link-progress-bar{
+            width: 100%;
+            height: 10px;
+            background: rgba(255,255,255,0.10);
+            border-radius: 999px;
+            overflow:hidden;
+            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
         }
 
-        .task-text-info {
-            color: #555; /* Slightly lighter text */
-            font-size: 16px;
-            font-weight: 500;
+        .task-item-card{
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 16px 44px rgba(0,0,0,0.30);
+            margin: 10px 0;
+            padding: 14px;
+            border-radius: 18px;
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            gap: 12px;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .task-left{
+            display:flex;
+            align-items:flex-start;
+            gap: 12px;
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+        .task-dot{
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: linear-gradient(90deg, var(--neon-start), var(--neon-mid), var(--neon-end));
+            box-shadow: 0 8px 18px rgba(0,0,0,0.35);
+            flex: 0 0 10px;
+            margin-top: 6px;
+        }
+        .task-text-info{
+            display:flex;
+            flex-direction:column;
+            gap: 6px;
+            min-width: 0;
+        }
+        .task-name{
+            color: rgba(255,255,255,0.95);
+            font-weight: 900;
+            font-size: 14px;
+            line-height: 1.25;
+            overflow:hidden;
+            text-overflow: ellipsis;
+        }
+        .task-meta{
+            display:flex;
+            align-items:center;
+            gap: 8px;
+            flex-wrap: wrap;
+            color: rgba(255,255,255,0.70);
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .task-reward{
+            padding: 5px 10px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: rgba(255,255,255,0.88);
+            font-weight: 900;
+            font-variant-numeric: tabular-nums;
         }
 
-        /* Button style from user's input (Pencil Style Action Button) */
-        .task-action-btn-new {
-            border:1px solid transparent;
-            color:#fff;
-            padding:10px 20px;
-            border-radius:8px;
+        .task-action-btn-new{
+            border: 1px solid rgba(255,255,255,0.16);
+            color: rgba(255,255,255,0.95);
+            padding: 10px 14px;
+            border-radius: 14px;
             cursor:pointer;
-            font-size:1em;
-            font-weight: bold;
-            min-width: 90px; 
-            transition: all 0.1s ease;
-            text-transform: uppercase;
+            font-size: 13px;
+            font-weight: 900;
+            min-width: 96px;
+            transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
+            background: linear-gradient(145deg, var(--primary-start), var(--primary-end));
+            box-shadow: 0 10px 26px rgba(0,0,0,0.35);
+            letter-spacing: 0.3px;
+            text-transform: none;
+            white-space: nowrap;
         }
-        .task-action-btn-new:hover {
-            transform: translateY(-1px);
-        }
-        .task-action-btn-new:active {
-            transform: translateY(2px);
-        }
-        .task-action-btn-new:disabled {
-            background:#ccc;
-            border-color:#aaa;
-            color:#666;
+        .task-action-btn-new:hover{transform: translateY(-1px); filter: brightness(1.03);}
+        .task-action-btn-new:active{transform: translateY(1px);}
+        .task-action-btn-new:disabled{
+            opacity: 0.55;
             cursor:not-allowed;
-            transform: translateY(0);
+            transform:none;
+            box-shadow:none;
+            filter:saturate(0.85);
         }
-        
-        .task-action-btn-new.completed {
-            background:linear-gradient(145deg, #28a745, #1e7e34); /* Green for completed */
-            border-color: #1c6d32;
-            color: #fff;
-            cursor: default;
-            box-shadow: 0 4px 0 #1c6d32;
+        .task-action-btn-new.completed{
+            background: linear-gradient(145deg, #28a745, #1e7e34);
+            border-color: rgba(255,255,255,0.14);
+            box-shadow: 0 10px 26px rgba(0,0,0,0.30);
         }
-        .task-action-btn-new.completed:disabled {
-             background:linear-gradient(145deg, #1e7e34, #1c6d32); /* Darker green when disabled (after completion) */
-             color: #ccc;
-             box-shadow: 0 4px 0 #1c6d32;
-        }
-        
-        .task-screen .note{ display: none; }
+        .task-screen .note{ display:none; }
 
-        /* Back Button Style - FIXED at bottom */
-        .task-back-btn {
+        .no-channel-tasks{
+            margin-top: 12px;
+            font-size: 13px;
+            color: rgba(255,255,255,0.75);
+            text-align:center;
+            background: rgba(255,255,255,0.06);
+            padding: 10px 12px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.10);
+        }
+
+        /* Back Button Style - fixed at bottom */
+        .task-back-btn{
             position: fixed;
-            bottom: 20px;
+            bottom: 18px;
             left: 50%;
             transform: translateX(-50%);
-            background:linear-gradient(145deg, #6c757d, #5a6268);
-            color:#fff;border:none;padding:15px 40px; /* Larger padding */
-            border-radius:12px;
-            font-size:16px;
-            font-weight:bold;
+            width: 92%;
+            max-width: 420px;
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.16);
+            background: rgba(255,255,255,0.08);
+            backdrop-filter: blur(10px) saturate(130%);
+            -webkit-backdrop-filter: blur(10px) saturate(130%);
+            color: rgba(255,255,255,0.92);
+            font-size: 15px;
+            font-weight: 900;
+            padding: 14px 16px;
             cursor:pointer;
-            box-shadow:0 6px 0 #4e555b; /* Larger shadow */
-            transition:all .1s ease;
-            width: 90%;
-            max-width: 350px;
-            z-index: 1000; /* Ensure it's above other elements */
+            box-shadow: 0 18px 55px rgba(0,0,0,0.40);
+            transition: transform .12s ease, filter .12s ease;
+            z-index: 1000;
         }
-        .task-back-btn:active{transform:translateY(3px) translateX(-50%);box-shadow:0 3px 0 #4e555b}
+        .task-back-btn:active{ transform: translateX(-50%) translateY(1px); filter: brightness(0.98); }
         
         /* ===== Spin Screen ===== */
         .spin-screen{
@@ -647,20 +797,64 @@
             transition:opacity .3s ease;
         }
         #wheelBox{position:relative;margin-bottom:25px}
+
+        /* Premium idle "breathing" (very subtle) */
+        #wheelBox.idle{
+            transform-origin:center;
+        }
+        /* Reduce constant animation to prevent lag on low-end phones */
+        @media (prefers-reduced-motion: no-preference){
+            .idle{ animation: wheelBreath 14s ease-in-out infinite; }
+            #wheelBox.spinning{ animation: none; }
+        }
+        @media (prefers-reduced-motion: reduce){
+            .idle{ animation: none; }
+            #wheelBox.spinning{ animation: none; }
+        }
+
+        @keyframes wheelBreath{
+            0%,100%{ transform: scale(1); }
+            50%{ transform: scale(1.002); }
+        }
+
+/* Subtle light flash during spin start */
+        #wheelBox .spin-light{
+            position:absolute;
+            inset:0;
+            border-radius:50%;
+            pointer-events:none;
+            opacity:0;
+            background: radial-gradient(circle at 30% 20%,
+                rgba(255,255,255,0.16),
+                rgba(255,255,255,0.00) 55%);
+            mix-blend-mode: screen;
+            filter: blur(3px);
+        }
+        #wheelBox.spin-flash .spin-light{
+            animation: spinFlash 0.65s ease-out forwards;
+        }
+        @keyframes spinFlash{
+            0%{ opacity:0; }
+            18%{ opacity:0.12; }
+            100%{ opacity:0; }
+        }
         #wheelCanvas{
             border-radius:50%;
-            /* Enhanced 3D Look */
-            box-shadow:0 0 0 10px #eee, 0 15px 35px rgba(0,0,0,0.4); 
-            background-color: #fefefe; 
-            border: 2px solid #ccc; 
+            background-color: #fefefe;
+            border: 1px solid rgba(255,255,255,0.35);
+            /* Premium depth (neutral, no slice color changes) */
+            box-shadow:
+              0 0 0 10px #eee,
+              0 18px 48px rgba(0,0,0,0.50),
+              inset 0 2px 2px rgba(255,255,255,0.55),
+              inset 0 -14px 22px rgba(0,0,0,0.18);
             transform-origin: center center;
-            transition: transform 4s cubic-bezier(0.22,0,0.2,1);
+            transition: transform 3.2s cubic-bezier(0.22,0,0.2,1);
             will-change: transform;
         }
-        /* Extra visual effect while spinning (glow) */
+        /* Extra visual effect while spinning (neutral, very subtle) */
         #wheelCanvas.spinning {
-            box-shadow: 0 0 40px rgba(255, 102, 136, 0.25), 0 15px 35px rgba(0,0,0,0.4);
-            filter: drop-shadow(0 10px 20px rgba(0,0,0,0.25));
+            filter: drop-shadow(0 10px 18px rgba(0,0,0,0.22));
         }
         .arrow{
             position:absolute;top:-16px;left:50%;transform:translateX(-50%);
@@ -669,84 +863,260 @@
         }
         .spin-btn{background:linear-gradient(145deg,var(--primary-start),var(--primary-end));color:#fff;border:none;padding:12px 35px;border-radius:30px;font-size:16px;font-weight:bold;cursor:pointer;box-shadow:0 6px 0 var(--primary-shadow);transition:all .1s ease}
         .spin-btn:active{transform:translateY(3px);box-shadow:0 3px 0 var(--primary-shadow)}
-        .spin-result{margin-top:18px;font-size:18px;color:#333;white-space:pre-wrap;text-align:center}
+        .spin-result{display:none !important;}
         .spin-back{margin-top:25px;background:#6c757d;color:#fff;border:none;padding:10px 25px;border-radius:8px;font-size:15px;font-weight:bold;cursor:pointer;box-shadow:0 4px 0 #5a6268}
         .spin-back:active{transform:translateY(2px);box-shadow:0 2px 0 #5a6268}
 
-        /* ===== Withdraw Screen - (No changes needed) ===== */
+                /* ===== Withdraw Screen - Fintech / Web3 Redesign (Mobile First) ===== */
         .withdraw-screen{
-            display:flex;flex-direction:column;align-items:center;padding:20px 20px;
-            transition:opacity .3s ease;
-            overflow-y: auto;
-        }
-        .withdraw-header{
-            text-align: center;
-            margin-bottom: 25px;
-            width: 100%;
-            max-width: 400px;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 15px;
-            border-radius: 15px;
             display:flex;
             flex-direction:column;
-            gap:10px;
             align-items:center;
+            padding:16px;
+            transition:opacity .3s ease;
+            overflow-y:auto;
+            background:linear-gradient(180deg,#0b1d3a,#08162c);
+            background-size:cover;
         }
-        .withdraw-header-top {
+
+        .withdraw-container{
+            width:100%;
+            max-width:420px;
+            display:flex;
+            flex-direction:column;
+            gap:16px;
+            padding-bottom:18px;
+        }
+
+        /* Banner (keep existing image with.png, scaled down ~35%, no white frame) */
+        .withdraw-banner{
+            width:100%;
+            height:110px;
+            background:url(with.png) center/contain no-repeat;
+            border-radius: 0;
+        }
+
+        /* Soft white card */
+        .withdraw-card{
+            background:rgba(255,255,255,0.94);
+            border-radius:16px;
+            box-shadow:0 10px 28px rgba(0,0,0,0.12);
+            padding:18px;
+        }
+
+        /* Section title */
+        .withdraw-section-title{
+            color:#e5e7eb;
+            font-weight:800;
+            font-size:13px;
+            margin:2px 2px 0 2px;
+        }
+
+        /* Balance Card */
+        .withdraw-balance-value{
+            font-size:34px;
+            font-weight:800;
+            letter-spacing:0.4px;
+            text-align:center;
+            color:#0f172a;
+        }
+        .withdraw-balance-currency{
+            margin-top:4px;
+            font-size:13px;
+            font-weight:700;
+            text-align:center;
+            color:#64748b;
+        }
+
+        /* Method Selection Cards */
+        .withdraw-method-toggle{
+            width:100%;
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:12px;
+        }
+
+        .method-option{
+            background:rgba(255,255,255,0.94);
+            border-radius:16px;
+            box-shadow:0 10px 28px rgba(0,0,0,0.10);
+            padding:14px;
+            display:flex;
+            align-items:center;
+            gap:10px;
+            cursor:pointer;
+            border:2px solid transparent;
+            transition:all .15s ease;
+            user-select:none;
+        }
+
+        .method-option input{
+            position:absolute;
+            opacity:0;
+            pointer-events:none;
+        }
+
+        .method-option .method-icon{
+            width:30px;
+            height:30px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-size:20px;
+        }
+
+        .method-option .label{
+            font-weight:800;
+            font-size:13px;
+            color:#0f172a;
+        }
+
+        .method-option.active{
+            border-color:var(--primary-start);
+            box-shadow:0 12px 34px rgba(11,134,214,0.22);
+        }
+
+        /* Form Card (reuse existing input classes) */
+        .input-form-container{
+            width:100%;
+            max-width:420px;
+            background:rgba(255,255,255,0.94);
+            padding:18px;
+            border-radius:16px;
+            box-shadow:0 10px 28px rgba(0,0,0,0.12);
+            border:none;
+            margin-bottom:0;
+        }
+
+        .input-group{
+            width:100%;
+            margin-bottom:14px;
+        }
+        .input-group label{
+            display:block;
+            margin-bottom:6px;
+            font-size:13px;
+            color:#64748b;
+            font-weight:700;
+        }
+        .input-group input{
+            width:100%;
+            padding:12px 14px;
+            border:1px solid #e5e7eb;
+            border-radius:12px;
+            font-size:15px;
+            transition:border-color .2s ease, box-shadow .2s ease;
+            outline:none;
+            background:#fff;
+        }
+        .input-group input:focus{
+            border-color:var(--primary-start);
+            box-shadow:0 0 0 3px rgba(11,134,214,0.18);
+        }
+
+        .withdraw-min-note{
+            margin-top:-8px;
+            margin-bottom:14px;
+            font-size:12px;
+            color:#64748b;
+        }
+
+        /* Primary / Secondary Buttons */
+        .withdraw-btn{
+            width:100%;
+            background:linear-gradient(145deg,var(--primary-start),var(--primary-end));
+            color:#fff;
+            border:none;
+            padding:14px 18px;
+            border-radius:16px;
+            font-size:16px;
+            font-weight:800;
+            cursor:pointer;
+            box-shadow:0 12px 30px rgba(11,134,214,0.35);
+            transition:transform .1s ease, box-shadow .1s ease, opacity .1s ease;
+        }
+
+        /* --- Withdraw UX tweaks (v2) --- */
+        .w-actions{
             width:100%;
             display:flex;
-            justify-content:space-between;
-            align-items:center;
-            gap:8px;
+            gap:12px;
+            margin-top:6px;
         }
-        .withdraw-title{
-            background: url(with.png) center;
-            background-size: cover;
-            width: 200px;
-            height: 170px;
-            border-radius: 50px;
-            margin-left: 45px;
+        .w-actions .withdraw-btn{flex:1;width:auto}
+        .withdraw-btn.w-outline{
+            background:linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.06));
+            color:#ffffff;
+            border:1px solid rgba(255,255,255,0.18);
+            box-shadow:0 12px 30px rgba(2,6,23,0.35);
         }
-        .current-balance-info{
-            font-size: 16px;
-            color: #555;
-            margin-top: 0;
-            font-weight: bold;
+        .withdraw-btn.w-outline:hover{
+            transform:translateY(-1px);
+            background:linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.08));
         }
-        .input-form-container {
-            width: 100%;
-            max-width: 420px;
-            background: #fff;
-            padding: 25px;
-            border-radius: 15px;
-            box-shadow: 0 6px 20px rgba(0,0,0,.1);
-            border: 1px solid #ddd;
-            margin-bottom: 20px;
-        }
-        .input-group{
-            width:100%;margin-bottom:15px;
-        }
-        .input-group label{display:block;margin-bottom:8px;font-size:14px;color:#555;font-weight:600;}
-        .input-group input{width:100%;padding:12px 15px;border:1px solid #ddd;border-radius:10px;font-size:16px;transition:border-color .3s ease, box-shadow .3s ease;outline:none;}
-        .input-group input:focus{border-color:#ff8c00;box-shadow:0 0 0 3px rgba(255,140,0,0.2);}
-        .withdraw-buttons{display:flex;gap:15px;margin-top:20px;justify-content: center;flex-wrap:wrap}
-        .withdraw-btn{
-            background: linear-gradient(145deg,var(--primary-start),var(--primary-end));
-            color:#fff;border:none;padding:12px 30px;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer;
-            box-shadow:0 5px 0 var(--primary-shadow);transition:all .1s ease;
-            width: 100%;
-            max-width: 220px;
-        }
-        .withdraw-btn:active{transform:translateY(3px);box-shadow:0 2px 0 var(--primary-shadow)}
-        .back-btn{
-            background:linear-gradient(145deg,#6c757d,#5a6268);
-            color:#fff;border:none;padding:12px 30px;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer;
-            box-shadow:0 5px 0 #4e555b;transition:all .1s ease;
-        }
-        .back-btn:active{transform:translateY(3px);box-shadow:0 2px 0 #4e555b}
-        .note{margin-top:15px;font-size:13px;color:#777;max-width:400px;text-align:center;background:rgba(255,140,0,0.1);padding:10px;border-radius:10px;border-left: 5px solid #ff8c00;}
 
-        /* Withdrawal History Table */
+        /* Make numbers clearer inside Telegram / mobile */
+        #withdrawBalanceDisplay,
+        #withdrawAmount,
+        .w-meta-pill,
+        .w-chip,
+        .history-item .amount{
+            font-family:'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            font-variant-numeric: tabular-nums;
+            letter-spacing:0.2px;
+            text-shadow:none;
+        }
+        #withdrawBalanceDisplay{font-weight:800}
+        #withdrawAmount{font-weight:700}
+
+        /* Make numbers clearer across the app (Main / Contest / History) */
+        #shibBalanceText,
+        .contest-ticket-value,
+        .prize-value,
+        .contest-countdown{
+            font-variant-numeric: tabular-nums;
+        }
+
+        .withdraw-btn:active{transform:translateY(2px)}
+        .withdraw-btn:disabled{
+            opacity:0.6;
+            box-shadow:none;
+            cursor:not-allowed;
+        }
+
+        .withdraw-secondary-btn{
+            width:100%;
+            background:rgba(255,255,255,0.10);
+            color:#e5e7eb;
+            border:1px solid rgba(255,255,255,0.18);
+            padding:12px 18px;
+            border-radius:16px;
+            font-size:14px;
+            font-weight:800;
+            cursor:pointer;
+            transition:transform .1s ease, background .15s ease;
+        }
+        .withdraw-secondary-btn:active{transform:translateY(2px)}
+        .withdraw-secondary-btn:hover{background:rgba(255,255,255,0.14)}
+
+        /* Info Bar */
+        .withdraw-info-bar{
+            width:100%;
+            display:flex;
+            align-items:center;
+            gap:10px;
+            padding:12px 14px;
+            border-radius:16px;
+            background:rgba(255,255,255,0.08);
+            border:1px solid rgba(255,255,255,0.14);
+            color:#e5e7eb;
+            font-size:13px;
+        }
+        .withdraw-info-bar .icon{
+            font-size:18px;
+            line-height:1;
+        }
+/* Withdrawal History Table */
         .history-section{
             width: 100%;
             max-width: 400px;
@@ -935,35 +1305,39 @@
         .custom-alert-box.warning .alert-title { color: #8B4513; } /* Brown */
         .custom-alert-box.warning .alert-icon::before { content: '✍️'; } /* Pencil/Writing Icon */
 
-        /* ===== Task Link Progress (NEW, COMPACT) ===== */
+        /* ===== Task Link Progress (COMPACT) ===== */
+        /* NOTE: Base layout colors are aligned with the new Task glass UI */
         .task-link-container {
             width: 100%;
-            max-width: 360px;
-            background: #fff;
-            padding: 8px;
-            border-radius: 10px;
-            box-shadow: 0 6px 18px rgba(0,0,0,0.06);
-            border: 1px solid #e6e6e6;
+            max-width: none;
+            background: rgba(11,20,42,0.78);
+            padding: 12px;
+            border-radius: 18px;
+            box-shadow: 0 16px 46px rgba(0,0,0,0.34);
+            border: 1px solid rgba(255,255,255,0.10);
             margin-bottom: 12px;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
             align-items: stretch;
             font-size: 13px;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
         }
         .task-link-title {
-            font-size: 14px;
-            color: #333;
-            font-weight: 700;
+            font-size: 13px;
+            color: rgba(255,255,255,0.88);
+            font-weight: 800;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 10px;
         }
         .task-link-progress-bar {
             width: 100%;
             height: 10px;
-            background: rgba(0,0,0,0.06);
-            border-radius: 8px;
+            background: rgba(255,255,255,0.10);
+            border-radius: 999px;
             overflow: hidden;
         }
         .task-link-progress-fill {
@@ -1014,12 +1388,12 @@
         .no-channel-tasks {
             margin-top: 12px;
             font-size: 13px;
-            color: #666;
+            color: rgba(255,255,255,0.75);
             text-align: center;
-            background: rgba(255,255,255,0.6);
-            padding: 8px 12px;
-            border-radius: 8px;
-            border: 1px solid rgba(0,0,0,0.04);
+            background: rgba(255,255,255,0.06);
+            padding: 10px 12px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.10);
         }
 
         /* ===== Withdraw method toggle ===== */
@@ -1041,7 +1415,8 @@
         /* ===== Fullscreen withdrawal history page ===== */
         .withdraw-history-full {
             display:flex;flex-direction:column;padding:20px 20px;overflow-y:auto;background:#fff;
-        }
+  padding-bottom: 96px;
+}
         .withdraw-history-header {
             display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;
         }
@@ -1060,168 +1435,320 @@
         /* (Now uses an image inside the circular button; styles above) */
 
         /* ===== Contest Screen Styles (UPDATED LAYOUT) ===== */
-        .contest-screen {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 20px 14px;
-            overflow-y: auto;
-            background: linear-gradient(135deg, #001f3f, #003366);
-            color: #fff;
-            position: relative;
-        }
-        .contest-header {
-            text-align: center;
-            margin-bottom: 18px;
-            width: 100%;
-            max-width: 420px;
-            background: rgba(255, 255, 255, 0.06);
-            padding: 14px;
-            border-radius: 12px;
-            backdrop-filter: blur(8px);
+        .contest-screen{
             display:flex;
             flex-direction:column;
-            gap:10px;
             align-items:center;
+            padding: 18px 14px 96px;
+            overflow-y:auto;
+            color:#fff;
+            position:relative;
+            background:
+              radial-gradient(1200px 800px at 15% 0%, rgba(0,191,255,0.20), transparent 55%),
+              radial-gradient(1000px 700px at 110% 20%, rgba(255,90,162,0.16), transparent 55%),
+              linear-gradient(135deg, #07162f, #061029 55%, #060b1f);
         }
-        .contest-title {
-            font-family: 'Orbitron', sans-serif;
-            font-size: 28px;
-            color: #00bfff;
-            font-weight: 700;
-            text-shadow: 0 0 10px #00bfff;
-            margin-bottom: 0;
-        }
-        .contest-countdown {
-            font-size: 20px;
-            color: #ffd700;
-            font-weight: bold;
-            letter-spacing: 1px;
-            text-shadow: 0 0 6px #ffd700;
-            margin-bottom: 0;
-        }
-        /* Prize distribution box (vertical, compact, no overflow) */
-        .prize-vertical-box {
+
+        .contest-header{
+            width:100%;
+            max-width: 460px;
             display:flex;
             flex-direction:column;
-            gap:8px;
-            background: rgba(255,255,255,0.06);
-            border-radius: 12px;
-            padding: 12px;
-            width: 100%;
-            max-width: 320px;
-            box-shadow: 0 6px 18px rgba(0,0,0,0.16);
-            border: 1px solid rgba(255,255,255,0.08);
-            color: #fff;
-            align-items:stretch;
+            gap:14px;
         }
-        .prize-item {
-            display:flex;
-            justify-content:space-between;
-            align-items:center;
-            gap: 8px;
-            padding: 8px 10px;
-            border-radius: 10px;
-            background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-            font-weight:700;
-            font-size:14px;
-            white-space:nowrap;
+
+        .contest-hero{
+            position:relative;
+            padding: 14px 14px 12px;
+            border-radius: 16px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.10);
+            backdrop-filter: blur(10px) saturate(130%);
+            -webkit-backdrop-filter: blur(10px) saturate(130%);
+            box-shadow: 0 18px 50px rgba(0,0,0,0.35);
             overflow:hidden;
-            text-overflow:ellipsis;
         }
-        .prize-label { color: #e6f7ff; font-weight:700; }
-        .prize-value { color: #ffd700; font-weight:900; }
-        /* ensure content doesn't overflow horizontally on small screens */
-        .prize-item .prize-label, .prize-item .prize-value {
-            max-width: 60%;
+        .contest-hero::before{
+            content:"";
+            position:absolute;
+            inset:-1px;
+            border-radius: 16px;
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(0,242,254,0.65), rgba(122,92,255,0.55), rgba(255,90,162,0.55));
+            -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events:none;
+            opacity:0.85;
+        }
+
+        .contest-hero-top{
+            display:flex;
+            align-items:flex-start;
+            justify-content:space-between;
+            gap: 10px;
+        }
+
+        .contest-title{
+            font-family:'Orbitron','Inter','Vazirmatn', sans-serif;
+            font-size: 24px;
+            font-weight: 900;
+            letter-spacing: 0.4px;
+            margin: 0;
+            color: rgba(255,255,255,0.96);
+            text-shadow: 0 10px 26px rgba(0,0,0,0.40);
+        }
+
+        .contest-badge{
+            flex: 0 0 auto;
+            font-weight: 900;
+            font-size: 11px;
+            letter-spacing: 0.8px;
+            padding: 8px 10px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: rgba(255,255,255,0.90);
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .contest-meta{
+            margin-top: 10px;
+            display:grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .meta-pill{
+            border-radius: 14px;
+            padding: 10px 10px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.10);
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+            display:flex;
+            flex-direction:column;
+            gap: 6px;
+            align-items:flex-start;
+            min-width: 0;
+        }
+
+        .meta-label{
+            font-size: 12px;
+            font-weight: 800;
+            color: rgba(255,255,255,0.70);
+            letter-spacing: 0.2px;
+        }
+
+        .meta-value,
+        .contest-countdown{
+            font-size: 16px;
+            font-weight: 900;
+            color: #ffd700;
+            text-shadow: 0 0 10px rgba(255,215,0,0.22);
+            white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
 
-        .contest-tickets-container {
-            width: 100%;
-            max-width: 420px;
-            background: rgba(255, 255, 255, 0.06);
-            padding: 12px;
-            border-radius: 12px;
-            backdrop-filter: blur(8px);
-            margin-bottom: 16px;
-            display:flex;
-            gap:10px;
-            align-items:center;
-            justify-content:space-between;
-        }
-        .contest-ticket-row {
+        /* Prize list */
+        .prize-vertical-box{
             display:flex;
             flex-direction:column;
-            gap:6px;
-            align-items:flex-start;
-            min-width: 0;
-        }
-        .contest-ticket-label {
-            font-size: 14px;
-            color: #cfeeff;
-            font-weight: 700;
-            display:flex;
-            align-items:center;
-            gap:6px;
-        }
-        .contest-ticket-value {
-            font-size: 15px;
-            color: #ffd700;
-            font-weight: bold;
-            white-space:nowrap;
-            overflow:hidden;
-            text-overflow:ellipsis;
-        }
-        .contest-buttons-horizontal {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin-top: 6px;
-        }
-        .contest-watch-btn, .contest-rank-btn {
-            background: linear-gradient(145deg,var(--primary-start),var(--primary-end));
-            color: #fff;
-            border: none;
-            padding: 12px 25px;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 5px 0 var(--primary-shadow), 0 8px 15px rgba(0,0,0,.2);
-            transition: all .1s ease;
-        }
-        .contest-watch-btn.locked { opacity: 0.6; cursor: not-allowed; box-shadow: none; transform: none; }
-        .contest-watch-btn:hover, .contest-rank-btn:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 6px 0 var(--primary-shadow), 0 10px 20px rgba(0,0,0,.25);
-        }
-        .contest-back-btn {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: linear-gradient(145deg, #6c757d, #5a6268);
-            color: #fff;
-            border: none;
-            padding: 15px 40px;
-            border-radius: 12px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 6px 0 #4e555b;
-            transition: all .1s ease;
-            width: 90%;
-            max-width: 350px;
-            z-index: 1000;
-        }
-        .contest-back-btn:active {
-            transform: translateY(3px) translateX(-50%);
-            box-shadow: 0 3px 0 #4e555b;
+            gap: 10px;
+            padding: 12px;
+            border-radius: 16px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.10);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 18px 50px rgba(0,0,0,0.30);
         }
 
-        /* ===== Contest Ranking Screen ===== */
+        .prize-item{
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap: 10px;
+            padding: 12px 12px;
+            border-radius: 14px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+            border: 1px solid rgba(255,255,255,0.10);
+            overflow:hidden;
+        }
+        .prize-item:hover{
+            transform: translateY(-2px);
+            box-shadow: 0 16px 34px rgba(0,0,0,0.22);
+        }
+
+        .prize-item.prize-top{
+            border-color: rgba(255,215,0,0.22);
+            box-shadow: 0 22px 55px rgba(255,215,0,0.06), 0 18px 50px rgba(0,0,0,0.28);
+            background: linear-gradient(180deg, rgba(255,215,0,0.10), rgba(255,255,255,0.03));
+        }
+        .prize-item.prize-second{
+            border-color: rgba(192,192,192,0.22);
+            background: linear-gradient(180deg, rgba(210,210,210,0.08), rgba(255,255,255,0.02));
+        }
+
+        .prize-left{
+            display:flex;
+            align-items:center;
+            gap: 10px;
+            min-width: 0;
+        }
+        .prize-medal{
+            width: 36px;
+            height: 36px;
+            border-radius: 12px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.14);
+            box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+            flex: 0 0 36px;
+            font-size: 18px;
+        }
+        .prize-text{
+            display:flex;
+            flex-direction:column;
+            gap: 3px;
+            min-width: 0;
+        }
+        .prize-label{
+            font-weight: 900;
+            font-size: 14px;
+            color: rgba(255,255,255,0.95);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .prize-sub{
+            font-size: 12px;
+            font-weight: 800;
+            color: rgba(255,255,255,0.68);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .prize-amount{
+            display:flex;
+            align-items:baseline;
+            gap: 6px;
+            flex: 0 0 auto;
+            font-weight: 900;
+            font-variant-numeric: tabular-nums;
+        }
+        .prize-value{
+            font-size: 18px;
+            color: #ffd700;
+            text-shadow: 0 0 10px rgba(255,215,0,0.18);
+        }
+        .prize-unit{
+            font-size: 12px;
+            color: rgba(255,255,255,0.75);
+            letter-spacing: 0.4px;
+        }
+
+        /* Tickets container */
+        .contest-tickets-container{
+            width: 100%;
+            max-width: 460px;
+            margin-top: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255,255,255,0.10);
+            padding: 12px;
+            border-radius: 16px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display:flex;
+            gap: 12px;
+            align-items:center;
+            justify-content:space-between;
+            box-shadow: 0 18px 50px rgba(0,0,0,0.25);
+        }
+        .contest-ticket-row{
+            display:flex;
+            flex-direction:column;
+            gap: 6px;
+            min-width: 0;
+        }
+        .contest-ticket-label{
+            font-size: 12px;
+            font-weight: 800;
+            color: rgba(255,255,255,0.75);
+            display:flex;
+            align-items:center;
+            gap: 6px;
+        }
+        .contest-ticket-value{
+            font-size: 16px;
+            font-weight: 900;
+            color: rgba(255,255,255,0.95);
+            white-space: nowrap;
+            overflow:hidden;
+            text-overflow: ellipsis;
+        }
+
+        .contest-buttons-horizontal{
+            display:flex;
+            gap: 10px;
+            justify-content:center;
+            margin-top: 14px;
+        }
+
+        .contest-watch-btn, .contest-rank-btn{
+            background: linear-gradient(145deg,var(--primary-start),var(--primary-end));
+            color:#fff;
+            border:none;
+            padding: 12px 18px;
+            border-radius: 14px;
+            font-size: 14px;
+            font-weight: 900;
+            cursor:pointer;
+            box-shadow: 0 6px 0 var(--primary-shadow), 0 16px 34px rgba(0,0,0,.28);
+            transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
+            white-space: nowrap;
+        }
+        .contest-watch-btn.locked{opacity:0.6;cursor:not-allowed;box-shadow:none;transform:none}
+        .contest-watch-btn:hover, .contest-rank-btn:hover{transform:translateY(-2px);filter:saturate(1.05)}
+        .contest-watch-btn:active, .contest-rank-btn:active{transform:translateY(2px);box-shadow: 0 4px 0 var(--primary-shadow), 0 10px 22px rgba(0,0,0,.22);}
+
+        .contest-back-btn{
+            position: fixed;
+            bottom: 18px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 92%;
+            max-width: 420px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.14);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            color: rgba(255,255,255,0.92);
+            padding: 14px 16px;
+            border-radius: 18px;
+            font-size: 15px;
+            font-weight: 900;
+            cursor: pointer;
+            box-shadow: 0 18px 55px rgba(0,0,0,0.40);
+            z-index: 1000;
+        }
+        .contest-back-btn:active{
+            transform: translateX(-50%) translateY(1px);
+            filter: brightness(0.98);
+        }
+
+        @media (max-width: 360px){
+            .contest-title{font-size:22px}
+            .contest-badge{font-size:10px}
+            .meta-value, .contest-countdown{font-size:15px}
+            .prize-value{font-size:17px}
+        }
+
+/* ===== Contest Ranking Screen ===== */
         .contest-rank-screen {
             display: flex;
             flex-direction: column;
@@ -1586,325 +2113,1384 @@
         /* small helper to visually hide old overlay (we won't use it anymore but keep DOM for compatibility) */
         .custom-alert-overlay { display: none !important; opacity: 0 !important; pointer-events: none !important; }
 
-    </style>
+    
+
+        /* ============================
+           Invite Screen (v3 / EN / solid)
+           ============================ */
+        .invite-screen{
+            display:flex;
+            flex-direction:column;
+            align-items:stretch;
+            padding: 16px 16px 26px;
+            overflow-y:auto;
+            background:
+                radial-gradient(900px 500px at 10% 10%, rgba(0,242,254,0.18), rgba(0,0,0,0) 60%),
+                radial-gradient(900px 500px at 90% 20%, rgba(255,90,162,0.14), rgba(0,0,0,0) 60%),
+                linear-gradient(180deg, #0b1220 0%, #070b13 100%);
+        }
+        .invite-screen *{ box-sizing: border-box; }
+        .invite-shell{
+            width:100%;
+            max-width: 460px;
+            margin: 0 auto;
+            display:flex;
+            flex-direction:column;
+            gap: 14px;
+            position: relative;
+            z-index: 1;
+            font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        }
+
+        .invite-topbar{
+            display:flex;
+            align-items:center;
+            gap: 12px;
+            padding: 6px 2px;
+        }
+        .invite-back-icon{
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.14);
+            background: #0f1a2b;
+            color: #fff;
+            font-size: 18px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            box-shadow: 0 10px 22px rgba(0,0,0,0.38);
+            transition: transform .15s ease, filter .15s ease;
+        }
+        .invite-back-icon:active{ transform: translateY(1px) scale(0.99); }
+        .invite-topbar-title{ display:flex; flex-direction:column; line-height:1.1; }
+        .invite-topbar-kicker{
+            font-size: 12px;
+            letter-spacing: .18em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.62);
+        }
+        .invite-topbar-headline{
+            font-size: 18px;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        .invite-hero-card{
+            display:flex;
+            gap: 14px;
+            padding: 14px;
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: linear-gradient(180deg, #0f1a2b 0%, #0b1424 100%);
+            box-shadow: 0 18px 40px rgba(0,0,0,0.45);
+            position: relative;
+            overflow:hidden;
+        }
+        .invite-hero-card::after{
+            content:"";
+            position:absolute;
+            inset:-2px;
+            background: radial-gradient(420px 240px at 20% 20%, rgba(0,242,254,0.12), rgba(0,0,0,0) 65%),
+                        radial-gradient(420px 240px at 80% 10%, rgba(122,92,255,0.12), rgba(0,0,0,0) 65%);
+            pointer-events:none;
+        }
+        .invite-hero-art{
+            width: 92px;
+            height: 76px;
+            border-radius: 16px;
+            background: url(refal.png) center/cover no-repeat, linear-gradient(135deg, #00f2fe 0%, #7a5cff 45%, #ff5aa2 100%);
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18), 0 14px 28px rgba(0,0,0,0.35);
+            flex: 0 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+        .invite-hero-text{ position:relative; z-index:1; }
+        .invite-hero-title{
+            font-size: 18px;
+            font-weight: 900;
+            color:#fff;
+        }
+        .invite-hero-sub{
+            margin-top: 6px;
+            font-size: 13px;
+            color: rgba(255,255,255,0.78);
+            line-height: 1.35;
+        }
+        .invite-hero-sub strong{ color:#fff; font-weight: 900; }
+
+        .invite-stats{
+            display:grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .invite-stat{
+            padding: 12px 12px;
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.10);
+            background: #0f1a2b;
+            box-shadow: 0 14px 30px rgba(0,0,0,0.35);
+        }
+        .invite-stat .label{
+            font-size: 11px;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.60);
+        }
+        .invite-stat .value{
+            margin-top: 6px;
+            font-size: 18px;
+            font-weight: 900;
+            color: #fff;
+        }
+        .pill{
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #00f2fe 0%, #7a5cff 55%, #ff5aa2 100%);
+            color: #0b1220;
+        }
+
+        .invite-link-card,
+        .invite-note-card{
+            padding: 14px;
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: #0f1a2b;
+            box-shadow: 0 18px 40px rgba(0,0,0,0.45);
+        }
+        .invite-link-label{
+            font-size: 12px;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.68);
+            margin-bottom: 10px;
+        }
+        .invite-link-row{
+            display:flex;
+            gap: 10px;
+            align-items:center;
+        }
+        .invite-link-input{
+            width:100%;
+            height: 46px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: #0b1424;
+            color: #fff;
+            padding: 0 12px;
+            font-size: 13px;
+            outline: none;
+        }
+        .invite-mini-btn{
+            height: 46px;
+            padding: 0 14px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.14);
+            background: #14213a;
+            color: #fff;
+            font-weight: 800;
+            box-shadow: 0 14px 28px rgba(0,0,0,0.35);
+            transition: transform .15s ease;
+            white-space: nowrap;
+        }
+        .invite-mini-btn:active{ transform: translateY(1px) scale(0.99); }
+
+        .invite-actions{
+            display:flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+        .invite-primary-btn{
+            flex: 1 1 auto;
+            height: 48px;
+            border-radius: 16px;
+            border: none;
+            background: linear-gradient(135deg, #00f2fe 0%, #7a5cff 55%, #ff5aa2 100%);
+            color: #0b1220;
+            font-weight: 900;
+            letter-spacing: .02em;
+            box-shadow: 0 18px 34px rgba(0,0,0,0.45);
+            transition: transform .15s ease, filter .15s ease;
+        }
+        .invite-primary-btn:active{ transform: translateY(1px) scale(0.99); }
+
+        .invite-ghost-btn{
+            flex: 0 0 auto;
+            height: 48px;
+            padding: 0 14px;
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.14);
+            background: #0b1424;
+            color: #fff;
+            font-weight: 800;
+        }
+
+        .invite-hint{
+            margin-top: 10px;
+            font-size: 12px;
+            color: rgba(255,255,255,0.72);
+            line-height: 1.35;
+        }
+
+        .invite-note-title{
+            font-size: 14px;
+            font-weight: 900;
+            color: #fff;
+            margin-bottom: 10px;
+        }
+        .invite-note-list{
+            margin: 0;
+            padding-left: 18px;
+            color: rgba(255,255,255,0.80);
+            font-size: 13px;
+            line-height: 1.45;
+        }
+        .invite-note-list li{ margin: 6px 0; }
+
+        .invite-back-btn{
+            background: #0f1a2b !important;
+            border: 1px solid rgba(255,255,255,0.14) !important;
+            color: #fff !important;
+            border-radius: 18px !important;
+            box-shadow: 0 18px 40px rgba(0,0,0,0.45) !important;
+        }
+
+        @media (max-width: 360px){
+            .invite-stats{ grid-template-columns: 1fr; }
+        }
+
+
+
+/* ===== Withdraw Page: Ultra Pro Upgrade (2026) ===== */
+.withdraw-screen{
+  background: radial-gradient(1200px 800px at 20% -10%, rgba(122,92,255,0.45), transparent 55%),
+              radial-gradient(900px 700px at 110% 10%, rgba(255,90,162,0.35), transparent 55%),
+              linear-gradient(180deg, #060c18 0%, #070f22 50%, #050b16 100%);
+  padding: 18px 16px 26px;
+}
+
+.withdraw-container{max-width:460px; gap:14px;}
+
+.w-hero{
+  background: linear-gradient(180deg, #0c1630 0%, #0a1328 100%);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 22px;
+  padding: 16px 16px 14px;
+  box-shadow: 0 18px 55px rgba(0,0,0,0.38);
+}
+.w-hero-top{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;}
+.w-badge{
+  display:inline-flex; align-items:center; gap:8px;
+  font-weight:800; letter-spacing:.3px; font-size:12px;
+  color: rgba(255,255,255,0.86);
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.10);
+  padding: 8px 10px;
+  border-radius: 999px;
+}
+.w-icon-btn{
+  width:38px; height:38px; border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.92);
+  cursor:pointer;
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+}
+.w-icon-btn:active{transform: translateY(1px);}
+.w-hero-title{
+  font-family: 'Orbitron', sans-serif;
+  font-size: 22px;
+  color: rgba(255,255,255,0.95);
+  letter-spacing: .2px;
+  margin-bottom: 6px;
+}
+.w-hero-sub{
+  color: rgba(255,255,255,0.72);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.w-balance-card{
+  background: #0b142a;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 22px;
+  padding: 16px;
+  box-shadow: 0 16px 45px rgba(0,0,0,0.35);
+}
+.w-balance-label{color: rgba(255,255,255,0.68); font-size: 12px; font-weight: 700;}
+.w-balance-row{display:flex; align-items:baseline; gap:10px; margin-top:8px;}
+.w-balance-value{
+  font-family: 'Orbitron', sans-serif;
+  font-size: 34px;
+  color: rgba(255,255,255,0.98);
+  letter-spacing: .4px;
+}
+.w-balance-unit{color: rgba(255,255,255,0.72); font-weight:800; font-size: 12px; letter-spacing:.5px;}
+.w-balance-meta{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;}
+.w-meta-pill{
+  color: rgba(255,255,255,0.78);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.10);
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.w-panel{
+  background: #0b142a;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 22px;
+  padding: 14px;
+  box-shadow: 0 16px 45px rgba(0,0,0,0.30);
+}
+.w-panel-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;}
+.w-panel-title{
+  color: rgba(255,255,255,0.92);
+  font-weight: 900;
+  font-size: 13px;
+  letter-spacing: .2px;
+  margin-bottom: 10px;
+}
+.w-panel-head .w-panel-title{margin-bottom:0;}
+.w-link-btn{
+  border: none;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.88);
+  font-weight: 800;
+  font-size: 12px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform .12s ease, background .12s ease;
+}
+.w-link-btn:active{transform: translateY(1px);}
+
+.withdraw-method-toggle{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.method-option{
+  background: #0f1f3a;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 18px;
+  padding: 12px;
+  box-shadow: 0 14px 40px rgba(0,0,0,0.30);
+  transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease, background .14s ease;
+  position: relative;
+  overflow:hidden;
+}
+.method-option::after{
+  content:"";
+  position:absolute; inset:-40%;
+  background: radial-gradient(circle at 20% 30%, rgba(122,92,255,0.35), transparent 55%),
+              radial-gradient(circle at 80% 40%, rgba(255,90,162,0.25), transparent 55%);
+  opacity: 0;
+  transition: opacity .18s ease;
+}
+.method-option *{position: relative;}
+.method-option .method-icon{font-size: 18px;}
+.method-option .label{color: rgba(255,255,255,0.92); font-weight: 900; font-size: 13px;}
+.w-method-note{
+  display:block;
+  margin-top:4px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.62);
+  font-weight: 700;
+}
+.method-option.active{
+  border-color: rgba(255,255,255,0.22);
+  transform: translateY(-1px);
+  box-shadow: 0 18px 55px rgba(0,0,0,0.38);
+}
+.method-option.active::after{opacity:1;}
+
+.w-hint{
+  margin-top: 10px;
+  color: rgba(255,255,255,0.70);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.withdraw-screen .input-group label{
+  color: rgba(255,255,255,0.78);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .2px;
+}
+.withdraw-screen .input-group input{
+  background: #081127;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.92);
+  border-radius: 16px;
+  padding: 12px 12px;
+}
+.withdraw-screen .input-group input::placeholder{color: rgba(255,255,255,0.48);}
+.withdraw-screen .input-group input:focus{
+  border-color: rgba(122,92,255,0.65);
+  box-shadow: 0 0 0 4px rgba(122,92,255,0.16);
+}
+
+.w-chips{display:flex; gap:8px; flex-wrap:wrap;}
+.w-chip{
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.90);
+  padding: 9px 12px;
+  border-radius: 999px;
+  font-weight: 900;
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform .12s ease, background .12s ease;
+}
+.w-chip:active{transform: translateY(1px);}
+
+.withdraw-min-note{
+  color: rgba(255,255,255,0.60);
+  font-size: 12px;
+  margin-top: 10px;
+}
+
+.withdraw-btn.w-primary{
+  width: 100%;
+  border-radius: 18px;
+  padding: 14px 16px;
+  font-weight: 1000;
+  letter-spacing: .2px;
+  background: linear-gradient(90deg, var(--neon-start), var(--neon-mid), var(--neon-end));
+  border: 1px solid rgba(255,255,255,0.18);
+  box-shadow: 0 18px 55px rgba(0,0,0,0.42);
+}
+.withdraw-btn.w-primary:disabled{
+  opacity: 0.45;
+  filter: saturate(0.75);
+  box-shadow: none;
+}
+.withdraw-secondary-btn.w-secondary{
+  width: 100%;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.90);
+  font-weight: 900;
+  padding: 13px 14px;
+}
+.withdraw-secondary-btn.w-secondary:active{transform: translateY(1px);}
+
+.withdraw-info-bar{
+  background: #0b142a;
+  border: 1px solid rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.78);
+  border-radius: 18px;
+}
+
+/* ===== Withdrawal History Upgrade ===== */
+.withdraw-history-screen{
+  background: radial-gradient(1000px 700px at 10% 0%, rgba(122,92,255,0.35), transparent 55%),
+              radial-gradient(900px 700px at 110% 20%, rgba(255,90,162,0.25), transparent 55%),
+              linear-gradient(180deg, #060c18 0%, #050b16 100%);
+  padding: 0;              /* scrolling moved to inner container so the bottom alert stays fixed */
+  overflow: hidden;
+}
+.withdraw-history-full{
+  background: transparent;
+  max-width: 720px;
+  margin: 0 auto;
+  flex: 1;
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 18px 16px 120px; /* extra bottom space so content never hides behind the fixed alert */
+}
+
+.w-history-hero{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+  background: linear-gradient(180deg, #0c1630 0%, #0a1328 100%);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 22px;
+  padding: 16px;
+  box-shadow: 0 18px 55px rgba(0,0,0,0.38);
+  margin-bottom: 12px;
+  position: sticky;
+  top: 12px;
+  z-index: 200;
+}
+.w-history-title{
+  font-family: 'Orbitron', sans-serif;
+  color: rgba(255,255,255,0.95);
+  font-size: 18px;
+  font-weight: 900;
+  margin-bottom: 4px;
+}
+.w-history-sub{
+  color: rgba(255,255,255,0.70);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.back-btn.w-history-back{
+  border-radius: 14px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.90);
+  font-weight: 900;
+  padding: 10px 14px;
+}
+.back-btn.w-history-back:active{transform: translateY(1px);}
+
+.history-list{
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding-bottom: 50px;
+}
+
+.history-item{
+  background: #0b142a;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 18px;
+  padding: 14px;
+  display:flex;
+  justify-content:space-between;
+  gap: 12px;
+  box-shadow: 0 16px 45px rgba(0,0,0,0.32);
+  margin-bottom: 10px;
+}
+.history-item .left{color: rgba(255,255,255,0.80); font-size: 12px; line-height: 1.5;}
+.history-item .left strong{color: rgba(255,255,255,0.92);}
+.history-item .right{text-align:right;}
+.history-item .amount{
+  font-family: 'Orbitron', sans-serif;
+  color: rgba(255,255,255,0.95);
+  font-size: 14px;
+  font-weight: 900;
+  margin-bottom: 6px;
+}
+.history-row{display:flex;gap:8px;align-items:flex-start;}
+.history-row strong{min-width:52px;}
+.history-dest{word-break:break-all;}
+.status-pending, .status-completed{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  border: 1px solid rgba(255,255,255,0.14);
+}
+.status-pending{background: rgba(255,183,77,0.14); color: rgba(255,211,132,0.95);}
+.status-completed{background: rgba(70,255,188,0.12); color: rgba(140,255,212,0.95);}
+
+.history-empty{
+  background: #0b142a;
+  border: 1px solid rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.78);
+  border-radius: 18px;
+  padding: 16px;
+  text-align:center;
+  box-shadow: 0 16px 45px rgba(0,0,0,0.32);
+}
+
+/* Small screens */
+@media (max-width: 380px){
+  .withdraw-method-toggle{grid-template-columns: 1fr;}
+}
+
+/* === Withdraw refinements (v3) === */
+:root{
+  --app-font: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+/* One font across the app */
+html, body, button, input, textarea, select, .app, .app *{
+  font-family: var(--app-font) !important;
+}
+
+/* Make header compact (title removed) */
+.withdraw-screen{ padding-bottom: 92px; }
+.w-hero{ padding:14px 14px 12px; }
+.w-hero .w-badge{ font-weight:800; letter-spacing:.2px; }
+
+/* Numbers clarity */
+.w-balance-value,
+#withdrawBalanceDisplay,
+#withdrawAmount,
+.withdrawal-amount,
+.withdrawal-balance,
+.w-meta-pill{
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .2px;
+}
+
+/* Method switch (segmented, solid) */
+.withdraw-method-toggle{
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+
+.method-option{
+  background:#0d2343;
+  border:1px solid rgba(255,255,255,0.14);
+  box-shadow:none;
+  border-radius:16px;
+  padding:14px 14px;
+}
+
+.method-option .label{
+  color:#e2e8f0;
+  font-weight:800;
+  font-size:13px;
+}
+
+.method-option .method-icon{
+  font-size:18px;
+  width:28px;
+  height:28px;
+  border-radius:10px;
+  background:rgba(255,255,255,0.10);
+}
+
+.method-option.active{
+  background:#ffffff;
+  border-color:#ffffff;
+  box-shadow:0 10px 26px rgba(0,0,0,0.18);
+}
+
+.method-option.active .label{
+  color:#0f172a;
+}
+
+.method-option.active .method-icon{
+  background:rgba(15,23,42,0.06);
+}
+
+/* Actions row: tidy + equal buttons */
+.w-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  margin-top:14px;
+}
+
+.withdraw-btn{
+  width:100%;
+  height:48px;
+  border-radius:16px;
+  font-weight:800;
+}
+
+/* Bottom alert (restored style) */
+.w-bottom-alert{
+  position:fixed;
+  left:50%;
+  bottom:calc(12px + env(safe-area-inset-bottom));
+  transform:translateX(-50%);
+  width:min(380px, calc(100% - 32px));
+  background:rgba(11,26,51,0.55);
+  border:1px solid rgba(255,255,255,0.16);
+  color:#e7eefc;
+  padding:10px 12px;
+  border-radius:14px;
+  box-shadow:0 10px 24px rgba(0,0,0,0.22);
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  z-index:9000;
+  font-size:12.5px;
+  line-height:1.35;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.w-alert-dot{
+  width:10px;
+  height:10px;
+  border-radius:999px;
+  margin-top:4px;
+  background:#38bdf8;
+  flex:0 0 auto;
+}
+
+
+        /* ===== Withdraw Screen - Modern Controls (v5) ===== */
+        .w-actions{
+            gap:10px;
+            margin-top:10px;
+        }
+        .withdraw-btn{
+            height:46px;
+            border-radius:16px;
+            font-size:15px;
+            letter-spacing:0.2px;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .withdraw-btn:active{ transform:translateY(1px); }
+
+        /* Anti double-tap / loading state */
+        .withdraw-btn.is-loading{
+            opacity:0.85;
+            pointer-events:none;
+        }
+        .withdraw-btn.is-loading::after{
+            content:"";
+            width:16px;height:16px;
+            border-radius:999px;
+            border:2px solid rgba(255,255,255,0.55);
+            border-top-color: rgba(255,255,255,0.10);
+            margin-left:10px;
+            display:inline-block;
+            vertical-align:middle;
+            animation: wspin 0.9s linear infinite;
+        }
+        @keyframes wspin{ to { transform:rotate(360deg); } }
+
+        /* Modern segmented method toggle */
+        .withdraw-method-toggle{
+            display:flex;
+            gap:6px;
+            padding:6px;
+            border-radius:18px;
+            background:rgba(255,255,255,0.08);
+            border:1px solid rgba(255,255,255,0.14);
+            box-shadow:0 14px 34px rgba(0,0,0,0.22);
+        }
+        .method-option{
+            flex:1;
+            background:transparent;
+            border:0;
+            box-shadow:none;
+            padding:12px 10px;
+            border-radius:14px;
+            color:rgba(255,255,255,0.86);
+            justify-content:center;
+            gap:8px;
+            transition:transform .12s ease, background .12s ease, color .12s ease;
+        }
+        .method-option .label{ font-weight:800; }
+        .method-option .method-icon{ filter:drop-shadow(0 6px 14px rgba(0,0,0,0.22)); }
+        .method-option:hover{ transform:translateY(-1px); }
+        .method-option.active{
+            background:rgba(255,255,255,0.96);
+            color:#0b1d3a;
+            box-shadow:0 12px 26px rgba(0,0,0,0.18);
+        }
+        .method-option.active .label{ color:#0b1d3a; }
+        .method-option input{ display:none; }
+
+        /* Bottom alert: fixed, subtle, and never above the loader */
+        .w-bottom-alert{
+            pointer-events:none;
+            font-size:12.5px;
+            line-height:1.35;
+        }
+
+        @media (max-width:360px){
+            .withdraw-btn{ height:44px; font-size:14.5px; }
+            .method-option{ padding:11px 8px; }
+        }
+
+
+/* ===== Modern typography ===== */
+:root{
+  --font-sans: 'Plus Jakarta Sans','Inter',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;
+}
+body{ font-family: var(--font-sans); }
+
+/* ===== Contest (English/LTR polish) ===== */
+.contest-header{ direction:ltr; }
+.contest-title{ letter-spacing:-0.02em; }
+.contest-badge{ backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.meta-pill{ border: 1px solid rgba(255,255,255,0.10); }
+.prize-item{ border: 1px solid rgba(255,255,255,0.10); }
+
+/* ===== Leaderboard redesign ===== */
+.contest-rank-screen{
+  background: radial-gradient(900px 500px at 20% 0%, rgba(255,215,0,0.18), transparent 60%),
+              radial-gradient(900px 500px at 90% 20%, rgba(0,170,255,0.16), transparent 55%),
+              linear-gradient(135deg, #07101d, #0b1a2f 55%, #0a1730);
+  color:#fff;
+  padding: 14px;
+}
+.contest-rank-header{
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 10px 10px 12px;
+  margin: -14px -14px 12px;
+  background: rgba(7,16,29,0.18); /* more transparent */
+  border-bottom: 0;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.contest-rank-title{
+  margin:0;
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+.rank-header-left{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+.rank-sub{
+  font-size: 12px;
+  color: rgba(255,255,255,0.65);
+  margin-top: 2px;
+}
+.rank-header-actions{
+  display:flex;
+  align-items:center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.lb-refresh{
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,215,0,0.12);
+  color:#fff;
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-weight: 700;
+  cursor:pointer;
+  transition: transform .15s ease, background .15s ease;
+}
+.lb-refresh:active{ transform: scale(0.98); }
+.lb-refresh:hover{ background: rgba(255,215,0,0.18); }
+
+.contest-rank-list{
+  width: min(980px, 100%);
+  margin: 0 auto;
+  display:flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Row cards */
+.contest-rank-item{
+  border-radius: 16px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.10);
+  display:grid;
+  grid-template-columns: 54px 1fr 160px 120px 72px;
+  align-items:center;
+  gap: 10px;
+  box-shadow: 0 10px 26px rgba(0,0,0,0.18);
+}
+.contest-rank-item img{
+  width: 46px !important;
+  height: 46px !important;
+  border-radius: 14px !important;
+  border: 1px solid rgba(255,255,255,0.14);
+}
+.contest-rank-name .name-main{
+  font-weight: 800;
+  letter-spacing:-0.01em;
+}
+.contest-rank-username{
+  margin-top: 2px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.contest-rank-userid{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+  font-size: 12px;
+  color: rgba(255,255,255,0.70);
+  opacity: 0.9;
+  overflow:hidden;
+  text-overflow: ellipsis;
+}
+.contest-rank-tickets{
+  font-weight: 800;
+  text-align:right;
+}
+.contest-rank-position{
+  justify-self: end;
+  font-weight: 900;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255,215,0,0.10);
+  border: 1px solid rgba(255,215,0,0.16);
+  min-width: 48px;
+  text-align:center;
+}
+.contest-rank-item.current-player{
+  background: rgba(0,170,255,0.10);
+  border-color: rgba(0,170,255,0.22);
+}
+.contest-rank-item[data-rank="1"] .contest-rank-position{ background: rgba(255,215,0,0.18); }
+.contest-rank-item[data-rank="2"] .contest-rank-position{ background: rgba(255,255,255,0.12); }
+.contest-rank-item[data-rank="3"] .contest-rank-position{ background: rgba(205,127,50,0.18); }
+
+/* Responsive */
+@media (max-width: 560px){
+  .contest-rank-item{
+    grid-template-columns: 54px 1fr 90px 60px;
+  }
+  .contest-rank-userid{ display:none; }
+  .contest-rank-tickets{ text-align:right; }
+}
+@media (max-width: 380px){
+  .contest-rank-item{ grid-template-columns: 54px 1fr 70px 56px; }
+  .lb-refresh{ padding: 10px 10px; }
+}
+
+</style>
 </head>
 <body>
-    <div class="loading-screen" id="loadingScreen">
-      <div class="loader">
-        <span class="l">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 11 18" height="18" width="11" class="letter">
-            <path fill="currentColor" d="M0.28 16.14V0.94L3.7 0.64L5.7 1.64V12.3L8.5 12.06L10.5 13.06V16.44L2.28 17.14L0.28 16.14ZM3.5 12.7V0.859999L0.48 1.12V15.94L8.3 15.26V12.28L3.5 12.7Z"/>
-          </svg>
-        </span>
-        <span class="o">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 16 18" height="18" width="16" class="letter">
-            <path fill="currentColor" d="M8.94 17.24C8.84667 17.2533 8.74667 17.26 8.64 17.26C8.54667 17.26 8.45333 17.26 8.36 17.26C7.66667 17.26 7.02667 17.16 6.44 16.96C5.86667 16.7733 5.30667 16.5533 4.76 16.3C3.33333 15.5933 2.28667 14.6 1.62 13.32C0.966667 12.0267 0.64 10.4933 0.64 8.72C0.64 7.68 0.766667 6.67333 1.02 5.7C1.28667 4.71333 1.68 3.82667 2.2 3.04C2.72 2.24 3.36667 1.58667 4.14 1.08C4.92667 0.573332 5.84667 0.273333 6.9 0.18C7.00667 0.166666 7.10667 0.159999 7.2 0.159999C7.29333 0.159999 7.38667 0.159999 7.48 0.159999C8.14667 0.159999 8.74 0.246666 9.26 0.419999C9.78 0.579999 10.3067 0.766666 10.84 0.979999C11.8 1.36667 12.6 1.94 13.24 2.7C13.88 3.46 14.36 4.35333 14.68 5.38C15 6.39333 15.16 7.48 15.16 8.64C15.16 9.72 15.0333 10.7533 14.78 11.74C14.5267 12.7267 14.14 13.62 13.62 14.42C13.1133 15.2067 12.4667 15.8467 11.68 16.34C10.9067 16.8467 9.99333 17.1467 8.94 17.24ZM6.92 16.04C7.94667 15.96 8.84 15.68 9.6 15.2C10.36 14.7067 10.9867 14.0733 11.48 13.3C11.9733 12.5133 12.34 11.64 12.58 10.68C12.8333 9.70667 12.96 8.69333 12.96 7.64C12.96 6.68 12.8467 5.76667 12.62 4.9C12.4067 4.02 12.0733 3.24 11.62 2.56C11.1667 1.88 10.5933 1.34667 9.9 0.959999C9.22 0.559999 8.41333 0.359999 7.48 0.359999C7.38667 0.359999 7.29333 0.359999 7.2 0.359999C7.12 0.359999 7.02667 0.366666 6.92 0.38C5.89333 0.473333 5.0 0.766666 4.24 1.26C3.48 1.74 2.84667 2.37333 2.34 3.16C1.83333 3.93333 1.45333 4.8 1.2 5.76C0.96 6.70667 0.84 7.69333 0.84 8.72C0.84 9.72 0.953333 10.6667 1.18 11.56C1.40667 12.44 1.74667 13.22 2.2 13.9C2.65333 14.5667 3.22667 15.0933 3.92 15.48C4.61333 15.8667 5.42 16.06 6.34 16.06C6.44667 16.06 6.54667 16.06 6.64 16.06C6.73333 16.06 6.82667 16.0533 6.92 16.04ZM6.92 12.94C6.86667 12.94 6.81333 12.9467 6.76 12.96C6.72 12.96 6.67333 12.96 6.62 12.96C5.82 12.96 5.18667 12.6133 4.72 11.92C4.26667 11.2267 4.04 10.0667 4.04 8.44C4.04 7.28 4.16667 6.34667 4.42 5.64C4.67333 4.93333 5.02 4.41333 5.46 4.08C5.9 3.73333 6.38667 3.54 6.92 3.5C6.97333 3.5 7.02667 3.5 7.08 3.5C7.13333 3.48667 7.18667 3.48 7.24 3.48C8.02667 3.48 8.64 3.82 9.08 4.5C9.52 5.16667 9.74 6.31333 9.74 7.94C9.74 9.67333 9.47333 10.9267 8.94 11.7C8.42 12.46 7.74667 12.8733 6.92 12.94ZM6.86 12.74C7.64667 12.6733 8.28667 12.2733 8.78 11.54C9.28667 10.8067 9.54 9.60667 9.54 7.94C9.54 7.18 9.49333 6.53333 9.4 6C9.30667 5.46667 9.16667 5.03333 8.98 4.7C8.91333 4.68667 8.84667 4.68 8.78 4.68C8.71333 4.66667 8.64667 4.66 8.58 4.66C7.79333 4.66 7.20667 5.07333 6.82 5.9C6.43333 6.71333 6.24 7.89333 6.24 9.44C6.24 10.2133 6.29333 10.8733 6.4 11.42C6.50667 11.9533 6.66 12.3933 6.86 12.74Z"/>
-          </svg>
-        </span>
-        <span class="a">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 15 18" height="18" width="15" class="letter">
-            <path fill="currentColor" d="M9.28 15.76L8.54 13.38L6.96 13.52L5.98 17.02L2.58 17.32L0.58 16.32L4.96 0.699999L8.26 0.419999L10.26 1.42L14.72 16.48L11.28 16.76L9.28 15.76ZM5.12 0.899999L0.88 16.08L3.8 15.84L4.8 12.34L8.36 12.02L9.42 15.56L12.44 15.3L8.1 0.64L5.12 0.899999ZM5.5 9.42C5.75333 8.59333 5.96 7.80667 6.12 7.06C6.29333 6.31333 6.44 5.56667 6.56 4.82H6.64C6.74667 5.55333 6.88 6.27333 7.04 6.98C7.21333 7.67333 7.42 8.42 7.66 9.22L5.5 9.42Z"/>
-          </svg>
-        </span>
-        <span class="d">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 14 18" height="18" width="14" class="letter">
-            <path fill="currentColor" d="M0.28 16.24V1.04L4.44 0.679999C4.61333 0.666666 4.78 0.66 4.94 0.66C5.1 0.646666 5.24667 0.64 5.38 0.64C6.11333 0.64 6.76667 0.726666 7.34 0.899999C7.92667 1.07333 8.56667 1.32667 9.26 1.66C10.1933 2.08667 10.9533 2.61333 11.54 3.24C12.1267 3.85333 12.56 4.61333 12.84 5.52C13.12 6.41333 13.26 7.50667 13.26 8.8C13.26 10.4933 12.9733 11.92 12.4 13.08C11.84 14.24 11.0667 15.1333 10.08 15.76C9.09333 16.3733 7.95333 16.74 6.66 16.86L2.28 17.24L0.28 16.24ZM4.64 15.68C5.89333 15.5733 7 15.2133 7.96 14.6C8.93333 13.9867 9.69333 13.1133 10.24 11.98C10.7867 10.8467 11.06 9.45333 11.06 7.8C11.06 5.53333 10.5733 3.80667 9.6 2.62C8.64 1.43333 7.21333 0.84 5.32 0.84C5.18667 0.84 5.04667 0.846666 4.9 0.859999C4.75333 0.859999 4.60667 0.866666 4.46 0.879999L0.48 1.22V16.02L4.64 15.68ZM3.5 3.9L4.08 3.86C4.22667 3.84667 4.36 3.84 4.48 3.84C4.61333 3.82667 4.74667 3.82 4.88 3.82C5.57333 3.82 6.14 3.94667 6.58 4.2C7.03333 4.45333 7.36667 4.88667 7.58 5.5C7.80667 6.11333 7.92 6.97333 7.92 8.08C7.92 9.65333 7.59333 10.8067 6.94 11.54C6.28667 12.26 5.4 12.6667 4.28 12.76L3.5 12.82V3.9ZM5.7 12.2C6.38 11.9067 6.88667 11.4333 7.22 10.78C7.55333 10.1133 7.72 9.21333 7.72 8.08C7.72 6.66667 7.52 5.65333 7.12 5.04C7.06667 5.02667 7.01333 5.02 6.96 5.02C6.90667 5.02 6.85333 5.02 6.8 5.02C6.68 5.02 6.56 5.02667 6.44 5.04C6.33333 5.04 6.22 5.04667 6.1 5.06L5.7 5.08V12.2Z"/>
-          </svg>
-        </span>
-        <span class="ispan">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 6 17" height="18" width="6" class="letter i">
-            <path fill="currentColor" d="M0.38 15.96V0.76L3.86 0.439999L5.86 1.44V16.64L2.38 16.94L0.38 15.96ZM0.58 0.94V15.74L3.66 15.46V0.66L0.58 0.94Z"/>
-          </svg>
-        </span>
-        <span class="n">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 13 18" height="18" width="13" class="letter">
-            <path fill="currentColor" d="M7.22 15.82L5.72 12.44V16.92L2.28 17.22L0.28 16.22V1.02L3.52 0.74L5.52 1.74L7 4.94V0.64L10.48 0.319999L12.48 1.32V16.54L9.22 16.82L7.22 15.82ZM7.2 0.819999V6.42C7.2 6.56667 7.20667 6.80667 7.22 7.14C7.23333 7.46 7.24667 7.8 7.26 8.16C7.28667 8.50667 7.30667 8.80667 7.32 9.06C7.33333 9.3 7.34 9.42 7.34 9.42L7.28 9.46C7.28 9.46 7.26 9.38667 7.22 9.24C7.19333 9.09333 7.14667 8.92 7.08 8.72C7.01333 8.50667 6.94 8.31333 6.86 8.14L3.4 0.959999L0.48 1.2V16L3.52 15.76V10.52C3.52 10.36 3.51333 10.0867 3.5 9.7C3.48667 9.31333 3.47333 8.90667 3.46 8.48C3.46 8.05333 3.45333 7.69333 3.44 7.4C3.42667 7.09333 3.42 6.94 3.42 6.94L3.48 6.92C3.48 6.92 3.51333 7.05333 3.58 7.32C3.66 7.57333 3.76667 7.84 3.9 8.12L7.4 15.62L10.28 15.36V0.539999L7.2 0.819999Z"/>
-          </svg>
-        </span>
-        <span class="g">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 15 18" height="18" width="15" class="letter">
-            <path fill="currentColor" d="M14.04 13.72C13.64 14.6533 12.9933 15.44 12.1 16.08C11.22 16.72 10.1333 17.0933 8.84 17.2C8.72 17.2133 8.6 17.22 8.48 17.22C8.36 17.22 8.24 17.22 8.12 17.22C7.12 17.22 6.16667 17.0467 5.26 16.7C4.36667 16.3533 3.57333 15.8333 2.88 15.14C2.18667 14.4333 1.64 13.54 1.24 12.46C0.84 11.38 0.64 10.1 0.64 8.62C0.64 7.48667 0.78 6.42667 1.06 5.44C1.34 4.44 1.74667 3.55333 2.28 2.78C2.82667 2.00667 3.48667 1.38667 4.26 0.92C5.03333 0.453333 5.90667 0.179999 6.88 0.0999997C6.96 0.0866657 7.04 0.0799987 7.12 0.0799987C7.2 0.0799987 7.28 0.0799987 7.36 0.0799987C8.33333 0.0799987 9.28 0.299999 10.2 0.74C11.1333 1.18 11.9467 1.78 12.64 2.54C13.3467 3.3 13.8467 4.16 14.14 5.12L11.76 6.46L12.04 6.44L14.04 7.44V13.72ZM5.9 7.16V10	L8.98 9.74V11.46C8.80667 11.8067 8.52667 12.1067 8.14 12.36C7.76667 12.6 7.37333 12.7333 6.96 12.76C6.90667 12.7733 6.84667 12.78 6.78 12.78C6.72667 12.78 6.66667 12.78 6.6 12.78C5.73333 12.78 5.08 12.4333 4.64 11.74C4.2 11.0467 3.98 9.92 3.98 8.36C3.98 6.94667 4.20667 5.82 4.66 4.98C5.11333 4.14 5.84 3.68 6.84 3.6H7.06C7.60667 3.6 8.07333 3.76 8.46 4.08C8.86 4.4 9.14667 4.86667 9.32 5.48L11.9 4.02C11.6733 3.38 11.36 2.78 10.96 2.22C10.5733 1.64667 10.0867 1.18 9.5 0.819999C8.91333 0.459999 8.2 0.28 7.36 0.28C7.29333 0.28 7.22 0.28 7.14 0.28C7.06 0.28 6.98 0.286666 6.9 0.299999C5.63333 0.406666 4.54667 0.846666 3.64 1.62C2.73333 2.38 2.04 3.37333 1.56 4.6C1.08 5.81333 0.84 7.1533 0.84 8.72C0.84 10.14 1.06 11.4533 1.5 12.56C1.94 13.6667 2.56667 14.52 3.38 15.12C4.19333 15.72 5.16 16.02 6.28 16.02C6.37333 16.02 6.46 16.02 6.54 16.02C6.63333 16.02 6.72667 16.0133 6.82 16C8.07333 15.8933 9.12667 15.54 9.98 14.94C10.8467 14.3267 11.4733 13.5733 11.86 12.68V6.66L5.9 7.16ZM9.2 5.78C9.14667 5.59333 9.08667 5.42 9.02 5.26C8.95333 5.08667 8.88 4.93333 8.8 4.8C8.2 4.85333 7.70667 5.06667 7.32 5.44C6.94667 5.8 6.66667 6.29333 6.48 6.92L10.8 6.56L9.2 5.78ZM7.8 11.26L6.24 10.46C6.26667 10.9933 6.32 11.4133 6.4 11.72C6.49333 12.0133 6.62667 12.3 6.8 12.58C6.84 12.5667 6.88667 12.56 6.94 12.56C7.28667 12.5333 7.63333 12.4267 7.98 12.24C8.32667 12.04 8.59333 11.8067 8.78 11.54V11.14L7.8 11.26Z"/>
-          </svg>
-        </span>
+<div class="loading-screen" id="loadingScreen">
+<div class="loader">
+<span class="l">
+<svg class="letter" fill="none" height="18" viewbox="0 0 11 18" width="11" xmlns="http://www.w3.org/2000/svg">
+<path d="M0.28 16.14V0.94L3.7 0.64L5.7 1.64V12.3L8.5 12.06L10.5 13.06V16.44L2.28 17.14L0.28 16.14ZM3.5 12.7V0.859999L0.48 1.12V15.94L8.3 15.26V12.28L3.5 12.7Z" fill="currentColor"></path>
+</svg>
+</span>
+<span class="o">
+<svg class="letter" fill="none" height="18" viewbox="0 0 16 18" width="16" xmlns="http://www.w3.org/2000/svg">
+<path d="M8.94 17.24C8.84667 17.2533 8.74667 17.26 8.64 17.26C8.54667 17.26 8.45333 17.26 8.36 17.26C7.66667 17.26 7.02667 17.16 6.44 16.96C5.86667 16.7733 5.30667 16.5533 4.76 16.3C3.33333 15.5933 2.28667 14.6 1.62 13.32C0.966667 12.0267 0.64 10.4933 0.64 8.72C0.64 7.68 0.766667 6.67333 1.02 5.7C1.28667 4.71333 1.68 3.82667 2.2 3.04C2.72 2.24 3.36667 1.58667 4.14 1.08C4.92667 0.573332 5.84667 0.273333 6.9 0.18C7.00667 0.166666 7.10667 0.159999 7.2 0.159999C7.29333 0.159999 7.38667 0.159999 7.48 0.159999C8.14667 0.159999 8.74 0.246666 9.26 0.419999C9.78 0.579999 10.3067 0.766666 10.84 0.979999C11.8 1.36667 12.6 1.94 13.24 2.7C13.88 3.46 14.36 4.35333 14.68 5.38C15 6.39333 15.16 7.48 15.16 8.64C15.16 9.72 15.0333 10.7533 14.78 11.74C14.5267 12.7267 14.14 13.62 13.62 14.42C13.1133 15.2067 12.4667 15.8467 11.68 16.34C10.9067 16.8467 9.99333 17.1467 8.94 17.24ZM6.92 16.04C7.94667 15.96 8.84 15.68 9.6 15.2C10.36 14.7067 10.9867 14.0733 11.48 13.3C11.9733 12.5133 12.34 11.64 12.58 10.68C12.8333 9.70667 12.96 8.69333 12.96 7.64C12.96 6.68 12.8467 5.76667 12.62 4.9C12.4067 4.02 12.0733 3.24 11.62 2.56C11.1667 1.88 10.5933 1.34667 9.9 0.959999C9.22 0.559999 8.41333 0.359999 7.48 0.359999C7.38667 0.359999 7.29333 0.359999 7.2 0.359999C7.12 0.359999 7.02667 0.366666 6.92 0.38C5.89333 0.473333 5.0 0.766666 4.24 1.26C3.48 1.74 2.84667 2.37333 2.34 3.16C1.83333 3.93333 1.45333 4.8 1.2 5.76C0.96 6.70667 0.84 7.69333 0.84 8.72C0.84 9.72 0.953333 10.6667 1.18 11.56C1.40667 12.44 1.74667 13.22 2.2 13.9C2.65333 14.5667 3.22667 15.0933 3.92 15.48C4.61333 15.8667 5.42 16.06 6.34 16.06C6.44667 16.06 6.54667 16.06 6.64 16.06C6.73333 16.06 6.82667 16.0533 6.92 16.04ZM6.92 12.94C6.86667 12.94 6.81333 12.9467 6.76 12.96C6.72 12.96 6.67333 12.96 6.62 12.96C5.82 12.96 5.18667 12.6133 4.72 11.92C4.26667 11.2267 4.04 10.0667 4.04 8.44C4.04 7.28 4.16667 6.34667 4.42 5.64C4.67333 4.93333 5.02 4.41333 5.46 4.08C5.9 3.73333 6.38667 3.54 6.92 3.5C6.97333 3.5 7.02667 3.5 7.08 3.5C7.13333 3.48667 7.18667 3.48 7.24 3.48C8.02667 3.48 8.64 3.82 9.08 4.5C9.52 5.16667 9.74 6.31333 9.74 7.94C9.74 9.67333 9.47333 10.9267 8.94 11.7C8.42 12.46 7.74667 12.8733 6.92 12.94ZM6.86 12.74C7.64667 12.6733 8.28667 12.2733 8.78 11.54C9.28667 10.8067 9.54 9.60667 9.54 7.94C9.54 7.18 9.49333 6.53333 9.4 6C9.30667 5.46667 9.16667 5.03333 8.98 4.7C8.91333 4.68667 8.84667 4.68 8.78 4.68C8.71333 4.66667 8.64667 4.66 8.58 4.66C7.79333 4.66 7.20667 5.07333 6.82 5.9C6.43333 6.71333 6.24 7.89333 6.24 9.44C6.24 10.2133 6.29333 10.8733 6.4 11.42C6.50667 11.9533 6.66 12.3933 6.86 12.74Z" fill="currentColor"></path>
+</svg>
+</span>
+<span class="a">
+<svg class="letter" fill="none" height="18" viewbox="0 0 15 18" width="15" xmlns="http://www.w3.org/2000/svg">
+<path d="M9.28 15.76L8.54 13.38L6.96 13.52L5.98 17.02L2.58 17.32L0.58 16.32L4.96 0.699999L8.26 0.419999L10.26 1.42L14.72 16.48L11.28 16.76L9.28 15.76ZM5.12 0.899999L0.88 16.08L3.8 15.84L4.8 12.34L8.36 12.02L9.42 15.56L12.44 15.3L8.1 0.64L5.12 0.899999ZM5.5 9.42C5.75333 8.59333 5.96 7.80667 6.12 7.06C6.29333 6.31333 6.44 5.56667 6.56 4.82H6.64C6.74667 5.55333 6.88 6.27333 7.04 6.98C7.21333 7.67333 7.42 8.42 7.66 9.22L5.5 9.42Z" fill="currentColor"></path>
+</svg>
+</span>
+<span class="d">
+<svg class="letter" fill="none" height="18" viewbox="0 0 14 18" width="14" xmlns="http://www.w3.org/2000/svg">
+<path d="M0.28 16.24V1.04L4.44 0.679999C4.61333 0.666666 4.78 0.66 4.94 0.66C5.1 0.646666 5.24667 0.64 5.38 0.64C6.11333 0.64 6.76667 0.726666 7.34 0.899999C7.92667 1.07333 8.56667 1.32667 9.26 1.66C10.1933 2.08667 10.9533 2.61333 11.54 3.24C12.1267 3.85333 12.56 4.61333 12.84 5.52C13.12 6.41333 13.26 7.50667 13.26 8.8C13.26 10.4933 12.9733 11.92 12.4 13.08C11.84 14.24 11.0667 15.1333 10.08 15.76C9.09333 16.3733 7.95333 16.74 6.66 16.86L2.28 17.24L0.28 16.24ZM4.64 15.68C5.89333 15.5733 7 15.2133 7.96 14.6C8.93333 13.9867 9.69333 13.1133 10.24 11.98C10.7867 10.8467 11.06 9.45333 11.06 7.8C11.06 5.53333 10.5733 3.80667 9.6 2.62C8.64 1.43333 7.21333 0.84 5.32 0.84C5.18667 0.84 5.04667 0.846666 4.9 0.859999C4.75333 0.859999 4.60667 0.866666 4.46 0.879999L0.48 1.22V16.02L4.64 15.68ZM3.5 3.9L4.08 3.86C4.22667 3.84667 4.36 3.84 4.48 3.84C4.61333 3.82667 4.74667 3.82 4.88 3.82C5.57333 3.82 6.14 3.94667 6.58 4.2C7.03333 4.45333 7.36667 4.88667 7.58 5.5C7.80667 6.11333 7.92 6.97333 7.92 8.08C7.92 9.65333 7.59333 10.8067 6.94 11.54C6.28667 12.26 5.4 12.6667 4.28 12.76L3.5 12.82V3.9ZM5.7 12.2C6.38 11.9067 6.88667 11.4333 7.22 10.78C7.55333 10.1133 7.72 9.21333 7.72 8.08C7.72 6.66667 7.52 5.65333 7.12 5.04C7.06667 5.02667 7.01333 5.02 6.96 5.02C6.90667 5.02 6.85333 5.02 6.8 5.02C6.68 5.02 6.56 5.02667 6.44 5.04C6.33333 5.04 6.22 5.04667 6.1 5.06L5.7 5.08V12.2Z" fill="currentColor"></path>
+</svg>
+</span>
+<span class="ispan">
+<svg class="letter i" fill="none" height="18" viewbox="0 0 6 17" width="6" xmlns="http://www.w3.org/2000/svg">
+<path d="M0.38 15.96V0.76L3.86 0.439999L5.86 1.44V16.64L2.38 16.94L0.38 15.96ZM0.58 0.94V15.74L3.66 15.46V0.66L0.58 0.94Z" fill="currentColor"></path>
+</svg>
+</span>
+<span class="n">
+<svg class="letter" fill="none" height="18" viewbox="0 0 13 18" width="13" xmlns="http://www.w3.org/2000/svg">
+<path d="M7.22 15.82L5.72 12.44V16.92L2.28 17.22L0.28 16.22V1.02L3.52 0.74L5.52 1.74L7 4.94V0.64L10.48 0.319999L12.48 1.32V16.54L9.22 16.82L7.22 15.82ZM7.2 0.819999V6.42C7.2 6.56667 7.20667 6.80667 7.22 7.14C7.23333 7.46 7.24667 7.8 7.26 8.16C7.28667 8.50667 7.30667 8.80667 7.32 9.06C7.33333 9.3 7.34 9.42 7.34 9.42L7.28 9.46C7.28 9.46 7.26 9.38667 7.22 9.24C7.19333 9.09333 7.14667 8.92 7.08 8.72C7.01333 8.50667 6.94 8.31333 6.86 8.14L3.4 0.959999L0.48 1.2V16L3.52 15.76V10.52C3.52 10.36 3.51333 10.0867 3.5 9.7C3.48667 9.31333 3.47333 8.90667 3.46 8.48C3.46 8.05333 3.45333 7.69333 3.44 7.4C3.42667 7.09333 3.42 6.94 3.42 6.94L3.48 6.92C3.48 6.92 3.51333 7.05333 3.58 7.32C3.66 7.57333 3.76667 7.84 3.9 8.12L7.4 15.62L10.28 15.36V0.539999L7.2 0.819999Z" fill="currentColor"></path>
+</svg>
+</span>
+<span class="g">
+<svg class="letter" fill="none" height="18" viewbox="0 0 15 18" width="15" xmlns="http://www.w3.org/2000/svg">
+<path d="M14.04 13.72C13.64 14.6533 12.9933 15.44 12.1 16.08C11.22 16.72 10.1333 17.0933 8.84 17.2C8.72 17.2133 8.6 17.22 8.48 17.22C8.36 17.22 8.24 17.22 8.12 17.22C7.12 17.22 6.16667 17.0467 5.26 16.7C4.36667 16.3533 3.57333 15.8333 2.88 15.14C2.18667 14.4333 1.64 13.54 1.24 12.46C0.84 11.38 0.64 10.1 0.64 8.62C0.64 7.48667 0.78 6.42667 1.06 5.44C1.34 4.44 1.74667 3.55333 2.28 2.78C2.82667 2.00667 3.48667 1.38667 4.26 0.92C5.03333 0.453333 5.90667 0.179999 6.88 0.0999997C6.96 0.0866657 7.04 0.0799987 7.12 0.0799987C7.2 0.0799987 7.28 0.0799987 7.36 0.0799987C8.33333 0.0799987 9.28 0.299999 10.2 0.74C11.1333 1.18 11.9467 1.78 12.64 2.54C13.3467 3.3 13.8467 4.16 14.14 5.12L11.76 6.46L12.04 6.44L14.04 7.44V13.72ZM5.9 7.16V10	L8.98 9.74V11.46C8.80667 11.8067 8.52667 12.1067 8.14 12.36C7.76667 12.6 7.37333 12.7333 6.96 12.76C6.90667 12.7733 6.84667 12.78 6.78 12.78C6.72667 12.78 6.66667 12.78 6.6 12.78C5.73333 12.78 5.08 12.4333 4.64 11.74C4.2 11.0467 3.98 9.92 3.98 8.36C3.98 6.94667 4.20667 5.82 4.66 4.98C5.11333 4.14 5.84 3.68 6.84 3.6H7.06C7.60667 3.6 8.07333 3.76 8.46 4.08C8.86 4.4 9.14667 4.86667 9.32 5.48L11.9 4.02C11.6733 3.38 11.36 2.78 10.96 2.22C10.5733 1.64667 10.0867 1.18 9.5 0.819999C8.91333 0.459999 8.2 0.28 7.36 0.28C7.29333 0.28 7.22 0.28 7.14 0.28C7.06 0.28 6.98 0.286666 6.9 0.299999C5.63333 0.406666 4.54667 0.846666 3.64 1.62C2.73333 2.38 2.04 3.37333 1.56 4.6C1.08 5.81333 0.84 7.1533 0.84 8.72C0.84 10.14 1.06 11.4533 1.5 12.56C1.94 13.6667 2.56667 14.52 3.38 15.12C4.19333 15.72 5.16 16.02 6.28 16.02C6.37333 16.02 6.46 16.02 6.54 16.02C6.63333 16.02 6.72667 16.0133 6.82 16C8.07333 15.8933 9.12667 15.54 9.98 14.94C10.8467 14.3267 11.4733 13.5733 11.86 12.68V6.66L5.9 7.16ZM9.2 5.78C9.14667 5.59333 9.08667 5.42 9.02 5.26C8.95333 5.08667 8.88 4.93333 8.8 4.8C8.2 4.85333 7.70667 5.06667 7.32 5.44C6.94667 5.8 6.66667 6.29333 6.48 6.92L10.8 6.56L9.2 5.78ZM7.8 11.26L6.24 10.46C6.26667 10.9933 6.32 11.4133 6.4 11.72C6.49333 12.0133 6.62667 12.3 6.8 12.58C6.84 12.5667 6.88667 12.56 6.94 12.56C7.28667 12.5333 7.63333 12.4267 7.98 12.24C8.32667 12.04 8.59333 11.8067 8.78 11.54V11.14L7.8 11.26Z" fill="currentColor"></path>
+</svg>
+</span>
+</div>
+</div>
+<div class="app-screen main-screen" id="mainScreen">
+<div class="balance" id="shibBalance">
+<img alt="shib" id="shibIcon" src="https://files.catbox.moe/19ugek.png"/>
+<span id="shibBalanceText">0 SHIB</span>
+</div>
+<button aria-label="Open Contest" class="contest-btn-under-balance" onclick="showContest()">
+<img alt="Contest" src="https://app.crybblewars.org/main/leader_button/main-icon-top.webp"/>
+</button>
+<div aria-hidden="false" class="progress-group-container">
+<div aria-label="Ads progress" class="daily-progress-container" role="region">
+<div class="daily-progress-text">Ads today: <span id="adsCount">0</span> / 200</div>
+<div aria-hidden="false" class="daily-progress-bar">
+<div class="daily-progress-fill" id="dailyProgressFill"><span class="progress-percent" id="dailyPercent">0%</span></div>
+</div>
+</div>
+<div aria-label="Spin progress" class="spin-progress-container" role="region">
+<div class="spin-progress-text">Spins today: <span id="spinsCount">0</span> / 25</div>
+<div aria-hidden="false" class="spin-progress-bar">
+<div class="spin-progress-fill" id="spinProgressFill"><span class="progress-percent" id="spinPercent">0%</span></div>
+</div>
+</div>
+</div>
+<div class="user-circle" onclick="circleClick()">
+<img alt="User" id="userImage" src=""/>
+<div class="placeholder" aria-label="User profile">👤</div>
+</div>
+<div class="user-username" id="userName"></div>
+<div class="user-id" id="userId"></div>
+<div class="main-content"></div>
+<div class="button-container">
+<button class="nav-button" onclick="watchAds()"><span>Watch</span></button>
+<button class="nav-button task-btn" onclick="showTask()"><span>Task</span></button>
+<button class="nav-button" onclick="showSpin()"><span>Spin</span></button>
+<button class="nav-button withdraw-btn-nav" onclick="showWithdraw()"><span>Withdraw</span></button>
+<button class="nav-button" onclick="inviteFriends()"><span>Invite</span></button>
+</div>
+</div>
+<div class="app-screen task-screen" id="taskScreen">
+<div class="task-header">
+<h2 class="task-title">Daily Tasks</h2>
+</div>
+<div class="task-content-container" id="taskContentContainer">
+<div class="task-link-container" id="taskLinkArea" style="display:none;">
+<div class="task-link-title">
+<span>Open and get 5 SHIB</span>
+<span id="taskLinkCountDisplay">0 / 200</span>
+</div>
+<div class="task-link-progress-bar">
+<div class="task-link-progress-fill" id="taskLinkProgressFill" style="width:0%"></div>
+</div>
+<button class="task-link-button" id="taskLinkBtn" onclick="handleTaskLinkClick()">get 5 SHIB</button>
+</div>
+<div id="taskListContainer">
+</div>
+<div class="no-channel-tasks" id="noChannelTasksNotice" style="display:none;">No channel tasks now.</div>
+</div>
+<button class="task-back-btn" onclick="hideTask()">Back to Main</button>
+</div>
+<div class="app-screen spin-screen" id="spinScreen">
+<div class="idle" id="wheelBox">
+<div class="arrow"></div>
+<div aria-hidden="true" class="spin-light"></div>
+<canvas aria-label="Spin wheel" height="280" id="wheelCanvas" width="280"></canvas>
+</div>
+<button class="spin-btn" id="spinBtn" onclick="startSpin()">SPIN</button>
+<div class="spin-result" id="spinResult"></div>
+<button class="spin-back" onclick="hideSpin()">Back</button>
+</div>
+
+<div class="app-screen withdraw-screen" id="withdrawScreen">
+<div class="withdraw-container">
+<div class="w-hero">
+<div class="w-hero-top">
+<div class="w-badge">Payout Center</div>
+<button aria-label="Close" class="w-icon-btn" onclick="hideWithdraw()" type="button">✕</button>
+</div>
+</div>
+<div class="w-balance-card">
+<div class="w-balance-label">Available balance</div>
+<div class="w-balance-row">
+<div class="w-balance-value" id="withdrawBalanceDisplay">0</div>
+<div class="w-balance-unit">SHIB</div>
+</div>
+<div class="w-balance-meta">
+<span class="w-meta-pill">Minimum: 4,000 SHIB</span>
+<span class="w-meta-pill">Fee: 0 SHIB</span>
+</div>
+</div>
+<div class="w-panel">
+<div class="w-panel-head">
+<div class="w-panel-title">Method</div>
+</div>
+<div class="withdraw-method-toggle" id="withdrawMethodToggle">
+<label class="method-option active" id="methodBinance">
+<input checked="" name="withdrawMethod" type="radio" value="binance"/>
+<span aria-hidden="true" class="method-icon">🏦</span>
+<span class="label">Binance ID</span>
+</label>
+<label class="method-option" id="methodFaucetpay">
+<input name="withdrawMethod" type="radio" value="faucetpay"/>
+<span aria-hidden="true" class="method-icon">📧</span>
+<span class="label">FaucetPay Email</span>
+</label>
+</div>
+</div>
+<div class="w-panel">
+<div class="w-panel-title">Destination</div>
+<div class="w-form">
+<div class="input-group" id="binanceGroup">
+<label>Binance User ID</label>
+<input id="binanceId" placeholder="Enter your Binance ID" type="text"/>
+</div>
+<div class="input-group" id="faucetpayGroup" style="display:none;">
+<label>FaucetPay Email</label>
+<input id="faucetpayEmail" placeholder="Enter your FaucetPay email" type="email"/>
+</div>
+</div>
+</div>
+<div class="w-panel">
+<div class="w-panel-title">Amount</div>
+<div class="w-amount">
+<div class="input-group w-amount-input" style="margin-bottom:10px;">
+<label>Withdrawal Amount</label>
+<input id="withdrawAmount" min="4000" placeholder="Enter amount (SHIB)" type="number" value=""/>
+</div>
+<div aria-label="Quick amounts" class="w-chips">
+<button class="w-chip" data-withdraw-chip="4000" type="button">Min</button>
+<button class="w-chip" data-withdraw-chip="10000" type="button">10K</button>
+<button class="w-chip" data-withdraw-chip="25000" type="button">25K</button>
+<button class="w-chip" data-withdraw-chip="max" type="button">Max</button>
+</div>
+</div>
+</div>
+<div class="w-actions">
+  <button class="withdraw-btn w-primary" disabled="" id="withdrawRequestBtn" onclick="confirmWithdraw()">Withdraw</button>
+  <button class="withdraw-btn w-outline" type="button" onclick="displayWithdrawalsFull()">History</button>
+</div>
+</div>
+<button class="withdraw-secondary-btn w-secondary" onclick="hideWithdraw()">Back to Main</button>
+<div class="w-bottom-alert" id="withdrawBottomAlert" role="status" aria-live="polite">
+  <span class="w-alert-dot" aria-hidden="true"></span>
+  Withdrawals are processed within 24 hours. Please double-check your details.
+</div>
+</div>
+</div>
+
+
+<!-- Fullscreen withdrawal history (opened from History button) -->
+
+<div class="app-screen withdraw-history-screen" id="withdrawHistoryScreen">
+<div class="withdraw-history-full" id="withdrawHistoryFull">
+<div class="w-history-hero">
+<div class="w-history-left">
+<div class="w-history-title">Withdrawal History</div>
+<div class="w-history-sub">Track your payout requests and their status.</div>
+</div>
+<button class="back-btn w-history-back" onclick="closeWithdrawHistory()">Back</button>
+</div>
+<div class="history-list" id="withdrawHistoryList">
+<!-- items injected here -->
+</div>
+
+<div class="w-bottom-alert" id="withdrawHistoryBottomAlert" role="status" aria-live="polite">
+  <span class="w-alert-dot" aria-hidden="true"></span>
+  Notice: Withdrawal requests are processed within 24 hours. If the status is Pending, please wait a bit and double‑check your details.
+</div>
+</div>
+</div>
+
+<div aria-label="Invite" class="app-screen invite-screen" id="inviteScreen">
+<div class="invite-shell">
+<div class="invite-topbar">
+<button aria-label="Back" class="invite-back-icon" onclick="hideInvite()">←</button>
+<div class="invite-topbar-title">
+<div class="invite-topbar-kicker">Invite</div>
+<div class="invite-topbar-headline">Invite Friends</div>
+</div>
+</div>
+<div class="invite-hero-card">
+<div aria-hidden="true" class="invite-hero-art"></div>
+<div class="invite-hero-text">
+<div class="invite-hero-title">Earn from every invite</div>
+<div class="invite-hero-sub">Get <strong>40%</strong> of the ad revenue generated by your referrals.</div>
+</div>
+</div>
+<div aria-label="Invite stats" class="invite-stats" role="group">
+<div class="invite-stat">
+<div class="label">Referrals</div>
+<div class="value"><span id="referralsCountDisplay">0</span></div>
+</div>
+<div class="invite-stat">
+<div class="label">Rate</div>
+<div class="value">40%</div>
+</div>
+<div class="invite-stat">
+<div class="label">Status</div>
+<div class="value"><span class="pill">Active</span></div>
+</div>
+</div>
+<div class="invite-link-card">
+<div class="invite-link-label">Your invite link</div>
+<div class="invite-link-row">
+<input class="invite-link-input" dir="ltr" id="referralLinkInput" readonly="" type="text" value="Generating link..."/>
+<button class="invite-mini-btn" onclick="copyReferralLink()">Copy</button>
+</div>
+<div class="invite-actions">
+<button class="invite-primary-btn" onclick="shareReferralLink()">Share</button>
+<button class="invite-ghost-btn" onclick="copyReferralLink()">Copy again</button>
+</div>
+<div class="invite-hint">Tip: Share this link. When your friend opens the app from it, they’ll be counted as your referral.</div>
+</div>
+<div class="invite-note-card">
+<div class="invite-note-title">How it works</div>
+<ul class="invite-note-list">
+<li>Copy or share your invite link.</li>
+<li>When a friend opens the app using your link, it’s registered automatically.</li>
+<li>You earn 40% of the referral ad revenue.</li>
+</ul>
+</div>
+<button class="back-btn invite-back-btn" onclick="hideInvite()">Back to Home</button>
+</div>
+</div>
+<!-- Contest Screen -->
+<div class="app-screen contest-screen" id="contestScreen">
+<div class="contest-header" dir="ltr">
+  <div class="contest-hero">
+    <div class="contest-hero-top">
+      <h2 class="contest-title">🏆 Prize Contest</h2>
+      <div class="contest-badge">PRIZE POOL • 100,000 SHIB</div>
+    </div>
+
+    <div class="contest-meta">
+      <div class="meta-pill meta-countdown" aria-label="Countdown">
+        <span class="meta-label">Ends in</span>
+        <span class="contest-countdown" id="contestCountdown">10d 00h 00m 00s</span>
+      </div>
+      <div class="meta-pill meta-info" aria-label="Winners">
+        <span class="meta-label">Winners</span>
+        <span class="meta-value">Top 5</span>
       </div>
     </div>
-    
-    <div class="app-screen main-screen" id="mainScreen">
-        <div class="balance" id="shibBalance">
-            <img id="shibIcon" src="https://files.catbox.moe/19ugek.png" alt="shib">
-            <span id="shibBalanceText">0 SHIB</span>
-        </div>
-        <button class="contest-btn-under-balance" onclick="showContest()" aria-label="Open Contest">
-            <img src="https://app.crybblewars.org/main/leader_button/main-icon-top.webp" alt="Contest">
-        </button>
-        
-        <div class="progress-group-container" aria-hidden="false">
-            <div class="daily-progress-container" role="region" aria-label="Ads progress">
-                <div class="daily-progress-text">Ads today: <span id="adsCount">0</span> / 200</div>
-                <div class="daily-progress-bar" aria-hidden="false">
-                    <div class="daily-progress-fill" id="dailyProgressFill"><span class="progress-percent" id="dailyPercent">0%</span></div>
-                </div>
-            </div>
-            <div class="spin-progress-container" role="region" aria-label="Spin progress">
-                <div class="spin-progress-text">Spins today: <span id="spinsCount">0</span> / 25</div>
-                <div class="spin-progress-bar" aria-hidden="false">
-                    <div class="spin-progress-fill" id="spinProgressFill"><span class="progress-percent" id="spinPercent">0%</span></div>
-                </div>
-            </div>
-        </div>
-        
-        <div class="user-circle" onclick="circleClick()">
-            <img id="userImage" src="" alt="User">
-            <div class="placeholder">+</div>
-        </div>
-        <div class="user-username" id="userName"></div>
-        <div class="user-id" id="userId"></div>
-        
-        <div class="main-content"></div>
-        
-        <div class="button-container">
-            <button class="nav-button" onclick="watchAds()"><span>Watch</span></button>
-            <button class="nav-button task-btn" onclick="showTask()"><span>Task</span></button>
-            <button class="nav-button" onclick="showSpin()"><span>Spin</span></button>
-            <button class="nav-button withdraw-btn-nav" onclick="showWithdraw()"><span>Withdraw</span></button>
-            <button class="nav-button" onclick="inviteFriends()"><span>Invite</span></button>
-        </div>
-        </div>
+  </div>
 
-    <div class="app-screen task-screen" id="taskScreen">
-        <div class="task-header">
-            <h2 class="task-title">Daily Tasks</h2>
+  <!-- Prize distribution -->
+  <div class="prize-vertical-box" id="prizeBox" aria-label="Prize distribution">
+    <div class="prize-item prize-top">
+      <div class="prize-left">
+        <div class="prize-medal">🥇</div>
+        <div class="prize-text">
+          <div class="prize-label">1st Place</div>
+          <div class="prize-sub">1st place</div>
         </div>
-        
-        <div class="task-content-container" id="taskContentContainer">
-            <div id="taskLinkArea" class="task-link-container" style="display:none;">
-                <div class="task-link-title">
-                    <span>Open and get 5 SHIB</span>
-                    <span id="taskLinkCountDisplay">0 / 200</span>
-                </div>
-                <div class="task-link-progress-bar">
-                    <div class="task-link-progress-fill" id="taskLinkProgressFill" style="width:0%"></div>
-                </div>
-                <button class="task-link-button" id="taskLinkBtn" onclick="handleTaskLinkClick()">get 5 SHIB</button>
-            </div>
-
-            <div id="taskListContainer">
-                </div>
-
-            <div id="noChannelTasksNotice" class="no-channel-tasks" style="display:none;">No channel tasks now.</div>
-        </div>
-
-        <button class="task-back-btn" onclick="hideTask()">Back to Main</button>
+      </div>
+      <div class="prize-amount">
+        <span class="prize-value">50,000</span><span class="prize-unit">SHIB</span>
+      </div>
     </div>
 
-    <div class="app-screen spin-screen" id="spinScreen">
-        <div id="wheelBox">
-            <div class="arrow"></div>
-            <canvas id="wheelCanvas" width="280" height="280" aria-label="Spin wheel"></canvas>
+    <div class="prize-item prize-second">
+      <div class="prize-left">
+        <div class="prize-medal">🥈</div>
+        <div class="prize-text">
+          <div class="prize-label">2nd Place</div>
+          <div class="prize-sub">2nd place</div>
         </div>
-        <button class="spin-btn" id="spinBtn" onclick="startSpin()">SPIN</button>
-        <div class="spin-result" id="spinResult"></div>
-        <button class="spin-back" onclick="hideSpin()">Back</button>
+      </div>
+      <div class="prize-amount">
+        <span class="prize-value">25,000</span><span class="prize-unit">SHIB</span>
+      </div>
     </div>
 
-    <div class="app-screen withdraw-screen" id="withdrawScreen">
-        <div class="withdraw-header">
-            <div class="withdraw-header-top">
-                <h3 class="withdraw-title"></h3>
-            </div>
-            <div class="current-balance-info">Your Balance: <span id="withdrawBalanceDisplay">0 SHIB</span></div>
+    <div class="prize-item">
+      <div class="prize-left">
+        <div class="prize-medal">🥉</div>
+        <div class="prize-text">
+          <div class="prize-label">3rd Place</div>
+          <div class="prize-sub">3rd place</div>
         </div>
-        
-        <div class="input-form-container">
-            <div class="input-group">
-                <label>Choose Withdrawal Method</label>
-                <div class="withdraw-method-toggle" id="withdrawMethodToggle">
-                    <label class="method-option active" id="methodBinance">
-                        <input type="radio" name="withdrawMethod" value="binance" checked>
-                        <span class="label">Binance ID</span>
-                    </label>
-                    <label class="method-option" id="methodFaucetpay">
-                        <input type="radio" name="withdrawMethod" value="faucetpay">
-                        <span class="label">FaucetPay Email</span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="input-group" id="binanceGroup">
-                <label>Binance User ID</label>
-                <input type="text" id="binanceId" placeholder=" Binance ID">
-            </div>
-
-            <div class="input-group" id="faucetpayGroup" style="display:none;">
-                <label>FaucetPay Email</label>
-                <input type="email" id="faucetpayEmail" placeholder="your@email.com">
-            </div>
-
-            <div class="input-group">
-                <label>Amount in SHIB (Min 4000)</label>
-                <input type="number" id="withdrawAmount" min="4000" value="" placeholder="">
-            </div>
-            <div class="withdraw-buttons">
-                <button class="withdraw-btn" onclick="confirmWithdraw()">Send Request</button>
-                <button class="back-btn" onclick="displayWithdrawalsFull()" style="max-width:220px">Open History</button>
-            </div>
-        </div>
-        
-        <div class="note">
-            ⚠️ **Important:** The withdrawal will be processed manually within **24 hours**. Ensure your Binance ID or FaucetPay email is correct.
-        </div>
-
-        <button class="back-btn" onclick="hideWithdraw()">Back to Main</button>
+      </div>
+      <div class="prize-amount">
+        <span class="prize-value">10,000</span><span class="prize-unit">SHIB</span>
+      </div>
     </div>
 
-    <!-- Fullscreen withdrawal history (opened from History button) -->
-    <div class="app-screen withdraw-history-screen" id="withdrawHistoryScreen" style="background:#f7f7fb">
-        <div class="withdraw-history-full" id="withdrawHistoryFull">
-            <div class="withdraw-history-header">
-                <h2 style="margin:0">Withdrawal History</h2>
-                <div>
-                    <button class="back-btn" onclick="closeWithdrawHistory()">Back</button>
-                </div>
-            </div>
-
-            <div class="history-list" id="withdrawHistoryList">
-                <!-- items injected here -->
-            </div>
+    <div class="prize-item">
+      <div class="prize-left">
+        <div class="prize-medal">🏅</div>
+        <div class="prize-text">
+          <div class="prize-label">4th Place</div>
+          <div class="prize-sub">4th place</div>
         </div>
+      </div>
+      <div class="prize-amount">
+        <span class="prize-value">10,000</span><span class="prize-unit">SHIB</span>
+      </div>
     </div>
 
-    <div class="app-screen invite-screen" id="inviteScreen">
-        <div class="invite-header">
-            <h2 class="invite-title"></h2>
-            <div class="referrals-count-info">
-                Your Referrals: <span id="referralsCountDisplay">0</span>
-            </div>
+    <div class="prize-item">
+      <div class="prize-left">
+        <div class="prize-medal">⭐</div>
+        <div class="prize-text">
+          <div class="prize-label">5th Place</div>
+          <div class="prize-sub">5th place</div>
         </div>
-        
-        <div class="input-form-container">
-            <div class="input-group">
-                <label>Your Referral Link</label>
-                <input type="text" id="referralLinkInput" readonly value="Generating Link...">
-            </div>
-            <div class="invite-buttons">
-                <button class="copy-link-btn" onclick="copyReferralLink()">Copy Link</button>
-            </div>
-        </div>
-        
-        <div class="note">
-       
-🚀 Share this link to invite new users.
-You will earn 40% of the revenue from every referral you bring through ads!
-        </div>
-
-        <button class="back-btn" onclick="hideInvite()">Back to Main</button>
+      </div>
+      <div class="prize-amount">
+        <span class="prize-value">5,000</span><span class="prize-unit">SHIB</span>
+      </div>
     </div>
-
-    <!-- Contest Screen -->
-    <div class="app-screen contest-screen" id="contestScreen">
-        <div class="contest-header">
-            <h2 class="contest-title">🏆 Contest</h2>
-            <div class="contest-countdown" id="contestCountdown">15d 00h 00m 00s</div>
-            <!-- Prize distribution moved to a vertical boxed layout -->
-            <div class="prize-vertical-box" id="prizeBox">
-                <div class="prize-item"><div class="prize-label">1st Place</div><div class="prize-value">500,000 SHIB</div></div>
-                <div class="prize-item"><div class="prize-label">2nd Place</div><div class="prize-value">250,000 SHIB</div></div>
-                <div class="prize-item"><div class="prize-label">3rd Place</div><div class="prize-value">100,000 SHIB</div></div>
-                <div class="prize-item"><div class="prize-label">4th Place</div><div class="prize-value">100,000 SHIB</div></div>
-                <div class="prize-item"><div class="prize-label">5th Place</div><div class="prize-value">50,000 SHIB</div></div>
-            </div>
-        </div>
-        
-        <div class="contest-tickets-container" role="region" aria-label="Contest Tickets Summary">
-            <div class="contest-ticket-row">
-                <span class="contest-ticket-label">
-                    <img src="https://app.crybblewars.org/main/voucher_button/cards-icon.webp" class="contest-ticket-img" alt="ticket">
+  </div>
+</div>
+<div aria-label="Contest Tickets Summary" class="contest-tickets-container" role="region">
+<div class="contest-ticket-row">
+<span class="contest-ticket-label">
+<img alt="ticket" class="contest-ticket-img" src="https://app.crybblewars.org/main/voucher_button/cards-icon.webp"/>
                     My Tickets
                 </span>
-                <span class="contest-ticket-value" id="myTickets">0</span>
-            </div>
-            <div class="contest-ticket-row" style="align-items:flex-end;">
-                <span class="contest-ticket-label">
-                    <img src="https://app.crybblewars.org/main/voucher_button/cards-icon.webp" class="contest-ticket-img" alt="ticket">
+<span class="contest-ticket-value" id="myTickets">0</span>
+</div>
+<div class="contest-ticket-row" style="align-items:flex-end;">
+<span class="contest-ticket-label">
+<img alt="ticket" class="contest-ticket-img" src="https://app.crybblewars.org/main/voucher_button/cards-icon.webp"/>
                     All Tickets
                 </span>
-                <span class="contest-ticket-value" id="allTickets">0</span>
-            </div>
-        </div>
-        
-        <div class="contest-buttons-horizontal">
-            <button class="contest-watch-btn" onclick="watchContestAd()">Watch</button>
-            <button class="contest-rank-btn" onclick="showContestRank()">Ranking</button>
-        </div>
-        
-        <button class="contest-back-btn" onclick="hideContest()">Back to Main</button>
-    </div>
+<span class="contest-ticket-value" id="allTickets">0</span>
+</div>
+</div>
+<div class="contest-buttons-horizontal">
+<button class="contest-watch-btn" onclick="watchContestAd()">Watch</button>
+<button class="contest-rank-btn" onclick="showContestRank()">Ranking</button>
+</div>
+<button class="contest-back-btn" onclick="hideContest()">Back to Main</button>
+</div>
+<!-- Contest Ranking Screen -->
+<div class="app-screen contest-rank-screen" id="contestRankScreen">
+<div class="contest-rank-header">
+  <div class="rank-header-left">
+    <h2 class="contest-rank-title">🏆 Top Players</h2>
+    <div class="rank-sub" id="rankUpdatedAt" aria-live="polite"></div>
+  </div>
+  <div class="rank-header-actions">
+<button class="back-btn" onclick="hideContestRank()">Back</button>
+  </div>
+</div>
 
-    <!-- Contest Ranking Screen -->
-    <div class="app-screen contest-rank-screen" id="contestRankScreen">
-        <div class="contest-rank-header">
-            <h2 class="contest-rank-title">🏆 Top Players</h2>
-            <div>
-                <button class="back-btn" onclick="hideContestRank()">Back</button>
-            </div>
-        </div>
 
-        <!-- PERSONAL USER BOX: shows the current user's avatar + row with (user id) | (username centered) | (tickets) | (rank) -->
-        <div id="personalUserBox" class="personal-info-box" style="display:none;">
-            <!-- content injected by JS -->
-            <img src="" alt="avatar" class="personal-avatar" id="personalAvatar">
-            <div class="personal-info-row">
-                <div class="personal-id">
-                    <div class="label">ID</div>
-                    <div class="value" id="personalIdValue">-</div>
-                </div>
-                <div class="personal-username" style="flex:1">
-                    <div class="label">User</div>
-                    <div class="value" id="personalNameValue">-</div>
-                </div>
-                <div class="personal-tickets">
-                    <div class="label">Tickets</div>
-                    <div class="value" id="personalTicketsValue">0</div>
-                </div>
-                <div class="personal-rank">
-                    <div class="label">Rank</div>
-                    <div class="value" id="personalRankValue">-</div>
-                </div>
-            </div>
-        </div>
-
-        <div class="contest-rank-list" id="contestRankList" aria-live="polite">
-            <!-- Top players will be injected here from server -->
-        </div>
-    </div>
-
-    <div id="customAlert" class="custom-alert-overlay">
-        <div class="custom-alert-box">
-            <div class="alert-icon" id="alertIcon"></div>
-            <div class="alert-title" id="alertTitle"></div>
-            <div class="alert-message" id="alertMessage"></div>
-            <button class="alert-close-btn" onclick="document.getElementById('customAlert').classList.remove('visible')">OK</button>
-        </div>
-    </div>
-
-    <!-- Toast container (for top toasts). Created in HTML so CSS applies immediately -->
-    <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="false"></div>
-
-    <!-- Background audio player (playlist managed in JS): audio.mp3, audio2.mp3, audio3.mp3, audio4.mp3 -->
-    <audio id="bgPlayer">
-        <source id="bgSource" src="audio.mp3" type="audio/mp3">
+<!-- PERSONAL USER BOX: shows the current user's avatar + row with (user id) | (username centered) | (tickets) | (rank) -->
+<div class="personal-info-box" id="personalUserBox" style="display:none;">
+<!-- content injected by JS -->
+<img alt="avatar" class="personal-avatar" id="personalAvatar" src=""/>
+<div class="personal-info-row">
+<div class="personal-id">
+<div class="label">ID</div>
+<div class="value" id="personalIdValue">-</div>
+</div>
+<div class="personal-username" style="flex:1">
+<div class="label">User</div>
+<div class="value" id="personalNameValue">-</div>
+</div>
+<div class="personal-tickets">
+<div class="label">Tickets</div>
+<div class="value" id="personalTicketsValue">0</div>
+</div>
+<div class="personal-rank">
+<div class="label">Rank</div>
+<div class="value" id="personalRankValue">-</div>
+</div>
+</div>
+</div>
+<div aria-live="polite" class="contest-rank-list" id="contestRankList">
+<!-- Top players will be injected here from server -->
+</div>
+</div>
+<div class="custom-alert-overlay" id="customAlert">
+<div class="custom-alert-box">
+<div class="alert-icon" id="alertIcon"></div>
+<div class="alert-title" id="alertTitle"></div>
+<div class="alert-message" id="alertMessage"></div>
+<button class="alert-close-btn" onclick="document.getElementById('customAlert').classList.remove('visible')">OK</button>
+</div>
+</div>
+<!-- Toast container (for top toasts). Created in HTML so CSS applies immediately -->
+<div aria-atomic="false" aria-live="polite" class="toast-container" id="toastContainer"></div>
+<!-- Background audio player (playlist managed in JS): audio.mp3, audio2.mp3, audio3.mp3, audio4.mp3 -->
+<audio id="bgPlayer">
+<source id="bgSource" src="audio.mp3" type="audio/mp3"/>
         Your browser does not support the audio element.
     </audio>
-
-    <audio id="successSFX">
-        <source src="success.mp3" type="audio/mp3"> 
-    </audio>
-    <audio id="errorSFX">
-        <source src="error.mp3" type="audio/mp3"> 
-    </audio>
-
-    <script src='//libtl.com/sdk.js' data-zone='10245709' data-sdk='show_10245709'></script>
-    <script>
+<audio id="successSFX">
+<source src="success.mp3" type="audio/mp3"/>
+</audio>
+<audio id="errorSFX">
+<source src="error.mp3" type="audio/mp3"/>
+</audio>
+<script data-sdk="show_10245709" data-zone="10245709" src="//libtl.com/sdk.js"></script>
+<script>
         /* ===== Loading ===== */
         const loadingScreen = document.getElementById('loadingScreen');
         const mainScreen = document.getElementById('mainScreen');
@@ -2121,7 +3707,13 @@ You will earn 40% of the revenue from every referral you bring through ads!
             if(photoUrl){
                 imgEl.src = photoUrl;
                 imgEl.style.display = 'block';
-                placeHolder.style.display = 'none';
+                if (placeHolder) placeHolder.style.display = 'none';
+            } else {
+                // Show a clean initial instead of a plain "+" when no profile photo exists
+                if (placeHolder) {
+                    const initial = (userName && userName.trim().length) ? userName.trim().charAt(0).toUpperCase() : '👤';
+                    placeHolder.textContent = initial;
+                }
             }
             nameEl.textContent = userName;
             idEl.textContent   = 'ID: ' + userId;
@@ -2270,7 +3862,7 @@ You will earn 40% of the revenue from every referral you bring through ads!
         let currentTask = null;
 
         // ===== Contest Variables =====
-        let contestEndTime = new Date().getTime() + (15 * 24 * 60 * 60 * 1000); // 15 days from now
+        let contestEndTime = new Date().getTime() + (10 * 24 * 60 * 60 * 1000); // 10 days from now
         let myTickets = 0;
         let allTickets = 0;
         let contestCountdownInterval = null;
@@ -2481,9 +4073,21 @@ You will earn 40% of the revenue from every referral you bring through ads!
             }
         }
         
-        function updateUI(){
+        
+        function updateWithdrawButtonState(){
+            const btn = document.getElementById('withdrawRequestBtn');
+            const amountEl = document.getElementById('withdrawAmount');
+            if (!btn || !amountEl) return;
+            const bal = Number(shibBalance || 0);
+            const amount = Number(amountEl.value || 0);
+            const MIN_WITHDRAW_UI = 4000;
+            btn.disabled = !(bal >= MIN_WITHDRAW_UI && amount >= MIN_WITHDRAW_UI && amount <= bal);
+        }
+
+function updateUI(){
             document.getElementById('shibBalanceText').textContent = Number(shibBalance || 0).toLocaleString('en-US') + ' SHIB';
-            document.getElementById('withdrawBalanceDisplay').textContent = Number(shibBalance || 0).toLocaleString('en-US') + ' SHIB';
+            document.getElementById('withdrawBalanceDisplay').textContent = Number(shibBalance || 0).toLocaleString('en-US');
+            updateWithdrawButtonState();
 
             document.getElementById('adsCount').textContent = Number(adsWatchedToday || 0).toLocaleString('en-US');
             const adsPercent = Math.min((adsWatchedToday / DAILY_MAX) * 100, 100);
@@ -2689,7 +4293,13 @@ You will earn 40% of the revenue from every referral you bring through ads!
             if (!Array.isArray(availableTasks) || availableTasks.length === 0) {
                 container.innerHTML = `
                     <div class="task-item-card">
-                        <span class="task-text-info">No tasks now.</span>
+                        <div class="task-left">
+                            <span class="task-dot" aria-hidden="true"></span>
+                            <div class="task-text-info">
+                                <div class="task-name">No tasks now</div>
+                                <div class="task-meta">Check again later.</div>
+                            </div>
+                        </div>
                     </div>
                 `;
                 if (noChannelNotice) noChannelNotice.style.display = 'none';
@@ -2701,12 +4311,17 @@ You will earn 40% of the revenue from every referral you bring through ads!
             const html = availableTasks.map(t => {
                 const rewardText = `Reward: ${Number(t.reward || 0).toLocaleString('en-US')} SHIB`;
                 const safeLink = (t.link || '').replace(/"/g, '&quot;');
+                const name = escapeHtml(t.name || 'Task');
                 return `
                     <div class="task-item-card" data-task-id="${t.task_id}">
-                        <span class="task-text-info">${escapeHtml(t.name)} — ${escapeHtml(rewardText)}</span>
-                        <button class="task-action-btn-new" data-task-link="${safeLink}" data-task-id="${t.task_id}" onclick="onTaskButtonClick(event)">
-                            Open
-                        </button>
+                        <div class="task-left">
+                            <span class="task-dot" aria-hidden="true"></span>
+                            <div class="task-text-info">
+                                <div class="task-name">${name}</div>
+                                <div class="task-meta"><span class="task-reward">${escapeHtml(rewardText)}</span></div>
+                            </div>
+                        </div>
+                        <button class="task-action-btn-new" data-task-link="${safeLink}" data-task-id="${t.task_id}" onclick="onTaskButtonClick(event)">Open</button>
                     </div>
                 `;
             }).join('');
@@ -3060,6 +4675,41 @@ You will earn 40% of the revenue from every referral you bring through ads!
                 showCustomAlert('Copy Failed!', 'Failed to copy the link. Please try again.', 'error');
             });
         }
+
+        function shareReferralLink() {
+            const inviteLink = document.getElementById('referralLinkInput').value;
+
+            if (inviteLink === 'User data not available.' || inviteLink === 'Generating Link...' || inviteLink === 'Generating link...') {
+                showCustomAlert('Link not ready', 'Please wait a moment until your invite link is generated.', 'warning');
+                return;
+            }
+
+            const message = `Join me using my invite link:\n${inviteLink}`;
+            const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(message)}`;
+
+            // Prefer native share where available
+            if (navigator.share) {
+                navigator.share({ title: 'Invite Link', text: message, url: inviteLink }).catch(()=>{});
+            }
+
+            try {
+                if (window.Telegram && Telegram.WebApp) {
+                    if (Telegram.WebApp.openTelegramLink) {
+                        Telegram.WebApp.openTelegramLink(shareUrl);
+                    } else if (Telegram.WebApp.openLink) {
+                        Telegram.WebApp.openLink(shareUrl);
+                    } else {
+                        window.open(shareUrl, '_blank');
+                    }
+                    try { Telegram.WebApp.HapticFeedback.impactOccurred('light'); } catch(e){}
+                } else {
+                    window.open(shareUrl, '_blank');
+                }
+            } catch (e) {
+                window.open(shareUrl, '_blank');
+            }
+        }
+
         /* ===== End of Invite Screen Functions ===== */
 
 
@@ -3067,11 +4717,14 @@ You will earn 40% of the revenue from every referral you bring through ads!
         const colors = ['#00bfff', '#ff8c00', '#28a745', '#ff4500', '#00f2fe'];
         const prizeValues = sectors; 
         const canvas = document.getElementById('wheelCanvas');
+        const wheelBox = document.getElementById('wheelBox');
         const ctx = canvas.getContext('2d');
         const spinResult = document.getElementById('spinResult');
         const spinBtn    = document.getElementById('spinBtn'); 
         let spinning = false;
+        let wheelAnimating = false;
         let currentAngle = 0;
+        if (wheelBox) wheelBox.classList.add('idle');
 
         // Preload the icon that will be drawn into every sector (35x35 target)
         const wheelIcon = new Image();
@@ -3083,73 +4736,108 @@ You will earn 40% of the revenue from every referral you bring through ads!
 
         function drawWheel() {
             if (!ctx) return;
+
             const centerX = canvas.width / 2;
             const centerY = canvas.height / 2;
             const radius = 130;
             const sectorCount = sectors.length;
-            const arc = 2 * Math.PI / sectorCount;
+            const arc = (2 * Math.PI) / sectorCount;
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            ctx.font = '20px Orbitron, Vazirmatn, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
+            // Smoother edges / premium rendering
+            ctx.imageSmoothingEnabled = true;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
 
+            // ---- Sectors (keep SAME colors, add subtle depth) ----
             sectors.forEach((val, i) => {
-                const start = i * arc - Math.PI / 2; 
+                const start = i * arc - Math.PI / 2;
                 const end = start + arc;
 
-                // Sector fill
+                // Base sector fill (no color changes)
+                ctx.save();
                 ctx.beginPath();
-                ctx.fillStyle = colors[i % colors.length];
                 ctx.moveTo(centerX, centerY);
                 ctx.arc(centerX, centerY, radius, start, end);
                 ctx.closePath();
+
+                ctx.fillStyle = colors[i % colors.length];
                 ctx.fill();
 
-                // Sector border
+                // Subtle 3D shading overlay (white/black alpha only)
+                ctx.clip();
+                const shade = ctx.createRadialGradient(
+                    centerX - radius * 0.28, centerY - radius * 0.32, radius * 0.12,
+                    centerX, centerY, radius
+                );
+                shade.addColorStop(0.00, 'rgba(255,255,255,0.22)');
+                shade.addColorStop(0.45, 'rgba(255,255,255,0.04)');
+                shade.addColorStop(0.80, 'rgba(0,0,0,0.10)');
+                shade.addColorStop(1.00, 'rgba(0,0,0,0.20)');
+                ctx.fillStyle = shade;
+                ctx.fillRect(centerX - radius - 8, centerY - radius - 8, (radius + 8) * 2, (radius + 8) * 2);
+
+                // Very light outer-edge gloss (keeps color, adds polish)
                 ctx.beginPath();
-                ctx.strokeStyle = '#fff'; 
+                ctx.arc(centerX, centerY, radius - 1.5, start, end);
                 ctx.lineWidth = 3;
-                ctx.moveTo(centerX, centerY);
-                ctx.arc(centerX, centerY, radius, start, end);
-                ctx.closePath();
+                ctx.strokeStyle = 'rgba(255,255,255,0.10)';
                 ctx.stroke();
 
-                // Compute image position (center of sector)
+                // Shiba icon (same as before, no labels)
                 const angle = start + arc / 2;
-                const imgX = centerX + radius * 0.55 * Math.cos(angle);
-                const imgY = centerY + radius * 0.55 * Math.sin(angle);
+                const imgX = centerX + radius * 0.56 * Math.cos(angle);
+                const imgY = centerY + radius * 0.56 * Math.sin(angle);
+                const iconSize = 34;
 
-                // Draw circular-clipped icon (35x35) centered at (imgX,imgY) if loaded, otherwise fallback to emoji
-                const iconSize = 35;
+                // soft shadow under the badge (neutral)
+                ctx.save();
+                ctx.shadowColor = 'rgba(0,0,0,0.22)';
+                ctx.shadowBlur = 10;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 4;
+                ctx.beginPath();
+                ctx.arc(imgX, imgY, iconSize / 2 + 2, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0,0,0,0.03)';
+                ctx.fill();
+                ctx.restore();
+
                 if (wheelIconLoaded) {
                     try {
+                        // circular clip for the icon
                         ctx.save();
                         ctx.beginPath();
-                        ctx.arc(imgX, imgY, iconSize / 2 + 1, 0, Math.PI * 2); // +1 for slight border
+                        ctx.arc(imgX, imgY, iconSize / 2, 0, Math.PI * 2);
                         ctx.closePath();
                         ctx.clip();
-
-                        // draw image centered
-                        ctx.drawImage(wheelIcon, imgX - iconSize/2, imgY - iconSize/2, iconSize, iconSize);
-
+                        ctx.drawImage(wheelIcon, imgX - iconSize / 2, imgY - iconSize / 2, iconSize, iconSize);
                         ctx.restore();
 
-                        // draw subtle circular border around image
+                        // refined badge ring (soft, not harsh)
+                        ctx.save();
                         ctx.beginPath();
                         ctx.arc(imgX, imgY, iconSize / 2 + 1, 0, Math.PI * 2);
-                        ctx.closePath();
-                        ctx.lineWidth = 2;
-                        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+                        ctx.strokeStyle = 'rgba(255,255,255,0.70)';
+                        ctx.lineWidth = 1.5;
+                        ctx.shadowColor = 'rgba(255,255,255,0.10)';
+                        ctx.shadowBlur = 6;
                         ctx.stroke();
+
+                        // tiny highlight arc
+                        ctx.beginPath();
+                        ctx.arc(imgX, imgY, iconSize / 2 + 0.4, -Math.PI * 0.85, -Math.PI * 0.10);
+                        ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                        ctx.restore();
                     } catch (e) {
-                        // drawing image failed due to CORS or other; fallback to emoji
+                        // fallback emoji (Shiba)
                         ctx.save();
                         ctx.translate(imgX, imgY);
                         ctx.rotate(angle + Math.PI / 2);
                         ctx.fillStyle = '#000';
-                        ctx.fillText('🐱', 0, 0);
+                        ctx.fillText('🐶', 0, 0);
                         ctx.restore();
                     }
                 } else {
@@ -3157,34 +4845,133 @@ You will earn 40% of the revenue from every referral you bring through ads!
                     ctx.translate(imgX, imgY);
                     ctx.rotate(angle + Math.PI / 2);
                     ctx.fillStyle = '#000';
-                    ctx.fillText('🐱', 0, 0);
+                    ctx.fillText('🐶', 0, 0);
                     ctx.restore();
                 }
 
-                // Optionally draw small numeric label under the icon for clarity
-                ctx.save();
-                ctx.fillStyle = '#fff';
-                ctx.font = '700 12px Orbitron, Vazirmatn, sans-serif';
-                const labelX = centerX + (radius * 0.85) * Math.cos(angle);
-                const labelY = centerY + (radius * 0.85) * Math.sin(angle);
-                ctx.textAlign = 'center';
-                ctx.fillText(String(val), labelX, labelY);
                 ctx.restore();
             });
 
-            // Center decoration
+            // ---- Soft section separation (no harsh/raised lines) ----
+            ctx.save();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            // soft highlight line (very subtle)
+            ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+            ctx.lineWidth = 1.35;
+            ctx.shadowColor = 'rgba(255,255,255,0.10)';
+            ctx.shadowBlur = 6;
+            for (let i = 0; i < sectorCount; i++) {
+                const a = i * arc - Math.PI / 2;
+                const r0 = 18;           // leave center clean
+                const r1 = radius - 3;   // avoid harsh outer edge
+                ctx.beginPath();
+                ctx.moveTo(centerX + r0 * Math.cos(a), centerY + r0 * Math.sin(a));
+                ctx.lineTo(centerX + r1 * Math.cos(a), centerY + r1 * Math.sin(a));
+                ctx.stroke();
+            }
+
+            // soft shade line for gentle depth
+            ctx.shadowColor = 'rgba(0,0,0,0.12)';
+            ctx.shadowBlur = 8;
+            ctx.strokeStyle = 'rgba(0,0,0,0.10)';
+            ctx.lineWidth = 1.05;
+            for (let i = 0; i < sectorCount; i++) {
+                const a = i * arc - Math.PI / 2;
+                const r0 = 18;
+                const r1 = radius - 4;
+                const off = 0.012;
+                ctx.beginPath();
+                ctx.moveTo(centerX + r0 * Math.cos(a + off), centerY + r0 * Math.sin(a + off));
+                ctx.lineTo(centerX + r1 * Math.cos(a + off), centerY + r1 * Math.sin(a + off));
+                ctx.stroke();
+            }
+
+            ctx.restore();
+
+            // ---- Global inner shadow (subtle depth) ----
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            ctx.clip();
+
+            const innerShadow = ctx.createRadialGradient(centerX, centerY, radius * 0.55, centerX, centerY, radius);
+            innerShadow.addColorStop(0.00, 'rgba(0,0,0,0.00)');
+            innerShadow.addColorStop(0.72, 'rgba(0,0,0,0.00)');
+            innerShadow.addColorStop(1.00, 'rgba(0,0,0,0.22)');
+            ctx.fillStyle = innerShadow;
+            ctx.fillRect(centerX - radius - 10, centerY - radius - 10, (radius + 10) * 2, (radius + 10) * 2);
+            ctx.restore();
+
+            // ---- Light glossy highlight (screen blend, very subtle) ----
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            ctx.clip();
+
+            ctx.globalCompositeOperation = 'screen';
+            const gloss = ctx.createLinearGradient(centerX - radius, centerY - radius, centerX + radius, centerY + radius);
+            gloss.addColorStop(0.00, 'rgba(255,255,255,0.00)');
+            gloss.addColorStop(0.24, 'rgba(255,255,255,0.05)');
+            gloss.addColorStop(0.35, 'rgba(255,255,255,0.10)');
+            gloss.addColorStop(0.55, 'rgba(255,255,255,0.03)');
+            gloss.addColorStop(1.00, 'rgba(255,255,255,0.00)');
+            ctx.fillStyle = gloss;
+            ctx.fillRect(centerX - radius, centerY - radius, radius * 2, radius * 2);
+
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.restore();
+
+            // ---- Refined outer ring (beveled rim) ----
+            // Outer rim shadow
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius + 7, 0, 2 * Math.PI);
+            ctx.lineWidth = 14;
+            ctx.shadowColor = 'rgba(0,0,0,0.26)';
+            ctx.shadowBlur = 14;
+            ctx.shadowOffsetY = 6;
+            ctx.strokeStyle = 'rgba(0,0,0,0.10)';
+            ctx.stroke();
+            ctx.restore();
+
+            // Outer rim highlight / bevel
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius + 6, 0, 2 * Math.PI);
+            ctx.lineWidth = 12;
+            const rim = ctx.createRadialGradient(centerX, centerY, radius + 1, centerX, centerY, radius + 12);
+            rim.addColorStop(0.00, 'rgba(255,255,255,0.70)');
+            rim.addColorStop(0.55, 'rgba(255,255,255,0.18)');
+            rim.addColorStop(1.00, 'rgba(0,0,0,0.22)');
+            ctx.strokeStyle = rim;
+            ctx.stroke();
+            ctx.restore();
+
+            // Inner rim line (crisp edge)
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius - 0.5, 0, 2 * Math.PI);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(255,255,255,0.30)';
+            ctx.stroke();
+            ctx.restore();
+
+            // ---- Center decoration (kept as-is, no text/icons) ----
             ctx.beginPath();
             ctx.fillStyle = '#fff';
-            ctx.arc(centerX, centerY, 20, 0, 2 * Math.PI); 
+            ctx.arc(centerX, centerY, 20, 0, 2 * Math.PI);
             ctx.fill();
             ctx.strokeStyle = '#ff3366';
             ctx.lineWidth = 4;
             ctx.stroke();
-            
+
             ctx.beginPath();
             ctx.fillStyle = '#ff3366';
-            ctx.arc(centerX, centerY, 8, 0, 2 * Math.PI); 
+            ctx.arc(centerX, centerY, 8, 0, 2 * Math.PI);
             ctx.fill();
+
             ctx.shadowColor = 'transparent';
         }
         drawWheel();
@@ -3228,8 +5015,8 @@ You will earn 40% of the revenue from every referral you bring through ads!
 
                 spinning = true;
                 spinBtn.disabled = true;
-                spinResult.textContent = 'Spinning...'; 
-                canvas.classList.add('spinning');
+                spinResult.textContent = '';
+canvas.classList.add('spinning');
 
                 const spinResultRes = await fetchApi({ 
                     type: 'spinResult',
@@ -3251,32 +5038,76 @@ You will earn 40% of the revenue from every referral you bring through ads!
                     
                     currentAngle += rotationToApply;
 
-                    canvas.style.transition = 'transform 4s cubic-bezier(0.22,0,0.2,1)';
-                    requestAnimationFrame(() => {
-                        canvas.style.transform = `rotate(${currentAngle}rad)`;
-                    });
-                    
-                    setTimeout(async ()=>{
+                                        // Premium spin motion: ease-out with a very subtle bounce
+                    wheelAnimating = true;
+                    const startAngle = currentAngle - rotationToApply;
+                    const targetAngle = currentAngle;
+                    const bounce = Math.PI / 120; // ~1.5deg, very subtle
+
+                    const finalizeSpin = async () => {
                         canvas.style.transition = '';
+                        canvas.style.transform = `rotate(${targetAngle}rad)`;
                         canvas.classList.remove('spinning');
-                        
+                        if (wheelBox) {
+                            wheelBox.classList.remove('spinning');
+                            wheelBox.classList.add('idle');
+                        }
+                      
                         updateState({ 
                             balance: spinResultRes.data.new_balance,
                             spins_today: spinResultRes.data.new_spins_count
                         });
                         
-                        spinResult.textContent = `🎉 You won ${Number(finalPrize || 0).toLocaleString('en-US')} SHIB!`;
-                        showCustomAlert('Congratulations!', `You won ${Number(finalPrize || 0).toLocaleString('en-US')} SHIB!`, 'success');
+                        spinResult.textContent = '';
+showCustomAlert('Congratulations!', `You won ${Number(finalPrize || 0).toLocaleString('en-US')} SHIB!`, 'success');
                         
-                        await loadUserData(); 
-                        
-                    },4000); 
+                        await loadUserData();
+                        // unlock UI after wheel settles
+                        wheelAnimating = false;
+                        spinning = false;
+                        if (spinBtn) spinBtn.disabled = false;
+                        updateUI();
+                    };
+
+                    // start visual states
+                    if (wheelBox) {
+                        wheelBox.classList.add('spinning');
+                        wheelBox.classList.remove('idle');
+                        wheelBox.classList.add('spin-flash');
+                        setTimeout(() => wheelBox.classList.remove('spin-flash'), 650);
+                    }
+
+                    if (canvas.animate) {
+                        // cancel any previous animations
+                        canvas.getAnimations().forEach(a => a.cancel());
+                        const anim = canvas.animate(
+                            [
+                                { transform: `rotate(${startAngle}rad)`, offset: 0 },
+                                { transform: `rotate(${targetAngle + bounce}rad)`, offset: 0.95, easing: 'cubic-bezier(0.22,0,0.2,1)' },
+                                { transform: `rotate(${targetAngle}rad)`, offset: 1, easing: 'cubic-bezier(0.2,1,0.2,1)' }
+                            ],
+                            { duration: 3200, fill: 'forwards' }
+                        );
+                        anim.onfinish = finalizeSpin;
+                    } else {
+                        // Fallback: CSS transition + tiny overshoot
+                        canvas.style.transition = 'transform 3s cubic-bezier(0.22,0,0.2,1)';
+                        requestAnimationFrame(() => {
+                            canvas.style.transform = `rotate(${targetAngle + bounce}rad)`;
+                        });
+                        setTimeout(() => {
+                            canvas.style.transition = 'transform 240ms cubic-bezier(0.2,1,0.2,1)';
+                            canvas.style.transform = `rotate(${targetAngle}rad)`;
+                        }, 2950);
+                        setTimeout(finalizeSpin, 3200);
+                    }
+ 
 
                 } else {
                     canvas.classList.remove('spinning');
                     canvas.style.transition = '';
-                    spinResult.textContent = `❌ ERROR ❌\n\n[STATUS] Error receiving prize. Please try again.`;
-                    showCustomAlert('Error!', 'Error receiving prize from the server. Please try again.', 'error');
+                    spinResult.textContent = '';
+showCustomAlert('Error!', 'Error receiving prize from the server. Please try again.', 'error');
                     await loadUserData(); 
                 }
             } catch (e) {
@@ -3288,14 +5119,17 @@ You will earn 40% of the revenue from every referral you bring through ads!
                 }
                 await loadUserData();
             } finally {
-                // Ensure wheel and button are reset in all paths to prevent "freeze/تعليق"
-                try {
-                    canvas.classList.remove('spinning');
-                    canvas.style.transition = '';
-                } catch (err) {}
-                spinning = false;
-                if (spinBtn) spinBtn.disabled = false;
-                updateUI();
+                // Avoid resetting while the wheel animation is running
+                if (!wheelAnimating) {
+                    // Ensure wheel and button are reset in error paths to prevent "freeze/تعليق"
+                    try {
+                        canvas.classList.remove('spinning');
+                        canvas.style.transition = '';
+                    } catch (err) {}
+                    spinning = false;
+                    if (spinBtn) spinBtn.disabled = false;
+                    updateUI();
+                }
             }
         }
 
@@ -3375,17 +5209,21 @@ You will earn 40% of the revenue from every referral you bring through ads!
             }
 
             const html = withdrawalHistory.map(rec => {
-                const dest = rec.binance_id ? rec.binance_id : (rec.faucetpay_email ? rec.faucetpay_email : '-');
+                const isBinance = !!rec.binance_id;
+                const method = isBinance ? 'Binance' : (rec.faucetpay_email ? 'FaucetPay' : '—');
+                const dest = isBinance ? rec.binance_id : (rec.faucetpay_email ? rec.faucetpay_email : '-');
                 const statusText = rec.status === 'pending' ? 'Pending' : 'Completed';
+                const statusClass = rec.status === 'pending' ? 'status-pending' : 'status-completed';
                 return `
                     <div class="history-item">
                         <div class="left">
-                            <div><strong>Date:</strong> ${rec.date}</div>
-                            <div><strong>Dest:</strong> ${escapeHtml(dest)}</div>
+                            <div class="history-row"><strong>Date:</strong> <span>${escapeHtml(rec.date || '-') }</span></div>
+                            <div class="history-row"><strong>Method:</strong> <span>${escapeHtml(method)}</span></div>
+                            <div class="history-row history-dest"><strong>Dest:</strong> <span>${escapeHtml(dest)}</span></div>
                         </div>
                         <div class="right">
                             <div class="amount">${Number(rec.amount).toLocaleString('en-US')} SHIB</div>
-                            <div class="${rec.status === 'pending' ? 'status-pending' : 'status-completed'}">${statusText}</div>
+                            <div class="${statusClass}">${statusText}</div>
                         </div>
                     </div>
                 `;
@@ -3400,6 +5238,15 @@ You will earn 40% of the revenue from every referral you bring through ads!
         }
 
         async function confirmWithdraw(){
+            const btn = document.getElementById('withdrawRequestBtn');
+            if (window.__withdrawSubmitting) return;
+            window.__withdrawSubmitting = true;
+            if (btn){
+                btn.disabled = true;
+                btn.classList.add('is-loading');
+                btn.setAttribute('aria-busy','true');
+            }
+            try{
             if (isBanned) {
                  showCustomAlert('Access Denied!', 'This account has been banned.', 'error');
                  return;
@@ -3457,6 +5304,17 @@ You will earn 40% of the revenue from every referral you bring through ads!
                 const destText = selectedMethod === 'faucetpay' ? `FaucetPay: ${faucetpayEmail}` : `Binance ID: ${binanceId}`;
                 showCustomAlert('Request Sent!', `Details:\n${destText}\nAmount: ${Number(amount).toLocaleString('en-US')} SHIB\n\nThe transfer will be processed within 24 hours.`, 'success');
             }
+        
+            } finally {
+                window.__withdrawSubmitting = false;
+                if (btn){
+                    btn.classList.remove('is-loading');
+                    btn.removeAttribute('aria-busy');
+                }
+                if (typeof updateWithdrawButtonState === 'function'){
+                    updateWithdrawButtonState();
+                }
+            }
         }
         
         document.addEventListener('click', (e) => {
@@ -3474,8 +5332,35 @@ You will earn 40% of the revenue from every referral you bring through ads!
                 document.getElementById('faucetpayGroup').style.display = 'block';
             }
         });
+        // Update withdraw button state live while typing the amount
+        document.addEventListener('input', (e) => {
+            if (e && e.target && e.target.id === 'withdrawAmount') {
+                updateWithdrawButtonState();
+            }
+        });
 
-        // ===== Contest Functions (UPDATED to use server data for tickets and ranking) =====
+
+
+        
+
+        // Quick amount chips (Min / presets / Max)
+        document.addEventListener('click', (e) => {
+            const chip = e.target && e.target.closest ? e.target.closest('[data-withdraw-chip]') : null;
+            if (!chip) return;
+            const amountEl = document.getElementById('withdrawAmount');
+            if (!amountEl) return;
+            const bal = Number(shibBalance || 0);
+            let v = chip.getAttribute('data-withdraw-chip');
+            let next = 0;
+            if (v === 'max') next = bal;
+            else next = Number(v);
+            if (!Number.isFinite(next) || next <= 0) return;
+            amountEl.value = Math.floor(next);
+            amountEl.dispatchEvent(new Event('input', { bubbles: true }));
+            amountEl.focus();
+        });
+
+// ===== Contest Functions (UPDATED to use server data for tickets and ranking) =====
         function showContest() {
             if (isBanned) {
                 showCustomAlert('Access Denied!', 'This account has been banned.', 'error');
@@ -3632,12 +5517,22 @@ You will earn 40% of the revenue from every referral you bring through ads!
             }
 
             const list = document.getElementById('contestRankList');
+            const updatedAtEl = document.getElementById('rankUpdatedAt');
+            const stampUpdated = () => {
+                if (!updatedAtEl) return;
+                updatedAtEl.textContent = `Updated: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+            };
+
+            if (!list) return;
+
             if (!players || players.length === 0) {
-                list.innerHTML = `<div style="text-align:center;color:#cfeeff;padding:20px;border-radius:10px;background:rgba(255,255,255,0.02);">No entries yet.</div>`;
-                // still render personal box if possible
+                list.innerHTML = `<div style="text-align:center;color:#cfeeff;padding:20px;border-radius:14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.10);">No entries yet.</div>`;
                 renderPersonalUserBox(players);
+                stampUpdated();
                 return;
             }
+
+            stampUpdated();
 
             // We'll use a single default avatar when photo is missing
             const DEFAULT_AVATAR = 'https://giftgogame.com/static/thumbnails/5170233102089322756.webp';
@@ -3690,7 +5585,7 @@ You will earn 40% of the revenue from every referral you bring through ads!
                 // Construct safe HTML for the row with strict truncation rules applied via CSS
                 // Note: tickets shown as number only per requirement (e.g., "400")
                 return `
-                    <div class="${rowClass}" role="article" aria-label="Player ${pos}">
+                    <div class="${rowClass}" data-rank="${pos}" role="article" aria-label="Player ${pos}">
                         <img src="${avatarSrc || DEFAULT_AVATAR}" class="contest-rank-avatar" alt="" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}'">
                         <div class="contest-rank-name" title="${firstNameSafe}">
                             <div class="name-main">${escapeHtml(displayName)}</div>
@@ -3720,6 +5615,11 @@ You will earn 40% of the revenue from every referral you bring through ads!
         }
 
         // Render the personal user golden box using tgUser and authoritative players array when available
+
+        /* ===== Leaderboard UI helpers removed (search/podium) ===== */
+
+
+
         function renderPersonalUserBox(players) {
             const box = document.getElementById('personalUserBox');
             const avatarEl = document.getElementById('personalAvatar');
