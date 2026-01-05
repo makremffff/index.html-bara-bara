@@ -16,6 +16,7 @@ const SUPABASE_KEY = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
 // ------------------------------------------------------------------
 const REWARD_PER_AD = 10;
 const REFERRAL_COMMISSION_RATE = 0.10;
+const REFERRAL_TICKETS_BONUS = 50; // tickets given to referrer for each successful referral
 const DAILY_MAX_ADS = 200; // Max ads limit
 const DAILY_MAX_SPINS = 25; // Max spins limit
 const RESET_INTERVAL_MS = 6 * 60 * 60 * 1000; // ⬅️ 6 hours in milliseconds
@@ -100,6 +101,31 @@ async function supabaseFetch(tableName, method, body = null, queryParams = '?sel
       return text;
   }
 }
+
+/**
+ * Add contest tickets to a user (upsert into 'ticket' table).
+ * Used for referral rewards and other ticket grants.
+ */
+async function addContestTickets(userId, ticketsToAdd) {
+  const id = parseInt(userId);
+  const inc = parseInt(ticketsToAdd);
+
+  if (!id || isNaN(id) || !inc || isNaN(inc) || inc <= 0) return;
+
+  const nowIso = new Date().toISOString();
+  const existing = await supabaseFetch('ticket', 'GET', null, `?user_id=eq.${id}&select=tickets`);
+
+  if (Array.isArray(existing) && existing.length > 0) {
+    const current = parseInt(existing[0].tickets || 0);
+    const newTickets = current + inc;
+    await supabaseFetch('ticket', 'PATCH', { tickets: newTickets, updated_at: nowIso }, `?user_id=eq.${id}`);
+    return newTickets;
+  } else {
+    await supabaseFetch('ticket', 'POST', { user_id: id, tickets: inc, created_at: nowIso, updated_at: nowIso }, '?select=user_id');
+    return inc;
+  }
+}
+
 
 /**
  * Checks if a user is a member (or creator/admin) of a specific Telegram channel.
@@ -598,6 +624,15 @@ async function handleRegister(req, res, body) {
         photo_url: providedPhoto
       };
       await supabaseFetch('users', 'POST', newUser, '?select=id');
+      // Referral contest bonus: give referrer 50 tickets per successful referral (only on first register)
+      const refId = newUser.ref_by ? parseInt(newUser.ref_by) : null;
+      if (refId && refId !== id) {
+        const refRows = await supabaseFetch('users', 'GET', null, `?id=eq.${refId}&select=id,is_banned`);
+        if (Array.isArray(refRows) && refRows.length > 0 && !refRows[0].is_banned) {
+          await addContestTickets(refId, REFERRAL_TICKETS_BONUS);
+        }
+      }
+
     } else {
         if (users[0].is_banned) {
              return sendError(res, 'User is banned.', 403);
