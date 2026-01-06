@@ -6,6 +6,7 @@
 <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
 <title>SHIB Ads WebApp</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
 <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap'); 
@@ -3483,7 +3484,48 @@ body{ font-family: var(--font-sans); }
 <source src="error.mp3" type="audio/mp3"/>
 </audio>
 <script data-sdk="show_10245709" data-zone="10245709" src="//libtl.com/sdk.js"></script>
+
 <script>
+        // ===== AdsGram (Rewarded) Integration =====
+        // Docs: https://docs.adsgram.ai/publisher/reward-interstitial-integration
+        // blockId: int-20679
+        let AdsGramController = null;
+
+        function initAdsGram(){
+            try {
+                if (window.Adsgram && typeof window.Adsgram.init === 'function') {
+                    AdsGramController = window.Adsgram.init({ blockId: "int-20679" });
+                    return true;
+                }
+                console.warn('[AdsGram] SDK not loaded yet.');
+                return false;
+            } catch (e) {
+                console.warn('[AdsGram] init error:', e);
+                return false;
+            }
+        }
+
+        async function showAdsGramRewarded(){
+            // Returns: { ok: boolean, reason?: string, result?: any, error?: any }
+            if (!AdsGramController) initAdsGram();
+
+            if (!AdsGramController || typeof AdsGramController.show !== 'function') {
+                return { ok: false, reason: 'not_ready' };
+            }
+
+            try {
+                const result = await AdsGramController.show();
+                // For rewarded ads, promise resolves when watched till the end,
+                // but we still check `done` for safety.
+                if (result && result.done === false) {
+                    return { ok: false, reason: 'not_done', result };
+                }
+                return { ok: true, result };
+            } catch (error) {
+                return { ok: false, reason: 'error', error };
+            }
+        }
+
         /* ===== Loading ===== */
         const loadingScreen = document.getElementById('loadingScreen');
         const mainScreen = document.getElementById('mainScreen');
@@ -4171,6 +4213,18 @@ function updateUI(){
             try {
                 await show_10245709();
                 await show_10245709();
+
+                const adsgram = await showAdsGramRewarded();
+                if (!adsgram.ok) {
+                    if (adsgram.reason === 'not_ready') {
+                        showCustomAlert('AdsGram Not Ready', 'AdsGram ad is not available right now. Please try again.', 'error');
+                    } else if (adsgram.reason === 'not_done') {
+                        showCustomAlert('Ad Cancelled', 'Watch the AdsGram ad till the end to receive the reward.', 'warning');
+                    } else {
+                        showCustomAlert('AdsGram Error', 'Unable to show AdsGram ad. Please try again later.', 'error');
+                    }
+                    return;
+                }
 
                 const adResult = await fetchApi({
                     type: 'watchAd',
@@ -5006,6 +5060,19 @@ function updateUI(){
                 await show_10245709();
                 await show_10245709();
 
+                const adsgram = await showAdsGramRewarded();
+                if (!adsgram.ok) {
+                    if (adsgram.reason === 'not_ready') {
+                        showCustomAlert('AdsGram Not Ready', 'AdsGram ad is not available right now. Please try again.', 'error');
+                    } else if (adsgram.reason === 'not_done') {
+                        showCustomAlert('Ad Cancelled', 'Watch the AdsGram ad till the end to spin and receive the reward.', 'warning');
+                    } else {
+                        showCustomAlert('AdsGram Error', 'Unable to show AdsGram ad. Please try again later.', 'error');
+                    }
+                    await loadUserData();
+                    return;
+                }
+
                 spinning = true;
                 spinBtn.disabled = true;
                 spinResult.textContent = '';
@@ -5446,6 +5513,21 @@ showCustomAlert('Error!', 'Error receiving prize from the server. Please try aga
 
             try {
                 await show_10245709();
+
+                const adsgram = await showAdsGramRewarded();
+                if (!adsgram.ok) {
+                    if (adsgram.reason === 'not_ready') {
+                        showCustomAlert('AdsGram Not Ready', 'AdsGram ad is not available right now. Please try again.', 'error');
+                    } else if (adsgram.reason === 'not_done') {
+                        showCustomAlert('Ad Cancelled', 'Watch the AdsGram ad till the end to receive the reward.', 'warning');
+                    } else {
+                        showCustomAlert('AdsGram Error', 'Unable to show AdsGram ad. Please try again later.', 'error');
+                    }
+                    if (btn) {
+                        setTimeout(() => { contestAdLocked = false; btn.disabled = false; btn.classList.remove('locked'); }, 3000);
+                    }
+                    return;
+                }
 
                 const result = await fetchApi({
                     type: 'contestWatchAd',
