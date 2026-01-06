@@ -6,6 +6,7 @@
 <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
 <title>SHIB Ads WebApp</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
 <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap'); 
@@ -101,6 +102,7 @@
             background: url('back2.png') no-repeat center center;
             background-size: cover;
             box-shadow: 0 18px 40px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.14);
+            margin-top: -115px;
         }
         .loading-dots{
             display:flex;
@@ -122,7 +124,7 @@
             animation: dotPulse 2.1s infinite ease-in-out;
             transform: translateY(0) scale(0.5);
             opacity: 0.55;
-            margin-top: 20px;
+            margin-top: 35px;
             will-change: transform, opacity;
         }
         /* loading dots unified (blue) */
@@ -148,7 +150,7 @@
         .user-circle{
             position:absolute;
             top:12px;
-            left:15px;
+            left:17px;
             width:60px;
             height:60px;
             border:none;
@@ -3481,8 +3483,36 @@ body{ font-family: var(--font-sans); }
 <audio id="errorSFX">
 <source src="error.mp3" type="audio/mp3"/>
 </audio>
-<script data-sdk="show_10245709" data-zone="10245709" src="//libtl.com/sdk.js"></script>
 <script>
+        /* ===== AdsGram SDK (replaces libtl.com) ===== */
+        const ADSGRAM_BLOCK_ID = 'int-20679';
+        let __adsgramController = null;
+
+        function getAdsgramController() {
+            if (__adsgramController) return __adsgramController;
+            if (!window.Adsgram || typeof window.Adsgram.init !== 'function') {
+                throw new Error('AdsGram SDK not loaded');
+            }
+            __adsgramController = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
+            return __adsgramController;
+        }
+
+        // Keep legacy function name so the rest of the app works without changes
+        async function show_10245709() {
+            const ctrl = getAdsgramController();
+            try {
+                return await ctrl.show();
+            } catch (res) {
+                const desc = (res && res.description) ? String(res.description) : '';
+                // mimic old "canceled" behavior for skip-like events
+                if (/skip|cancel|cancell/i.test(desc)) {
+                    throw 'canceled';
+                }
+                throw res;
+            }
+        }
+
+
         /* ===== Loading ===== */
         const loadingScreen = document.getElementById('loadingScreen');
         const mainScreen = document.getElementById('mainScreen');
@@ -4211,7 +4241,7 @@ function updateUI(){
                     await loadUserData();
                 }
             } catch (e) {
-                console.error("libtl.com Ad sequence failed:", e);
+                console.error("AdsGram Ad sequence failed:", e);
                 if (typeof e === 'string' && e.includes('canceled')) {
                     showCustomAlert('Ad Cancelled', 'The ad sequence was interrupted. Watch the full ad to receive the reward.', 'warning');
                 } else {
@@ -5103,7 +5133,7 @@ showCustomAlert('Error!', 'Error receiving prize from the server. Please try aga
                     await loadUserData(); 
                 }
             } catch (e) {
-                console.error("libtl.com Ad failed to show or was dismissed:", e);
+                console.error("AdsGram Ad failed to show or was dismissed:", e);
                 if (typeof e === 'string' && e.includes('canceled')) {
                     showCustomAlert('Ad Cancelled', 'The ad was not watched completely. The attempt was not counted.', 'warning');
                 } else {
