@@ -14,7 +14,7 @@ const SUPABASE_KEY = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
 // ------------------------------------------------------------------
 // Fully secured and defined server-side constants
 // ------------------------------------------------------------------
-const REWARD_PER_AD = 10;
+const REWARD_PER_AD = 17;
 const REFERRAL_COMMISSION_RATE = 0.10;
 const REFERRAL_TICKETS_BONUS = 50; // tickets given to referrer for each successful referral
 const DAILY_MAX_ADS = 200; // Max ads limit
