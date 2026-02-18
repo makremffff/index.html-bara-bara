@@ -1,0 +1,409 @@
+@import url('https://fonts.googleapis.com/css2?family=Creepster&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Story+Script&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DynaPuff:wght@400..700&display=swap');
+
+@import url('https://fonts.googleapis.com/css2?family=Trade+Winds&display=swap');
+
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+body{
+  display: flex;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  font-family: Story Script;
+  background: #2C2D34;
+  user-select: none;
+ margin: 0;
+}
+a{
+  text-decoration: none;
+  color: white;
+}
+
+#pn{
+  border-radius: 15px;
+  position: absolute;
+  top: 0;
+  left: 40%;
+}
+.page{
+  display: none;
+  height: 100vh;
+  width: 100%;
+  background: #121212;  
+
+
+}
+#main{
+  display: block;
+
+}
+
+ 
+
+
+
+#adsnotifi{
+  color: navy;
+  min-width: fit-content;
+  font-size: 23px;
+  font-family: DynaPuff;
+  background: papayawhip;
+  height: fit-content;
+  padding: 5px 50px;
+  padding-bottom: 60px;
+  border-radius: 20px;
+  text-shadow: 0 0px 4px #000;
+  position: relative;
+  left: 10%;
+  top: -50%;
+  display: none;
+transition: 0.3s linear;
+z-index: 9999;
+text-align: center;
+font-weight: bold;
+
+
+
+ 
+}
+
+
+
+.info{
+  position: relative;
+}
+
+.menub img{
+  width: 35px;
+  height: 35px;
+  opacity: 1;
+  position: relative;
+  top: -60px;
+  left: 0px;
+  transition: 0.4s;
+  
+ padding: 0px 1px;
+}
+.menub{
+  display: flex;
+  position: fixed;
+  bottom: 0px;
+  width: 100%;
+  border-radius: 20px 20px 2px 2px;
+ padding: 10px ;
+  justify-content: space-evenly;
+  background: #A0A5E1;
+  gap: 37px;
+  z-index: 9999;
+ border: navy solid 1px;
+ border-bottom: transparent;
+  
+}
+.menub .btn{
+  width: 28%;
+  height: 45px;
+  border: none;
+  background: transparent;
+  color: ;
+  font-size: 15px;
+  font-family: DynaPuff;
+  transition: 0.4s;
+  position: relative;
+  top: 55px;
+  text-align: center;
+  
+  
+
+}
+.btn:hover{
+ color: white;
+ transition: 0.7s;
+ top: -10px;
+ transition: 1s;
+ background: #868BC2;
+  border-radius: 20px;
+ 
+}
+.btn:hover img{
+  top: -5px;
+  scale: 0.7;
+  opacity: 1.7;
+  
+}
+.menub:hover .btn:not(:hover){
+  opacity: 0.9;
+  color: red;
+}
+#loading{
+  position: absolute;
+  display: flex;
+  text-align: center;
+  
+  align-content: center;
+ 
+  z-index: 9999;
+transition: 1s;
+background: #ffeedd;
+}
+#page-load{
+  color: blue;
+ font-weight: bold;
+ font-size: 23px;
+ position: fixed;
+ top: 60%;
+ left: 32%;
+ font-family: DynaPuff;
+}
+#page-load::after{
+  content: "";
+  animation: text 1s linear infinite;
+  transition: 0.5s;
+  color: blueviolet;
+}
+@keyframes text{
+  10%{content: ".";}
+  35%{content: "..";}
+  70%{content: "...";}
+  100%{content: "....";}
+}
+
+
+
+
+
+
+ 
+@media (max-height: 500px){
+  .menub{
+    bottom: -80px;
+  }
+  
+  
+}
+ 
+ 
+ .withdrawmg{
+ position: relative;
+   width: 30px;
+   height: 30px;
+   bottom: 55px;
+   left: 260px;
+  
+   
+ }
+ 
+
+ .progres-ads{
+   background: linear-gradient(black,#2A2C37,black);
+   position: absolute;
+   top: 30%;
+   left: 15%;
+   text-align: center;
+   width: 70%;
+   padding: 20px ;
+   border-radius: 20px;
+   display: flex;
+   flex-direction: column;
+   height: 160px;
+  align-items: center;
+  transition: 0.7s;
+  box-shadow: 0px 0.4px 2px 1px #3A3C53;
+   justify-content: space-between;
+
+
+ }
+ .progres-ads :nth-child(1){
+   color: white;
+   font-weight: bold;
+   position: relative;
+   bottom: 20px;
+   letter-spacing: 5px;
+   font-size: 20px;
+  font-family: DynaPuff;
+   padding: 0 3px;
+   border-radius: 10px;
+ }
+ #progres{
+   color: gold;
+   font-family: DynaPuff;
+   font-size: 25px;
+   position: absolute;
+   lft: 35%;
+   top: 43%;
+   letter-spacing: 3px;
+   background: #3E3F4D;
+   border-radius: 10px;
+   padding: 7px;
+     box-shadow: 0px 5px 0px  #494A58;
+
+ }
+ .btnSumbit{
+   background: #323945;
+   padding: 10px 0;
+   border-radius: 20px;
+   box-shadow: 0px 5px 0 #272B34;
+   width: 80%;
+   margin-left: 25px;
+  align-content: center;
+ }
+
+ 
+#adsnotifi img{
+ position: absolute;
+ top: 50%;
+ left: 40%;
+
+}
+#check{
+  display: none;
+}
+#barbtn{
+  position: absolute;
+  left: 40%;
+  background: #757CC9;
+  width: 50px;
+  height: 50px;
+  
+  border-radius: 30%;
+  transition: 0.7s;
+z-index: 9999;  
+ 
+
+ 
+}
+
+
+.bar{
+  display: flex;
+  background: #848EFF;
+  width: 0%;
+  height: 10vh;
+  position: relative;
+  left: 0%;
+  top: 0px;
+padding: 60px 0;
+border-radius: 0 0 15px 15px;
+font-size: 20px;
+font-family: DynaPuff;
+overflow: hidden;
+transition: 0.4s;
+box-shadow: 0px 1.6px 1px #65677B;
+font-size: 15px;
+z-index: 100;
+opacity: 0.8;
+}
+.bar a{
+display: inline-flex;
+margin: 0px 14px;
+background: #5C63B4;
+padding: 5px 5px;
+border-radius: 20px;
+}
+#check:checked~ .bar{
+  width: 100%;
+  height: 21vh;
+  left: 0%;
+
+}
+#check:checked~ #barbtn{
+  transform: rotate(990deg);
+  background: transparent;
+}
+.bar img{
+  position: absolute;
+  top: 65%;
+ 
+ 
+}
+
+
+
+
+
+.addtask-container{
+  width: 100%;
+  display: flex;
+  gap: 40px;
+  flex-direction: column;
+  align-items: center;
+  padding: 50px 0;
+  position: relative;
+  top: 0px;
+  font-family: DynaPuff;
+  
+  text-align: center;
+}
+.addtask-container input{
+  width: 90%;
+  height: 40px;
+  outline: none;
+  border: #373955 solid 2px;
+  border-radius: 10px;
+  background: transparent;
+ font-family: DynaPuff;
+color: #F7F7F7;
+}
+.addtask-container button{
+margin-top: 60px;
+border: none;
+width: 90px;
+padding: 10px 3px;
+font-family: DynaPuff;
+color: white;
+background: black;
+border-radius: 15px;
+
+}
+.addtask-container label{
+  color: #30313D;
+  position: relative;
+  right: 17%;
+  bottom: 30px;
+  
+}
+.addtask-container .support{
+  position: relative;
+  bottom: 60px;
+  font-size: 15px;
+  color: red;
+}
+.addtask-container a{
+  text-decoration: underline;
+}
+.addtask-container .note{
+  display: inline-flex;
+  position: relative;
+  bottom: 130px;
+  color: red;
+}
+
+.addtask-container ::placeholder{
+  color: navy;
+}
+.addtask-notifi{
+  color: navy;
+  width: 80%;
+  font-size: 23px;
+  font-family: DynaPuff;
+  background: papayawhip;
+  height: fit-content;
+  padding: 5px 50px;
+  padding-bottom: 20px;
+  border-radius: 20px;
+  text-shadow: 0 0px 4px #000;
+  position: relative;
+  left: 10%;
+  top: -0px;
+  display: none;
+transition: 0.3s linear;
+z-index: 9999;
+text-align: center;
+font-weight: bold;
+
+}
