@@ -142,27 +142,12 @@ adsBtn.addEventListener("click", async function () {
 
   adsBtn.style.display  = "none";
   adsBtnn.style.display = "block";
-  adsBtnn.textContent = "Loading Ads...";
 
-  // الإعلان الأول
-  await showSingleAd();
-  adsBtnn.textContent = "Next ad in 7s";
-  await delay(7000);
-
-  // الإعلان الثاني
-  await showSingleAd();
-  adsBtnn.textContent = "Next ad in 7s";
-  await delay(7000);
-
-  // الإعلان الثالث
-  await showSingleAd();
-
-  // بعد انتهاء الثلاثة نبدأ العد التنازلي العادي
+  /* ===== بدء عداد 60 ثانية مباشرة ===== */
   let timeLeft = 60;
   adsBtnn.textContent = timeLeft + "s";
 
   timer = setInterval(function () {
-
     timeLeft--;
     adsBtnn.textContent = timeLeft + "s";
 
@@ -232,6 +217,20 @@ adsBtn.addEventListener("click", async function () {
     }
 
   }, 1000);
+
+  /* ===== عرض 3 إعلانات مع فاصل 7 ثواني يبدأ فور تشغيل كل إعلان ===== */
+
+  // الإعلان الأول
+  showSingleAd();
+  await delay(7000);
+
+  // الإعلان الثاني
+  showSingleAd();
+  await delay(7000);
+
+  // الإعلان الثالث
+  showSingleAd();
+
 });
 
 /* =======================
