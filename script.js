@@ -119,20 +119,14 @@ let progresLimit = 60* 60000;
 
  
 /* =======================
-   AdsGram integration
-   أخذت الكود من ads.html ووضعت دوال تهيئة واستدعاء هنا
+   AdsGram integration (مأخوذ من ads.html)
+   مهيأ للعمل عند الضغط على الزر الأصلي بدون تغيير في شكله
 ======================= */
 let AdsGramController = null;
 
-/**
- * initAdsGram()
- * يحاول تهيئة SDK إذا كانت محمّلة
- * يعيد true إن تم التهيئة بنجاح، false خلاف ذلك
- */
 function initAdsGram(){
     try {
         if (window.Adsgram && typeof window.Adsgram.init === 'function') {
-            // blockId: استخدم blockId الموجود في ads.html (قابل للتغيير حسب حسابك)
             AdsGramController = window.Adsgram.init({ blockId: "int-20679" });
             return true;
         }
@@ -144,11 +138,6 @@ function initAdsGram(){
     }
 }
 
-/**
- * showAdsGramRewarded()
- * يحاول عرض الإعلان المكافئ عبر AdsGram ويتعامل مع الأخطاء
- * يعيد كائن { ok: boolean, reason?: string, result?: any, error?: any }
- */
 async function showAdsGramRewarded(){
     if (!AdsGramController) initAdsGram();
 
@@ -158,7 +147,6 @@ async function showAdsGramRewarded(){
 
     try {
         const result = await AdsGramController.show();
-        // تحقق من النتيجة إن احتجنا
         if (result && result.done === false) {
             return { ok: false, reason: 'not_done', result };
         }
@@ -169,193 +157,176 @@ async function showAdsGramRewarded(){
 }
 
 /* =======================
-   عند الضغط على زر الإعلان (القديم)
-   هذا الزر يبقى كما هو، لكنه مستقل عن AdsGram.
+   دالة جائزة موحّدة لإعادة الاستخدام
 ======================= */
-adsBtn.addEventListener("click", function () {
+function grantLocalAdReward(amount = 100){
+  ADS += amount;
+  adsBalance.textContent = ADS;
 
+  try {
+    soundads.currentTime = 0;
+    soundads.play();
+  } catch (e) {}
+
+  // إظهار الإشعار بنفس تأثير الزر القديم
+  adsNotfi.style.display = "block";
+  adsNotfi.style.opacity = "0.8";
+
+  setTimeout(function () {
+    adsNotfi.style.opacity = "0.4";
+  }, 2500);
+
+  adsNotfi.style.transform = "translateY(-150%)";
+
+  setTimeout(function () {
+    adsNotfi.style.transform = "translateY(135px)";
+  }, 100);
+
+  setTimeout(function () {
+    adsNotfi.style.transform = "translateY(-150%)";
+    adsNotfi.style.opacity = "0";
+  }, 3000);
+
+  setTimeout(function () {
+    adsNotfi.style.display = "none";
+    adsNotfi.style.transform = "";
+    adsNotfi.style.opacity = "";
+  }, 3500);
+
+  // تحديث التقدّم اليومي (مثل المنطق القديم)
+  dailyProgres --;
+  progres.textContent = dailyProgres;
+}
+
+/* =======================
+   المنطق القديم كدالة قابلة لإعادة الاستدعاء
+======================= */
+function startLocalAdSequence(){
+  // يحاكي السلوك القديم (العد التنازلي ثم منح الجائزة)
   adsBtn.style.display  = "none";
   adsBtnn.style.display = "block";
   let timeLeft = 2;
   adsBtnn.textContent = timeLeft + "s";
-  
 
   timer = setInterval(function () {
 
     timeLeft--;
     adsBtnn.textContent = timeLeft + "s";
-    
-    
-    
 
     if (timeLeft <= 0) {
 
-     
-      // زيادة الرصيد
-      ADS += 100;
-      adsBalance.textContent = ADS;
-     
-   
-
-
-      // تشغيل صوت المكافأة
-      soundads.currentTime = 0;
-      soundads.play();
+      clearInterval(timer);
+      // منح الجائزة
+      grantLocalAdReward(100);
 
       // إعادة الزر
-      clearInterval(timer);
       adsBtnn.style.display = "none";
       adsBtn.style.display  = "block";
 
-      // إظهار الإشعار
-      adsNotfi.style.display = "block";
-      adsNotfi.style.opacity = "0.8";
-
-      setTimeout(function () {
-        adsNotfi.style.opacity = "0.4";
-      }, 2500);
-
-      adsNotfi.style.transform = "translateY(-150%)";
-
-      setTimeout(function () {
-        adsNotfi.style.transform = "translateY(135px)";
-      }, 100);
-
-      setTimeout(function () {
-        adsNotfi.style.transform = "translateY(-150%)";
-        adsNotfi.style.opacity = "0";
-      }, 3000);
-
-      setTimeout(function () {
-        adsNotfi.style.display = "none";
-        adsNotfi.style.transform = "";
-        adsNotfi.style.opacity = "";
-      }, 3500);
-
-   
-  dailyProgres --;
-  progres.textContent = dailyProgres;
-  if (dailyProgres <= 0) {
-    adsBtn.style.display = 'none'
-    adsBtnn.style.display = "block"
-    adsBtnn.textContent = progresLimit;
-    adsBtnn.style.background = 'red'
-    dailyLimit = setInterval(function(){
-      
-    progresLimit --;
-    adsBtnn.textContent = progresLimit;
-    
-      if (progresLimit <= 0) {
-      clearInterval(dailyLimit);
-      
-      adsBtnn.style.display = 'none'
-      adsBtn.style.display = 'block'
-      adsBtnn.style.background = ''
-      progresLimit = 60* 60000;
-      dailyProgres = 100;
-      progres.textContent = dailyProgres;
+      // نفس منطق الحد اليومي
+      if (dailyProgres <= 0) {
+        adsBtn.style.display = 'none'
+        adsBtnn.style.display = "block"
+        adsBtnn.textContent = progresLimit;
+        adsBtnn.style.background = 'red'
+        dailyLimit = setInterval(function(){
+          
+        progresLimit --;
+        adsBtnn.textContent = progresLimit;
+        
+          if (progresLimit <= 0) {
+          clearInterval(dailyLimit);
+          
+          adsBtnn.style.display = 'none'
+          adsBtn.style.display = 'block'
+          adsBtnn.style.background = ''
+          progresLimit = 60* 60000;
+          dailyProgres = 100;
+          progres.textContent = dailyProgres;
+            
+          }
+          
+        }, 1000)
         
       }
-      
-    }, 1000)
-    
-  }
 
-}
-
+    }
 
   }, 1000);
-  
-  
-  
-
-});
+}
 
 /* =======================
-   زر AdsGram الجديد في الواجهة الرئيسية
-   سيحاول عرض إعلان AdsGram مكافئ ثم يمنح الجائزة محلياً (مثال: +100)
+   حدث الضغط على الزر الأصلي adsBtn
+   الآن يحاول عرض AdsGram أولاً، وإذا لم يكن جاهزًا أو فشل يستدعي السلوك القديم
+   دون تغيير شكل الزر أو إضافة أزرار جديدة
 ======================= */
-const adsGramBtn = document.getElementById('adsgramBtn');
-if (adsGramBtn) {
-    adsGramBtn.addEventListener('click', async function () {
-        // تأكد من تهيئة الـ SDK أول مرة
-        if (!AdsGramController) {
-            const ok = initAdsGram();
-            if (!ok) {
-                // SDK لم يُحمّل بعد - شبّه رسالة بسيطة للمستخدم
-                alert('AdsGram SDK not ready yet. Please try again in a moment.');
-                return;
-            }
+adsBtn.addEventListener("click", async function () {
+  // حاول تهيئة SDK إن لم تكن مهيأة
+  if (!AdsGramController) {
+    initAdsGram();
+  }
+
+  // إذا SDK غير جاهز استعمل السلوك القديم
+  if (!AdsGramController || typeof AdsGramController.show !== 'function') {
+    startLocalAdSequence();
+    return;
+  }
+
+  // تعطيل الزر مؤقتًا لمنع النقر المتكرر أثناء عرض الإعلان
+  adsBtn.disabled = true;
+  try {
+    const res = await showAdsGramRewarded();
+    if (!res.ok) {
+      // إذا المستخدم لم يكمل الإعلان أو SDK غير جاهز، نرجع للسلوك القديم
+      if (res.reason === 'not_ready' || res.reason === 'error') {
+        startLocalAdSequence();
+      } else if (res.reason === 'not_done') {
+        // لم يشاهد للمحتوى كاملاً -> لا جائزة، عرض إشعار بسيط (بدون تغيير شكل الزر)
+        try { alert('Ad not finished — no reward.'); } catch(e){}
+      } else {
+        startLocalAdSequence();
+      }
+      return;
+    }
+
+    // إعلان AdsGram اكتمل — منح الجائزة مباشرة وإظهار الإشعار
+    grantLocalAdReward(100);
+
+    // تعطيل مؤقت أو منطق الحد اليومي إن لزم
+    if (dailyProgres <= 0) {
+      adsBtn.style.display = 'none'
+      adsBtnn.style.display = "block"
+      adsBtnn.textContent = progresLimit;
+      adsBtnn.style.background = 'red'
+      dailyLimit = setInterval(function(){
+        
+      progresLimit --;
+      adsBtnn.textContent = progresLimit;
+      
+        if (progresLimit <= 0) {
+        clearInterval(dailyLimit);
+        
+        adsBtnn.style.display = 'none'
+        adsBtn.style.display = 'block'
+        adsBtnn.style.background = ''
+        progresLimit = 60* 60000;
+        dailyProgres = 100;
+        progres.textContent = dailyProgres;
+          
         }
+        
+      }, 1000)
+      
+    }
 
-        // تعطيل الزر أثناء المعالجة
-        adsGramBtn.disabled = true;
-        adsGramBtn.textContent = 'Loading...';
-
-        try {
-            const res = await showAdsGramRewarded();
-
-            if (!res.ok) {
-                // تعامل مع الأسباب الشائعة
-                if (res.reason === 'not_ready') {
-                    alert('AdsGram not ready. Try again later.');
-                } else if (res.reason === 'not_done') {
-                    alert('You did not finish watching the ad. No reward.');
-                } else {
-                    console.warn('AdsGram show error:', res.error || res);
-                    alert('Ad error. Try again later.');
-                }
-                return;
-            }
-
-            // إعلان تم مشاهدته بنجاح — امنح المستخدم الجائزة محلياً
-            ADS += 100;
-            adsBalance.textContent = ADS;
-
-            // تشغيل صوت المكافأة
-            try {
-                soundads.currentTime = 0;
-                soundads.play();
-            } catch (e) {}
-
-            // إظهار إشعار مرئي مشابه لزر الإعلانات القديم
-            adsNotfi.style.display = "block";
-            adsNotfi.style.opacity = "0.9";
-            adsNotfi.style.transform = "translateY(135px)";
-
-            setTimeout(function () {
-                adsNotfi.style.transform = "translateY(-150%)";
-                adsNotfi.style.opacity = "0";
-            }, 2200);
-
-            setTimeout(function () {
-                adsNotfi.style.display = "none";
-                adsNotfi.style.transform = "";
-                adsNotfi.style.opacity = "";
-            }, 2600);
-
-            // قلل قيمة الـ progress اليومي بنفس منطقك (مثال)
-            dailyProgres--;
-            progres.textContent = dailyProgres;
-
-            // لو وصلت للحد اليومي أوقف الزر الأصلي (مثال بسيط)
-            if (dailyProgres <= 0) {
-                adsGramBtn.disabled = true;
-                adsGramBtn.textContent = 'Daily limit';
-            }
-
-        } catch (e) {
-            console.error('AdsGram flow failed:', e);
-            alert('An error occurred while showing the ad.');
-        } finally {
-            // أعد تفعيل الزر لو لم يتجاوز الحد
-            if (dailyProgres > 0) {
-                adsGramBtn.disabled = false;
-                adsGramBtn.textContent = 'Watch AdsGram Ad';
-            }
-        }
-    });
-}
+  } catch (e) {
+    console.error('AdsGram invocation failed:', e);
+    // فشل غير متوقع -> عد للسلوك القديم
+    startLocalAdSequence();
+  } finally {
+    adsBtn.disabled = false;
+  }
+});
 
 /* =======================
    شاشة التحميل عند الدخول
