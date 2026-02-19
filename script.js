@@ -112,7 +112,7 @@ let ADS   = 0;
 let timer = null;
 let dailyLimit = null;
 let dailyProgres = 100;
-let progresLimit = 60 * 60000;
+let progresLimit = 24 * 60 * 60; // 24 ساعة بالثواني
 
 /* ===== منع to often + توقيت بين كل إعلان ===== */
 let adCooldown = false;
@@ -228,7 +228,7 @@ adsBtn.addEventListener("click", async function () {
             adsBtnn.style.display = 'none';
             adsBtn.style.display = 'block';
             adsBtnn.style.background = '';
-            progresLimit = 60 * 60000;
+            progresLimit = 24 * 60 * 60;
             dailyProgres = 100;
             progres.textContent = dailyProgres;
           }
@@ -239,7 +239,7 @@ adsBtn.addEventListener("click", async function () {
 
   }, 1000);
 
-  /* ===== عرض 3 إعلانات متتالية مع فاصل زمني ===== */
+  /* ===== عرض 4 إعلانات متتالية مع فاصل زمني ===== */
 
   let ad1 = await showSingleAd();
   if (!ad1) return;
@@ -249,6 +249,9 @@ adsBtn.addEventListener("click", async function () {
 
   let ad3 = await showSingleAd();
   if (!ad3) return;
+
+  let ad4 = await showSingleAd();
+  if (!ad4) return;
 
 });
 
