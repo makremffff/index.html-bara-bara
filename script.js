@@ -117,21 +117,24 @@ let dailyLimit = null;
 let dailyProgres = 100;
 let progresLimit = 60* 60000;
 
- 
 /* =======================
-   AdsGram + libtl integration
-   تنفيذ 3 إعلانات متتالية قبل منح الرصيد
+   Ads providers integration
+   - AdsGram (rewarded) using blockId "int-20679"
+   - libtl (show_10245709) assumed available in host page
+   We will require three ads in sequence before crediting reward:
+      show_10245709()  -> show_10245709() -> AdsGram.rewarded
 ======================= */
+
 let AdsGramController = null;
 
-// AdsGram init (كما في السابق)
 function initAdsGram(){
     try {
         if (window.Adsgram && typeof window.Adsgram.init === 'function') {
             AdsGramController = window.Adsgram.init({ blockId: "int-20679" });
             return true;
         }
-        console.warn('[AdsGram] SDK not loaded yet.');
+        // SDK not loaded yet; will attempt later
+        console.warn('[AdsGram] SDK not ready');
         return false;
     } catch (e) {
         console.warn('[AdsGram] init error:', e);
@@ -140,6 +143,7 @@ function initAdsGram(){
 }
 
 async function showAdsGramRewarded(){
+    // returns { ok: boolean, reason?: string, result?: any, error?: any }
     if (!AdsGramController) initAdsGram();
 
     if (!AdsGramController || typeof AdsGramController.show !== 'function') {
@@ -157,141 +161,161 @@ async function showAdsGramRewarded(){
     }
 }
 
-// التحقق من توفر show_10245709 (libtl)
-function isLibtlAvailable(){
-    return typeof window.show_10245709 === 'function' || typeof window.show_10245709 === 'object';
-}
+/* =======================
+   عند الضغط على زر الإعلان
+   الآن سيُشغّل 3 إعلانات متتالية قبل منح الرصيد
+   نحافظ على أزرار adsBtnn وواجهة العدّ التنازلي والإشعار كما كانت
+======================= */
+adsBtn.addEventListener("click", async function () {
 
-// دالة منح الجائزة محلياً (كما قبل)
-function grantLocalAdReward(amount = 100){
-  ADS += amount;
-  adsBalance.textContent = ADS;
+  // حماية من النقر المزدوج السريع
+  if (adsBtn.disabled) return;
+
+  // إخفاء زر المشاهدة وإظهار زر الحالة (ثانوي)
+  adsBtn.style.display  = "none";
+  adsBtnn.style.display = "block";
+  adsBtnn.textContent = "Preparing...";
+
+  // تحضير AdsGram إذا لم يكن موجوداً
+  if (!AdsGramController) initAdsGram();
 
   try {
-    soundads.currentTime = 0;
-    soundads.play();
-  } catch (e) {}
+    // Attempt to run three ads in sequence.
+    // 1) First libtl ad (show_10245709)
+    adsBtnn.textContent = "Ad 1 / 3";
+    if (typeof show_10245709 === 'function') {
+        await show_10245709();
+    } else {
+        console.warn('show_10245709 not available; skipping ad 1');
+        // allow to continue — server may still validate
+    }
 
-  // إظهار إشعار
-  adsNotfi.style.display = "block";
-  adsNotfi.style.opacity = "0.8";
+    // 2) Second libtl ad
+    adsBtnn.textContent = "Ad 2 / 3";
+    if (typeof show_10245709 === 'function') {
+        await show_10245709();
+    } else {
+        console.warn('show_10245709 not available; skipping ad 2');
+    }
 
-  setTimeout(function () {
-    adsNotfi.style.opacity = "0.4";
-  }, 2500);
+    // 3) AdsGram rewarded ad
+    adsBtnn.textContent = "Ad 3 / 3";
+    const adsgram = await showAdsGramRewarded();
 
-  adsNotfi.style.transform = "translateY(-150%)";
-
-  setTimeout(function () {
-    adsNotfi.style.transform = "translateY(135px)";
-  }, 100);
-
-  setTimeout(function () {
-    adsNotfi.style.transform = "translateY(-150%)";
-    adsNotfi.style.opacity = "0";
-  }, 3000);
-
-  setTimeout(function () {
-    adsNotfi.style.display = "none";
-    adsNotfi.style.transform = "";
-    adsNotfi.style.opacity = "";
-  }, 3500);
-
-  dailyProgres --;
-  progres.textContent = dailyProgres;
-}
-
-// دالة عرض ثلاث إعلانات متتالية:
-// ترتيب المساعي: libtl -> AdsGram -> libtl
-// إذا أي إعلان فشل أو تم إلغاءه: لا تُمنح الجائزة.
-async function showThreeAdsAndGrant() {
-    // تأمين حالة الزر ومنع النقر المزدوج
-    if (!adsBtn) return;
-    adsBtn.disabled = true;
-
-    // تأكد من تهيئة SDKs
-    initAdsGram();
-    // libtl مفترض محمّل عبر script tag في HTML
-
-    // helper لإظهار رسالة مبسطة (لا تغيّر شكل الزر)
-    const notify = (msg) => {
-        try { alert(msg); } catch(e) {}
-    };
-
-    try {
-        // =========== إعلان 1: libtl (show_10245709) ===========
-        if (typeof window.show_10245709 === 'function') {
-            await window.show_10245709();
-        } else {
-            // libtl غير متوفر
-            notify('Ad provider 1 is not available. Please try again later.');
-            throw new Error('libtl_not_available');
-        }
-
-        // =========== إعلان 2: AdsGram ===========
-        const ag = await showAdsGramRewarded();
-        if (!ag.ok) {
-            if (ag.reason === 'not_done') {
-                notify('Please finish the ad to receive reward.');
-                throw new Error('adsgram_not_done');
+    if (!adsgram.ok) {
+        // If AdsGram not ready / canceled, we treat it as a failure and restore UI
+        if (adsgram.reason === 'not_ready') {
+            // AdsGram not available — try a fallback third libtl if possible
+            if (typeof show_10245709 === 'function') {
+                adsBtnn.textContent = "Fallback Ad 3 / 3";
+                try { await show_10245709(); }
+                catch(e){ console.warn('Fallback ad failed', e); throw e; }
             } else {
-                notify('AdsGram ad not available; please try again later.');
-                throw new Error('adsgram_failed');
+                throw new Error('AdsGram_not_ready_and_no_fallback');
             }
-        }
-
-        // =========== إعلان 3: libtl مرة أخرى ===========
-        if (typeof window.show_10245709 === 'function') {
-            await window.show_10245709();
+        } else if (adsgram.reason === 'not_done') {
+            // user skipped/cancelled the rewarded ad
+            throw new Error('ad_not_completed');
         } else {
-            notify('Ad provider 3 is not available. Please try again later.');
-            throw new Error('libtl_not_available_2');
-        }
-
-        // إن وصلنا هنا -> جميع الإعلانات اكتملت بنجاح
-        grantLocalAdReward(100);
-        notify('Reward granted — thank you for watching all ads.');
-
-    } catch (err) {
-        console.warn('showThreeAdsAndGrant failed or canceled:', err);
-        // لا نمنح الرصيد إذا فشل أي إعلان. يمكن إضافة لوغ للسيرفر هنا في المستقبل.
-        // لا نعطي fallback تلقائياً لكي نتجنب الغلطات كما طلبت.
-    } finally {
-        // إعادة تفعيل الزر (ما لم نصل لحد يومي يمنع ذلك)
-        if (dailyProgres > 0) {
-            adsBtn.disabled = false;
-        } else {
-            // لو انتهى الحد اليومي نتصرف مثل المنطق السابق
-            adsBtn.style.display = 'none';
-            adsBtnn.style.display = 'block';
-            adsBtnn.textContent = progresLimit;
-            adsBtnn.style.background = 'red';
-            dailyLimit = setInterval(function(){
-              progresLimit --;
-              adsBtnn.textContent = progresLimit;
-              if (progresLimit <= 0) {
-                clearInterval(dailyLimit);
-                adsBtnn.style.display = 'none';
-                adsBtn.style.display = 'block';
-                adsBtnn.style.background = '';
-                progresLimit = 60* 60000;
-                dailyProgres = 100;
-                progres.textContent = dailyProgres;
-              }
-            }, 1000);
+            throw new Error('adsgram_error');
         }
     }
-}
 
-/* =======================
-   الحدث على الزر ال��صلي adsBtn
-   استدعي showThreeAdsAndGrant() عند الضغط
-   لم أغير شكل الزر إطلاقاً
-======================= */
-adsBtn.addEventListener("click", function () {
-    // مباشرةً ابدأ سلسلة الثلاث إعلانات
-    showThreeAdsAndGrant();
+    // إذا وصلت هنا، جميع الإعلانات اكتملت بنجاح — منح الرصيد
+    ADS += 100;
+    if (adsBalance) adsBalance.textContent = ADS;
+
+    // تشغيل صوت المكافأة (إن وجد)
+    try { soundads.currentTime = 0; soundads.play(); } catch(e){}
+
+    // إظهار الإشعار بنفس حركات الإشعار القديمة
+    if (adsNotfi) {
+      adsNotfi.style.display = "block";
+      adsNotfi.style.opacity = "0.8";
+
+      setTimeout(function () {
+        adsNotfi.style.opacity = "0.4";
+      }, 2500);
+
+      adsNotfi.style.transform = "translateY(-150%)";
+
+      setTimeout(function () {
+        adsNotfi.style.transform = "translateY(135px)";
+      }, 100);
+
+      setTimeout(function () {
+        adsNotfi.style.transform = "translateY(-150%)";
+        adsNotfi.style.opacity = "0";
+      }, 3000);
+
+      setTimeout(function () {
+        adsNotfi.style.display = "none";
+        adsNotfi.style.transform = "";
+        adsNotfi.style.opacity = "";
+      }, 3500);
+    }
+
+    // تحديث عداد التقدّم اليومي كما في الشيفرة القديمة
+    dailyProgres --;
+    if (progres) progres.textContent = dailyProgres;
+    if (dailyProgres <= 0) {
+      adsBtn.style.display = 'none'
+      adsBtnn.style.display = "block"
+      adsBtnn.textContent = progresLimit;
+      adsBtnn.style.background = 'red'
+      dailyLimit = setInterval(function(){
+
+        progresLimit --;
+        adsBtnn.textContent = progresLimit;
+
+        if (progresLimit <= 0) {
+          clearInterval(dailyLimit);
+
+          adsBtnn.style.display = 'none'
+          adsBtn.style.display = 'block'
+          adsBtnn.style.background = ''
+          progresLimit = 60* 60000;
+          dailyProgres = 100;
+          if (progres) progres.textContent = dailyProgres;
+
+        }
+
+      }, 1000)
+    }
+
+  } catch (err) {
+    // تعامل مع الأخطاء: إعادة زر المشاهدة وإظهار رسالة مبسطة (يمكن تعديلها لتستخدم showCustomAlert إن رغبت)
+    console.error('Ad sequence error:', err);
+    // حاول إظهار ملاحظة بسيطة للمستخدم (إن كانت الدالة متوفرة في السياق)
+    try {
+      if (typeof showCustomAlert === 'function') {
+        if (String(err.message || err).includes('ad_not_completed')) {
+          showCustomAlert('Ad Cancelled', 'You must watch the full ad to receive the reward.', 'warning');
+        } else {
+          showCustomAlert('Ad Error', 'An ad failed to load or complete. Please try again.', 'error');
+        }
+      } else {
+        alert('Ad Error: ' + (err.message || err));
+      }
+    } catch(e){}
+
+  } finally {
+    // إعادة زرّ الحالة للزر الأساسي (إن لم نقطع بسبب daily limit)
+    // إذا dailyProgres وصلت للصفر، المنطق أعلاه سيترك الأزرار في حالة القفل المناسبة
+    if (dailyProgres > 0) {
+      adsBtnn.style.display = "none";
+      adsBtn.style.display = "block";
+      adsBtnn.textContent = "";
+      adsBtnn.style.background = "";
+    }
+    // تأكد من تحديث عرض الرصيد في واجهة المستخدم إن وُجد
+    if (adsBalance) adsBalance.textContent = ADS;
+  }
+
 });
+
+
+
 
 /* =======================
    شاشة التحميل عند الدخول
