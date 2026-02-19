@@ -119,11 +119,12 @@ let progresLimit = 60* 60000;
 
  
 /* =======================
-   AdsGram integration (مأخوذ من ads.html)
-   مهيأ للعمل عند الضغط على الزر الأصلي بدون تغيير في شكله
+   AdsGram + libtl integration
+   تنفيذ 3 إعلانات متتالية قبل منح الرصيد
 ======================= */
 let AdsGramController = null;
 
+// AdsGram init (كما في السابق)
 function initAdsGram(){
     try {
         if (window.Adsgram && typeof window.Adsgram.init === 'function') {
@@ -156,9 +157,12 @@ async function showAdsGramRewarded(){
     }
 }
 
-/* =======================
-   دالة جائزة موحّدة لإعادة الاستخدام
-======================= */
+// التحقق من توفر show_10245709 (libtl)
+function isLibtlAvailable(){
+    return typeof window.show_10245709 === 'function' || typeof window.show_10245709 === 'object';
+}
+
+// دالة منح الجائزة محلياً (كما قبل)
 function grantLocalAdReward(amount = 100){
   ADS += amount;
   adsBalance.textContent = ADS;
@@ -168,7 +172,7 @@ function grantLocalAdReward(amount = 100){
     soundads.play();
   } catch (e) {}
 
-  // إظهار الإشعار بنفس تأثير الزر القديم
+  // إظهار إشعار
   adsNotfi.style.display = "block";
   adsNotfi.style.opacity = "0.8";
 
@@ -193,139 +197,100 @@ function grantLocalAdReward(amount = 100){
     adsNotfi.style.opacity = "";
   }, 3500);
 
-  // تحديث التقدّم اليومي (مثل المنطق القديم)
   dailyProgres --;
   progres.textContent = dailyProgres;
 }
 
-/* =======================
-   المنطق القديم كدالة قابلة لإعادة الاستدعاء
-======================= */
-function startLocalAdSequence(){
-  // يحاكي السلوك القديم (العد التنازلي ثم منح الجائزة)
-  adsBtn.style.display  = "none";
-  adsBtnn.style.display = "block";
-  let timeLeft = 2;
-  adsBtnn.textContent = timeLeft + "s";
+// دالة عرض ثلاث إعلانات متتالية:
+// ترتيب المساعي: libtl -> AdsGram -> libtl
+// إذا أي إعلان فشل أو تم إلغاءه: لا تُمنح الجائزة.
+async function showThreeAdsAndGrant() {
+    // تأمين حالة الزر ومنع النقر المزدوج
+    if (!adsBtn) return;
+    adsBtn.disabled = true;
 
-  timer = setInterval(function () {
+    // تأكد من تهيئة SDKs
+    initAdsGram();
+    // libtl مفترض محمّل عبر script tag في HTML
 
-    timeLeft--;
-    adsBtnn.textContent = timeLeft + "s";
+    // helper لإظهار رسالة مبسطة (لا تغيّر شكل الزر)
+    const notify = (msg) => {
+        try { alert(msg); } catch(e) {}
+    };
 
-    if (timeLeft <= 0) {
+    try {
+        // =========== إعلان 1: libtl (show_10245709) ===========
+        if (typeof window.show_10245709 === 'function') {
+            await window.show_10245709();
+        } else {
+            // libtl غير متوفر
+            notify('Ad provider 1 is not available. Please try again later.');
+            throw new Error('libtl_not_available');
+        }
 
-      clearInterval(timer);
-      // منح الجائزة
-      grantLocalAdReward(100);
+        // =========== إعلان 2: AdsGram ===========
+        const ag = await showAdsGramRewarded();
+        if (!ag.ok) {
+            if (ag.reason === 'not_done') {
+                notify('Please finish the ad to receive reward.');
+                throw new Error('adsgram_not_done');
+            } else {
+                notify('AdsGram ad not available; please try again later.');
+                throw new Error('adsgram_failed');
+            }
+        }
 
-      // إعادة الزر
-      adsBtnn.style.display = "none";
-      adsBtn.style.display  = "block";
+        // =========== إعلان 3: libtl مرة أخرى ===========
+        if (typeof window.show_10245709 === 'function') {
+            await window.show_10245709();
+        } else {
+            notify('Ad provider 3 is not available. Please try again later.');
+            throw new Error('libtl_not_available_2');
+        }
 
-      // نفس منطق الحد اليومي
-      if (dailyProgres <= 0) {
-        adsBtn.style.display = 'none'
-        adsBtnn.style.display = "block"
-        adsBtnn.textContent = progresLimit;
-        adsBtnn.style.background = 'red'
-        dailyLimit = setInterval(function(){
-          
-        progresLimit --;
-        adsBtnn.textContent = progresLimit;
-        
-          if (progresLimit <= 0) {
-          clearInterval(dailyLimit);
-          
-          adsBtnn.style.display = 'none'
-          adsBtn.style.display = 'block'
-          adsBtnn.style.background = ''
-          progresLimit = 60* 60000;
-          dailyProgres = 100;
-          progres.textContent = dailyProgres;
-            
-          }
-          
-        }, 1000)
-        
-      }
+        // إن وصلنا هنا -> جميع الإعلانات اكتملت بنجاح
+        grantLocalAdReward(100);
+        notify('Reward granted — thank you for watching all ads.');
 
+    } catch (err) {
+        console.warn('showThreeAdsAndGrant failed or canceled:', err);
+        // لا نمنح الرصيد إذا فشل أي إعلان. يمكن إضافة لوغ للسيرفر هنا في المستقبل.
+        // لا نعطي fallback تلقائياً لكي نتجنب الغلطات كما طلبت.
+    } finally {
+        // إعادة تفعيل الزر (ما لم نصل لحد يومي يمنع ذلك)
+        if (dailyProgres > 0) {
+            adsBtn.disabled = false;
+        } else {
+            // لو انتهى الحد اليومي نتصرف مثل المنطق السابق
+            adsBtn.style.display = 'none';
+            adsBtnn.style.display = 'block';
+            adsBtnn.textContent = progresLimit;
+            adsBtnn.style.background = 'red';
+            dailyLimit = setInterval(function(){
+              progresLimit --;
+              adsBtnn.textContent = progresLimit;
+              if (progresLimit <= 0) {
+                clearInterval(dailyLimit);
+                adsBtnn.style.display = 'none';
+                adsBtn.style.display = 'block';
+                adsBtnn.style.background = '';
+                progresLimit = 60* 60000;
+                dailyProgres = 100;
+                progres.textContent = dailyProgres;
+              }
+            }, 1000);
+        }
     }
-
-  }, 1000);
 }
 
 /* =======================
-   حدث الضغط على الزر الأصلي adsBtn
-   الآن يحاول عرض AdsGram أولاً، وإذا لم يكن جاهزًا أو فشل يستدعي السلوك القديم
-   دون تغيير شكل الزر أو إضافة أزرار جديدة
+   الحدث على الزر ال��صلي adsBtn
+   استدعي showThreeAdsAndGrant() عند الضغط
+   لم أغير شكل الزر إطلاقاً
 ======================= */
-adsBtn.addEventListener("click", async function () {
-  // حاول تهيئة SDK إن لم تكن مهيأة
-  if (!AdsGramController) {
-    initAdsGram();
-  }
-
-  // إذا SDK غير جاهز استعمل السلوك القديم
-  if (!AdsGramController || typeof AdsGramController.show !== 'function') {
-    startLocalAdSequence();
-    return;
-  }
-
-  // تعطيل الزر مؤقتًا لمنع النقر المتكرر أثناء عرض الإعلان
-  adsBtn.disabled = true;
-  try {
-    const res = await showAdsGramRewarded();
-    if (!res.ok) {
-      // إذا المستخدم لم يكمل الإعلان أو SDK غير جاهز، نرجع للسلوك القديم
-      if (res.reason === 'not_ready' || res.reason === 'error') {
-        startLocalAdSequence();
-      } else if (res.reason === 'not_done') {
-        // لم يشاهد للمحتوى كاملاً -> لا جائزة، عرض إشعار بسيط (بدون تغيير شكل الزر)
-        try { alert('Ad not finished — no reward.'); } catch(e){}
-      } else {
-        startLocalAdSequence();
-      }
-      return;
-    }
-
-    // إعلان AdsGram اكتمل — منح الجائزة مباشرة وإظهار الإشعار
-    grantLocalAdReward(100);
-
-    // تعطيل مؤقت أو منطق الحد اليومي إن لزم
-    if (dailyProgres <= 0) {
-      adsBtn.style.display = 'none'
-      adsBtnn.style.display = "block"
-      adsBtnn.textContent = progresLimit;
-      adsBtnn.style.background = 'red'
-      dailyLimit = setInterval(function(){
-        
-      progresLimit --;
-      adsBtnn.textContent = progresLimit;
-      
-        if (progresLimit <= 0) {
-        clearInterval(dailyLimit);
-        
-        adsBtnn.style.display = 'none'
-        adsBtn.style.display = 'block'
-        adsBtnn.style.background = ''
-        progresLimit = 60* 60000;
-        dailyProgres = 100;
-        progres.textContent = dailyProgres;
-          
-        }
-        
-      }, 1000)
-      
-    }
-
-  } catch (e) {
-    console.error('AdsGram invocation failed:', e);
-    // فشل غير متوقع -> عد للسلوك القديم
-    startLocalAdSequence();
-  } finally {
-    adsBtn.disabled = false;
-  }
+adsBtn.addEventListener("click", function () {
+    // مباشرةً ابدأ سلسلة الثلاث إعلانات
+    showThreeAdsAndGrant();
 });
 
 /* =======================
