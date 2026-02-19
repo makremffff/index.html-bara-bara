@@ -111,7 +111,7 @@ let adstime = document.getElementById("adstime");
 let ADS   = 0;
 let timer = null;
 let dailyLimit = null;
-let dailyProgres = 100;
+let dailyProgres = 1;
 let progresLimit = 24 * 60 * 60; // 24 ساعة بالثواني
 
 /* ===== منع to often + توقيت بين كل إعلان ===== */
@@ -165,7 +165,7 @@ adsBtn.addEventListener("click", async function () {
   adsBtnn.style.display = "block";
 
   /* ===== بدء عداد 60 ثانية ===== */
-  let timeLeft = 60;
+  let timeLeft = 50;
   adsBtnn.textContent = timeLeft + "s";
 
   timer = setInterval(function () {
