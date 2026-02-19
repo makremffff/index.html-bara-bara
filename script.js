@@ -4,7 +4,7 @@
 let btnMain   = document.querySelector("button");
 let btnTask   = document.getElementById("btn2");
 let btnWallet = document.getElementById("btn3");
- let btnshare = document.getElementById("sharebtn")
+let btnshare = document.getElementById("sharebtn")
 let bntaddTask = document.getElementById("addtask")
 
 /* =======================
@@ -42,32 +42,30 @@ let soundads  = document.getElementById("soundads");
 function showPage(btnpage) {
 
   // إخفاء جميع الصفحات
-  mainPage.style.display    = "none";
-  taskPage.style.display    = "none";
-  walletPage.style.display  = "none";
-  sharePage.style.display = 'none'
+  if (mainPage) mainPage.style.display    = "none";
+  if (taskPage) taskPage.style.display    = "none";
+  if (walletPage) walletPage.style.display  = "none";
+  if (sharePage) sharePage.style.display = 'none'
  
-addTaskpage.style.display = 'none'
+  if (addTaskpage) addTaskpage.style.display = 'none'
   // إظهار الصفحة المطلوبة
-  btnpage.style.display = "block";
+  if (btnpage) btnpage.style.display = "block";
 
-  // إظهار شاشة التحميل
-  loadpage.style.display = "block";
-  pagename.textContent = "Loading";
-  barbtn.style.display = 'none'
+  // ��ظهار شاشة التحميل
+  if (loadpage) loadpage.style.display = "block";
+  if (pagename) pagename.textContent = "Loading";
+  if (barbtn) barbtn.style.display = 'none'
   setTimeout(function(){
-    barbtn.style.display = 'block'
+    if (barbtn) barbtn.style.display = 'block'
   }, 2000)
   
 
   // تشغيل صوت التنقّل
-  soundbtn.currentTime = 0;
-  soundbtn.play();
+  try { if (soundbtn) { soundbtn.currentTime = 0; soundbtn.play(); } } catch(e){}
 
-  // إخفاء شاشة التحميل بعد 4 ثواني
+  // إخفاء شاشة التحميل بعد 2 ثواني
   setTimeout(function () {
-    loadpage.style.display = "none";
-  
+    if (loadpage) loadpage.style.display = "none";
   }, 2000);
   
 }
@@ -76,30 +74,30 @@ addTaskpage.style.display = 'none'
 /* =======================
    ربط الأزرار بالصفحات
 ======================= */
-btnMain.addEventListener("click", function () {
+if (btnMain) btnMain.addEventListener("click", function () {
   showPage(mainPage);
- 
 });
 
-btnTask.addEventListener("click", function () {
+if (btnTask) btnTask.addEventListener("click", function () {
   showPage(taskPage);
 });
 
-btnWallet.addEventListener("click", function () {
+if (btnWallet) btnWallet.addEventListener("click", function () {
   showPage(walletPage);
   
     
-    walletbalance.innerHTML = `
-  <img src="coins.png" style="width:20px; vertical-align:middle;">
- ${ADS}
-`;
-
+    if (walletbalance) walletbalance.innerHTML = `
+      <img src="coins.png" style="width:20px; vertical-align:middle;">
+      ${ADS}
+    `;
+    
 });
-btnshare.addEventListener("click",function(){showPage(sharePage)
+
+if (btnshare) btnshare.addEventListener("click",function(){showPage(sharePage)
   
 });
 
-bntaddTask.addEventListener('click',function(){showPage(addTaskpage)})
+if (bntaddTask) bntaddTask.addEventListener('click',function(){showPage(addTaskpage)})
 
 /* =======================
    أزرار الإعلانات + الرصيد
@@ -118,13 +116,19 @@ let dailyProgres = 100;
 let progresLimit = 60* 60000;
 
 /* =======================
-   Ads providers integration
-   - AdsGram (rewarded) using blockId "int-20679"
-   - libtl (show_10245709) assumed available in host page
-   We will require three ads in sequence before crediting reward.
+   نظام إعلانات ثلاثي + كولداون
+   - يشغّل ثلاثة إعلانات متتالية قبل منح الرصيد
+   - يفعّل adsBtnn مع timeLeft فور الضغط (كولداون)
+   - يمنع ظهور تحذيرات/رسائل أثناء تشغيل السلسلة ثم يعرض رسالة نهائية بعد انتهائها
+   - يستخدم libtl (show_10245709) إن كانت متوفرة و AdsGram مع نفس blockId "int-20679"
 ======================= */
 
 let AdsGramController = null;
+let adSequenceRunning = false;
+let suppressAdAlerts = false; // لمنع عرض التنبيهات أثناء السلسلة
+const ADS_COOLDOWN_SECONDS = 60; // مدة الكولداون بالثواني (يمكن تعديلها)
+let adsCooldownInterval = null;
+let adsCooldownRemaining = 0;
 
 function initAdsGram(){
     try {
@@ -158,23 +162,23 @@ async function showAdsGramRewarded(){
     }
 }
 
-/* =======================
-   New flow per request:
-   - When user clicks adsBtn:
-     * Immediately switch to adsBtnn and start a cooldown timer (timeLeft).
-     * Run three ads in sequence (best-effort).
-     * If all ads complete -> credit reward (ADS += 100).
-     * If any ad is cancelled/failed -> show appropriate toast/alert but cooldown still applies.
-   - adsBtnn shows remaining seconds until next allowed watch.
-======================= */
-
-const ADS_COOLDOWN_SECONDS = 60; // time before user can watch again
-let adsCooldownInterval = null;
-let adsCooldownRemaining = 0;
-let adSequenceRunning = false;
+async function playLibtlAdSafe() {
+  // wrapper لنداء show_10245709 إن كانت متاحة
+  if (typeof show_10245709 === 'function') {
+    try {
+      await show_10245709();
+      return { ok: true };
+    } catch (e) {
+      console.warn('libtl ad error:', e);
+      return { ok: false, error: e };
+    }
+  } else {
+    console.warn('libtl show_10245709 not available');
+    return { ok: false, error: 'not_available' };
+  }
+}
 
 function startAdsCooldown(seconds) {
-  // clear previous
   if (adsCooldownInterval) {
     clearInterval(adsCooldownInterval);
     adsCooldownInterval = null;
@@ -199,6 +203,7 @@ function startAdsCooldown(seconds) {
         adsBtnn.style.display = 'none';
         adsBtnn.textContent = "";
         adsBtnn.disabled = false;
+        adsBtnn.style.background = "";
       }
       if (adsBtn) {
         adsBtn.style.display = 'block';
@@ -208,191 +213,187 @@ function startAdsCooldown(seconds) {
   }, 1000);
 }
 
-async function playLibtlAdSafe() {
-  // wrapper to call show_10245709 if available, returns true if finished, false if error/cancel
-  if (typeof show_10245709 === 'function') {
-    try {
-      await show_10245709();
-      return { ok: true };
-    } catch (e) {
-      console.warn('libtl ad error:', e);
-      return { ok: false, error: e };
+// override عرض التنبيهات العالمية أثناء السلسلة (إن وجدت)
+if (typeof window.showCustomAlert === 'function') {
+  const _origAlert = window.showCustomAlert;
+  window.showCustomAlert = function(title, msg, type) {
+    if (suppressAdAlerts) {
+      // تجاهل مؤقت للرسائل أثناء إتمام سلسلة الإعلانات
+      console.log('Alert suppressed during ad sequence:', title);
+      return;
     }
-  } else {
-    console.warn('libtl show_10245709 not available');
-    return { ok: false, error: 'not_available' };
-  }
+    return _origAlert(title, msg, type);
+  };
 }
 
-adsBtn.addEventListener("click", async function () {
-  // prevent re-entry
-  if (adSequenceRunning) return;
+if (adsBtn) {
+  adsBtn.addEventListener("click", async function () {
+    if (adSequenceRunning) return;
 
-  adSequenceRunning = true;
+    adSequenceRunning = true;
+    suppressAdAlerts = true;
 
-  // start immediate cooldown UI
-  startAdsCooldown(ADS_COOLDOWN_SECONDS);
+    // ابدأ الكولداون فوراً
+    startAdsCooldown(ADS_COOLDOWN_SECONDS);
 
-  // ensure AdsGram initialized
-  if (!AdsGramController) initAdsGram();
+    // تأكد من تهيئة AdsGram
+    if (!AdsGramController) initAdsGram();
 
-  let allAdsCompleted = true;
-  let adErrors = [];
+    const adResults = []; // نجمع نتائج كل إعلان { idx, ok, info?, error? }
 
-  try {
-    // Ad 1 (libtl)
     try {
-      if (typeof show_10245709 === 'function') {
-        // show and await
-        await show_10245709();
-      } else {
-        // fallback: try AdsGram if libtl missing
-        const a = await showAdsGramRewarded();
-        if (!a.ok) throw new Error('ad1_failed');
-      }
-    } catch (e) {
-      allAdsCompleted = false;
-      adErrors.push({ idx: 1, err: e });
-      console.warn('Ad 1 failed or cancelled:', e);
-    }
-
-    // Ad 2 (libtl)
-    try {
-      if (typeof show_10245709 === 'function') {
-        await show_10245709();
-      } else {
-        const a = await showAdsGramRewarded();
-        if (!a.ok) throw new Error('ad2_failed');
-      }
-    } catch (e) {
-      allAdsCompleted = false;
-      adErrors.push({ idx: 2, err: e });
-      console.warn('Ad 2 failed or cancelled:', e);
-    }
-
-    // Ad 3 (prefer AdsGram rewarded for final reward)
-    try {
-      // Prefer AdsGram for last ad; fallback to libtl
-      let result = await showAdsGramRewarded();
-      if (!result.ok) {
-        // fallback to libtl if available
-        if (typeof show_10245709 === 'function') {
-          try {
-            await show_10245709();
-            result = { ok: true };
-          } catch (ee) {
-            result = { ok: false, error: ee };
-          }
-        }
-      }
-
-      if (!result.ok) {
-        throw result.error || new Error('ad3_failed');
-      }
-    } catch (e) {
-      allAdsCompleted = false;
-      adErrors.push({ idx: 3, err: e });
-      console.warn('Ad 3 failed or cancelled:', e);
-    }
-
-    // After attempts: if at least the ads sequence fully completed -> give reward
-    if (allAdsCompleted) {
-      ADS += 100;
-      if (adsBalance) adsBalance.textContent = ADS;
-
-      // play success sound
-      try { soundads.currentTime = 0; soundads.play(); } catch(e){}
-
-      // show notification (reuse existing UI if available)
-      if (adsNotfi) {
-        adsNotfi.style.display = "block";
-        adsNotfi.style.opacity = "0.8";
-        setTimeout(function () {
-          adsNotfi.style.opacity = "0.4";
-        }, 2500);
-        adsNotfi.style.transform = "translateY(-150%)";
-        setTimeout(function () {
-          adsNotfi.style.transform = "translateY(135px)";
-        }, 100);
-        setTimeout(function () {
-          adsNotfi.style.transform = "translateY(-150%)";
-          adsNotfi.style.opacity = "0";
-        }, 3000);
-        setTimeout(function () {
-          adsNotfi.style.display = "none";
-          adsNotfi.style.transform = "";
-          adsNotfi.style.opacity = "";
-        }, 3500);
-      }
-
-      // decrement daily progress and check limits (preserve original logic)
-      dailyProgres --;
-      if (progres) progres.textContent = dailyProgres;
-      if (dailyProgres <= 0) {
-        // lock ads similarly to original logic
-        if (adsBtn) adsBtn.style.display = 'none';
-        if (adsBtnn) {
-          adsBtnn.style.display = "block";
-          adsBtnn.textContent = progresLimit;
-          adsBtnn.style.background = 'red';
-        }
-        dailyLimit = setInterval(function(){
-          progresLimit --;
-          if (adsBtnn) adsBtnn.textContent = progresLimit;
-          if (progresLimit <= 0) {
-            clearInterval(dailyLimit);
-            if (adsBtnn) adsBtnn.style.display = 'none';
-            if (adsBtn) adsBtn.style.display = 'block';
-            if (adsBtnn) adsBtnn.style.background = '';
-            progresLimit = 60* 60000;
-            dailyProgres = 100;
-            if (progres) progres.textContent = dailyProgres;
-          }
-        }, 1000);
-      }
-
-    } else {
-      // Some ad(s) failed or were skipped: inform user (still keep cooldown)
+      // Ad 1
+      if (adsBtnn) adsBtnn.textContent = "Ad 1 / 3";
       try {
-        if (typeof showCustomAlert === 'function') {
-          // If one of errors was because user canceled (common), show friendly message
-          const wasCancelled = adErrors.some(e => String(e.err).toLowerCase().includes('cancel') || String(e.err).toLowerCase().includes('not_done'));
-          if (wasCancelled) {
-            showCustomAlert('Ad Cancelled', 'You must watch each ad fully to receive the reward. Try again after the cooldown.', 'warning');
-          } else {
-            showCustomAlert('Ad Error', 'One or more ads failed to complete. Try again after the cooldown.', 'error');
-          }
-        } else {
-          alert('Ad sequence incomplete. See console for details.');
-        }
-      } catch(e){}
-    }
+        const r1 = await playLibtlAdSafe();
+        adResults.push({ idx: 1, ok: !!r1.ok, info: r1 });
+      } catch (e) {
+        adResults.push({ idx: 1, ok: false, error: e });
+      }
 
-  } catch (outerErr) {
-    console.error('Unexpected error in ad sequence:', outerErr);
-    try { if (typeof showCustomAlert === 'function') showCustomAlert('Ad Error', 'Unexpected error. Please try again later.', 'error'); } catch(e){}
-  } finally {
-    adSequenceRunning = false;
-    // do not cancel cooldown — per request cooldown remains enforced by adsBtnn/timeLeft
-    // ensure UI shows updated balance
-    if (adsBalance) adsBalance.textContent = ADS;
-  }
-});
+      // Ad 2
+      if (adsBtnn) adsBtnn.textContent = "Ad 2 / 3";
+      try {
+        const r2 = await playLibtlAdSafe();
+        adResults.push({ idx: 2, ok: !!r2.ok, info: r2 });
+      } catch (e) {
+        adResults.push({ idx: 2, ok: false, error: e });
+      }
+
+      // Ad 3 (prefer AdsGram ثم fallback إلى libtl)
+      if (adsBtnn) adsBtnn.textContent = "Ad 3 / 3";
+      try {
+        let r3 = await showAdsGramRewarded();
+        if (!r3.ok && typeof show_10245709 === 'function') {
+          const fallback = await playLibtlAdSafe();
+          r3 = fallback;
+        }
+        adResults.push({ idx: 3, ok: !!r3.ok, info: r3 });
+      } catch (e) {
+        adResults.push({ idx: 3, ok: false, error: e });
+      }
+
+      // قرّر النتيجة النهائية بعد انتهاء الثلاثة إعلانات
+      const allCompleted = adResults.every(ar => ar.ok === true);
+
+      suppressAdAlerts = false; // الآن نعرض الرسالة النهائية
+
+      if (allCompleted) {
+        // منح الرصيد
+        ADS += 100;
+        if (adsBalance) adsBalance.textContent = ADS;
+
+        // تشغيل صوت المكافأة
+        try { if (soundads) { soundads.currentTime = 0; soundads.play(); } } catch(e){}
+
+        // إظهار إشعار بصري (حافظت على نفس الحركة)
+        if (adsNotfi) {
+          adsNotfi.style.display = "block";
+          adsNotfi.style.opacity = "0.8";
+
+          setTimeout(function () {
+            adsNotfi.style.opacity = "0.4";
+          }, 2500);
+
+          adsNotfi.style.transform = "translateY(-150%)";
+
+          setTimeout(function () {
+            adsNotfi.style.transform = "translateY(135px)";
+          }, 100);
+
+          setTimeout(function () {
+            adsNotfi.style.transform = "translateY(-150%)";
+            adsNotfi.style.opacity = "0";
+          }, 3000);
+
+          setTimeout(function () {
+            adsNotfi.style.display = "none";
+            adsNotfi.style.transform = "";
+            adsNotfi.style.opacity = "";
+          }, 3500);
+        }
+
+        // تحديث dailyProgres كما في المنطق القديم
+        dailyProgres--;
+        if (progres) progres.textContent = dailyProgres;
+        if (dailyProgres <= 0) {
+          if (adsBtn) adsBtn.style.display = 'none';
+          if (adsBtnn) {
+            adsBtnn.style.display = "block";
+            adsBtnn.textContent = progresLimit;
+            adsBtnn.style.background = 'red';
+          }
+          dailyLimit = setInterval(function(){
+            progresLimit--;
+            if (adsBtnn) adsBtnn.textContent = progresLimit;
+            if (progresLimit <= 0) {
+              clearInterval(dailyLimit);
+
+              if (adsBtnn) adsBtnn.style.display = 'none';
+              if (adsBtn) adsBtn.style.display = 'block';
+              if (adsBtnn) adsBtnn.style.background = ''
+              progresLimit = 60* 60000;
+              dailyProgres = 100;
+              if (progres) progres.textContent = dailyProgres;
+            }
+          }, 1000)
+        }
+
+        // رسالة نجاح موحدة
+        try {
+          if (typeof showCustomAlert === 'function') showCustomAlert('Reward Granted!', 'You received 100 SHIB for watching the ads.', 'success');
+          else alert('You received 100 SHIB for watching the ads.');
+        } catch (e) { /* ignore */ }
+
+      } else {
+        // فشل أو إلغاء: عرض رسالة موحدة
+        let wasCancelled = adResults.some(r => {
+          const reason = (r.info && r.info.reason) ? String(r.info.reason).toLowerCase() : '';
+          const err = String(r.error || '');
+          return reason.includes('not_done') || err.toLowerCase().includes('cancel') || err.toLowerCase().includes('not_done');
+        });
+
+        try {
+          if (typeof showCustomAlert === 'function') {
+            if (wasCancelled) {
+              showCustomAlert('Ad Cancelled', 'You must watch each ad fully to receive the reward. Try again after the cooldown.', 'warning');
+            } else {
+              showCustomAlert('Ad Error', 'One or more ads failed to complete. Try again after the cooldown.', 'error');
+            }
+          } else {
+            alert(wasCancelled ? 'Ad Cancelled: watch full ads to get reward.' : 'Ad Error: some ads failed.');
+          }
+        } catch (e) {}
+      }
+
+    } catch (outerErr) {
+      suppressAdAlerts = false;
+      console.error('Unexpected ad-sequence error', outerErr);
+      try { if (typeof showCustomAlert === 'function') showCustomAlert('Ad Error', 'Unexpected error occurred. Please try again after the cooldown.', 'error'); } catch(e){}
+    } finally {
+      adSequenceRunning = false;
+      suppressAdAlerts = false;
+      // تأكد من تحديث عرض الرصيد
+      if (adsBalance) adsBalance.textContent = ADS;
+      // ملاحظة: الكولداون يبقى مفعلًا حتى ينتهي الوقت
+    }
+  });
+}
 
 /* =======================
    شاشة التحميل عند الدخول
 ======================= */
-loadpage.style.display = "block";
-pagename.style.display = "none";
+if (loadpage) loadpage.style.display = "block";
+if (pagename) pagename.style.display = "none";
 
 setTimeout(function () {
-  loadpage.style.display = "none";
-  loadpage.style.background = "black";
-  pagename.style.display = "block";
+  if (loadpage) loadpage.style.display = "none";
+  if (loadpage) loadpage.style.background = "black";
+  if (pagename) pagename.style.display = "block";
 }, 8000);
 
 let menubtn = document.querySelector(".menub")
-if(menubtn){
+if (menubtn) {
   menubtn.style.display = 'none'
   setTimeout(function(){
    menubtn.style.display = 'block'
@@ -404,7 +405,7 @@ if(menubtn){
 //نسخ رابط احاله//
 let copyrefal = document.getElementById("copy");
 let link = document.getElementById("link");
-let refaltext = link ? document.getElementById("link").textContent : '';
+let refaltext = link ? link.textContent : '';
 let copyImge = document.getElementById("copyImg")
 let copynotifi = document.querySelector(".copynotifi")
 
@@ -454,15 +455,3 @@ if (creatTask) {
 
   });
 }
-
-/* =======================
-   باقي منطق الصفحة (لم يتغير)
-   ... (لا تتغير بقية وظائف التطبيق في هذا الملف)
-   — يمكنك إبقاء بقية الكود كما كان سابقًا (إظهار الصفحات، إدارة المهام، المسابقة، السحب ... الخ).
-   — للتبسيط عرضت هنا التعديلات المهمة فقط المتعلّقة بزر الإعلانات والـ cooldown.
-======================= */
-
-/* ملاحظة:
-   إذا أردت أن أدمج التعديل مباشرة داخل سكربت كامل موجود لديك (بما فيه كل الدوال والوظائف الأخرى من ملفات سابقة)
-   أرسل لي الملف الكامل الحالي وسأدرج التعديلات بدقة في مواضعها.
-*/
