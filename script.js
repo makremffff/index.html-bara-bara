@@ -222,11 +222,11 @@ adsBtn.addEventListener("click", async function () {
 
   // الإعلان الأول
   showSingleAd();
-  await delay(7000);
+  await delay(2000);
 
   // الإعلان الثاني
   showSingleAd();
-  await delay(7000);
+  await delay(2000);
 
   // الإعلان الثالث
   showSingleAd();
