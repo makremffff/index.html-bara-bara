@@ -114,17 +114,40 @@ let dailyLimit = null;
 let dailyProgres = 100;
 let progresLimit = 60 * 60000;
 
+/* ===== منع to often + توقيت بين كل إعلان ===== */
+let adCooldown = false;
+let adCooldownTime = 15000; // 15 ثانية بين كل إعلان
+
 /* =======================
-   دالة عرض إعلان واحد
+   دالة عرض إعلان واحد مع انتظار
 ======================= */
 function showSingleAd() {
   return new Promise((resolve) => {
+
+    if (adCooldown) {
+      resolve(false);
+      return;
+    }
+
+    adCooldown = true;
+
     if (AdsGramController && typeof AdsGramController.show === "function") {
       AdsGramController.show()
-        .then(() => resolve(true))
-        .catch(() => resolve(false));
+        .then(() => {
+          setTimeout(function(){
+            adCooldown = false;
+            resolve(true);
+          }, adCooldownTime);
+        })
+        .catch(() => {
+          adCooldown = false;
+          resolve(false);
+        });
     } else {
       setTimeout(function(){
+        setTimeout(function(){
+          adCooldown = false;
+        }, adCooldownTime);
         resolve(true);
       }, 2000);
     }
@@ -135,6 +158,8 @@ function showSingleAd() {
    عند الضغط على زر الإعلان
 ======================= */
 adsBtn.addEventListener("click", async function () {
+
+  if (adCooldown) return;
 
   adsBtn.style.display  = "none";
   adsBtnn.style.display = "block";
@@ -214,7 +239,7 @@ adsBtn.addEventListener("click", async function () {
 
   }, 1000);
 
-  /* ===== عرض 3 إعلانات متتالية فور انتهاء كل واحد ===== */
+  /* ===== عرض 3 إعلانات متتالية مع فاصل زمني ===== */
 
   let ad1 = await showSingleAd();
   if (!ad1) return;
