@@ -116,7 +116,7 @@ let progresLimit = 60 * 60000;
 
 /* ===== منع to often + توقيت بين كل إعلان ===== */
 let adCooldown = false;
-let adCooldownTime = 3000; // 15 ثانية بين كل إعلان
+let adCooldownTime = 6000; // 15 ثانية بين كل إعلان
 
 /* =======================
    دالة عرض إعلان واحد مع انتظار
