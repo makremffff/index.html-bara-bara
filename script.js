@@ -115,21 +115,17 @@ let dailyProgres = 100;
 let progresLimit = 60 * 60000;
 
 /* =======================
-   دوال مساعدة
+   دالة عرض إعلان واحد
 ======================= */
-function delay(ms){
-  return new Promise(res => setTimeout(res, ms));
-}
-
 function showSingleAd() {
   return new Promise((resolve) => {
     if (AdsGramController && typeof AdsGramController.show === "function") {
       AdsGramController.show()
-        .then(() => resolve())
-        .catch(() => resolve());
+        .then(() => resolve(true))
+        .catch(() => resolve(false));
     } else {
       setTimeout(function(){
-        resolve();
+        resolve(true);
       }, 2000);
     }
   });
@@ -143,7 +139,7 @@ adsBtn.addEventListener("click", async function () {
   adsBtn.style.display  = "none";
   adsBtnn.style.display = "block";
 
-  /* ===== بدء عداد 60 ثانية مباشرة ===== */
+  /* ===== بدء عداد 60 ثانية ===== */
   let timeLeft = 60;
   adsBtnn.textContent = timeLeft + "s";
 
@@ -218,18 +214,16 @@ adsBtn.addEventListener("click", async function () {
 
   }, 1000);
 
-  /* ===== عرض 3 إعلانات مع فاصل 7 ثواني يبدأ فور تشغيل كل إعلان ===== */
+  /* ===== عرض 3 إعلانات متتالية فور انتهاء كل واحد ===== */
 
-  // الإعلان الأول
-  showSingleAd();
-  await delay(2000);
+  let ad1 = await showSingleAd();
+  if (!ad1) return;
 
-  // الإعلان الثاني
-  showSingleAd();
-  await delay(2000);
+  let ad2 = await showSingleAd();
+  if (!ad2) return;
 
-  // الإعلان الثالث
-  showSingleAd();
+  let ad3 = await showSingleAd();
+  if (!ad3) return;
 
 });
 
