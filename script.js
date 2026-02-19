@@ -111,7 +111,7 @@ let adstime = document.getElementById("adstime");
 let ADS   = 0;
 let timer = null;
 let dailyLimit = null;
-let dailyProgres = 1;
+let dailyProgres = 100;
 let progresLimit = 24 * 60 * 60; // 24 ساعة بالثواني
 
 /* ===== منع to often + توقيت بين كل إعلان ===== */
@@ -284,7 +284,7 @@ let copyImge = document.getElementById("copyImg");
 let copynotifi = document.querySelector(".copynotifi");
 
 copyrefal.addEventListener("click",function(){
-  copyImge.src = 'approve.png';
+  copyImge.src = 'https://files.catbox.moe/cr5q08.png';
   copynotifi.style.display = 'block';
   copynotifi.style.top = '-48%';
   copyrefal.style.boxShadow = '0 0px 0 #EBEBF0';
