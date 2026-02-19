@@ -4,8 +4,8 @@
 let btnMain   = document.querySelector("button");
 let btnTask   = document.getElementById("btn2");
 let btnWallet = document.getElementById("btn3");
-let btnshare = document.getElementById("sharebtn")
-let bntaddTask = document.getElementById("addtask")
+let btnshare = document.getElementById("sharebtn");
+let bntaddTask = document.getElementById("addtask");
 
 /* =======================
    الصفحات
@@ -14,90 +14,161 @@ let mainPage    = document.getElementById("main");
 let taskPage    = document.getElementById("task");
 let walletPage  = document.getElementById("wallet");
 let sharePage = document.getElementById("share");
-
-let addTaskpage = document.getElementById("addTask")
+let addTaskpage = document.getElementById("addTask");
 
 /* =======================
    شاشة التحميل + اسم الصفحة
 ======================= */
 let loadpage = document.getElementById("loading");
 let pagename = document.getElementById("page-load");
+let userbalancce = document.querySelector('.user-balance');
+let walletbalance = document.getElementById("adsbalancce");
+let barbtn = document.querySelector(".bar");
 
-let userbalancce = document.querySelector('.user-balance')
-
-let walletbalance = document.getElementById("adsbalancce")
-
-let barbtn = document.querySelector(".bar")
 /* =======================
    الأصوات
 ======================= */
 let soundbtn  = document.getElementById("soundbtn");
 let soundads  = document.getElementById("soundads");
 
+/* =======================
+   Telegram WebApp
+======================= */
+let tgUser = null;
+if (typeof Telegram !== 'undefined' && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user) {
+    tgUser = Telegram.WebApp.initDataUnsafe.user;
+}
+
+const API_URL = '/api';
 
 /* =======================
    دالة إخفاء كل الصفحات
    وإظهار الصفحة المطلوبة
 ======================= */
 function showPage(btnpage) {
-
   // إخفاء جميع الصفحات
-  if (mainPage) mainPage.style.display    = "none";
-  if (taskPage) taskPage.style.display    = "none";
-  if (walletPage) walletPage.style.display  = "none";
-  if (sharePage) sharePage.style.display = 'none'
- 
-  if (addTaskpage) addTaskpage.style.display = 'none'
-  // إظهار الصفحة المطلوبة
-  if (btnpage) btnpage.style.display = "block";
-
-  // ��ظهار شاشة التحميل
-  if (loadpage) loadpage.style.display = "block";
-  if (pagename) pagename.textContent = "Loading";
-  if (barbtn) barbtn.style.display = 'none'
-  setTimeout(function(){
-    if (barbtn) barbtn.style.display = 'block'
-  }, 2000)
+  mainPage.style.display    = "none";
+  taskPage.style.display    = "none";
+  walletPage.style.display  = "none";
+  sharePage.style.display = 'none';
+  addTaskpage.style.display = 'none';
   
+  // إظهار الصفحة المطلوبة
+  btnpage.style.display = "block";
+
+  // إظهار شاشة التحميل
+  loadpage.style.display = "block";
+  pagename.textContent = "Loading";
+  barbtn.style.display = 'none';
+  setTimeout(function(){
+    barbtn.style.display = 'block';
+  }, 2000);
 
   // تشغيل صوت التنقّل
-  try { if (soundbtn) { soundbtn.currentTime = 0; soundbtn.play(); } } catch(e){}
+  if (soundbtn) {
+    soundbtn.currentTime = 0;
+    soundbtn.play();
+  }
 
-  // إخفاء شاشة التحميل بعد 2 ثواني
+  // إخفاء شاشة التحميل بعد 4 ثواني
   setTimeout(function () {
-    if (loadpage) loadpage.style.display = "none";
+    loadpage.style.display = "none";
   }, 2000);
-  
 }
-
 
 /* =======================
    ربط الأزرار بالصفحات
 ======================= */
-if (btnMain) btnMain.addEventListener("click", function () {
-  showPage(mainPage);
-});
+if (btnMain) {
+  btnMain.addEventListener("click", function () {
+    showPage(mainPage);
+  });
+}
 
-if (btnTask) btnTask.addEventListener("click", function () {
-  showPage(taskPage);
-});
+if (btnTask) {
+  btnTask.addEventListener("click", function () {
+    showPage(taskPage);
+  });
+}
 
-if (btnWallet) btnWallet.addEventListener("click", function () {
-  showPage(walletPage);
+if (btnWallet) {
+  btnWallet.addEventListener("click", function () {
+    showPage(walletPage);
+    if (walletbalance) {
+      walletbalance.innerHTML = `
+        <img src="coins.png" style="width:20px; vertical-align:middle;">
+        ${ADS}
+      `;
+    }
+  });
+}
+
+if (btnshare) {
+  btnshare.addEventListener("click", function() {
+    showPage(sharePage);
+  });
+}
+
+if (bntaddTask) {
+  bntaddTask.addEventListener('click', function() {
+    showPage(addTaskpage);
+  });
+}
+
+/* =======================
+   نظام الإعلانات (من ads.html)
+======================= */
+
+// AdsGram Controller
+let AdsGramController = null;
+
+function initAdsGram() {
+  try {
+    if (window.Adsgram && typeof window.Adsgram.init === 'function') {
+      AdsGramController = window.Adsgram.init({ blockId: "int-20679" });
+      return true;
+    }
+    console.warn('[AdsGram] SDK not loaded yet.');
+    return false;
+  } catch (e) {
+    console.warn('[AdsGram] init error:', e);
+    return false;
+  }
+}
+
+async function showAdsGramRewarded() {
+  if (!AdsGramController) initAdsGram();
   
-    
-    if (walletbalance) walletbalance.innerHTML = `
-      <img src="coins.png" style="width:20px; vertical-align:middle;">
-      ${ADS}
-    `;
-    
-});
+  if (!AdsGramController || typeof AdsGramController.show !== 'function') {
+    return { ok: false, reason: 'not_ready' };
+  }
 
-if (btnshare) btnshare.addEventListener("click",function(){showPage(sharePage)
-  
-});
+  try {
+    const result = await AdsGramController.show();
+    if (result && result.done === false) {
+      return { ok: false, reason: 'not_done', result };
+    }
+    return { ok: true, result };
+  } catch (error) {
+    return { ok: false, reason: 'error', error };
+  }
+}
 
-if (bntaddTask) bntaddTask.addEventListener('click',function(){showPage(addTaskpage)})
+// libtl.com SDK
+async function showLibtlAd() {
+  return new Promise((resolve, reject) => {
+    if (typeof show_10245709 === 'function') {
+      try {
+        show_10245709();
+        setTimeout(() => resolve(true), 1000);
+      } catch (e) {
+        reject(e);
+      }
+    } else {
+      reject('libtl SDK not available');
+    }
+  });
+}
 
 /* =======================
    أزرار الإعلانات + الرصيد
@@ -106,352 +177,329 @@ const adsBtn     = document.getElementById("adsbtn");
 const adsBtnn    = document.getElementById("adsbtnn");
 const adsBalance = document.getElementById("adsbalance");
 const adsNotfi   = document.getElementById("adsnotifi");
-let progres = document.getElementById("progres")
-let adstime = document.getElementById("adstime")
+let progres = document.getElementById("progres");
+let adstime = document.getElementById("adstime");
 
 let ADS   = 0;
 let timer = null;
 let dailyLimit = null;
 let dailyProgres = 100;
-let progresLimit = 60* 60000;
+let progresLimit = 60 * 60000;
+let isProcessingAd = false;
+
+// Toast notification system
+function showToast(message, type = 'info') {
+  // إنشاء عنصر Toast
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: ${type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#17a2b8'};
+    color: white;
+    padding: 15px 25px;
+    border-radius: 10px;
+    font-weight: bold;
+    z-index: 999999;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    animation: slideDown 0.3s ease;
+  `;
+  toast.textContent = message;
+  
+  document.body.appendChild(toast);
+  
+  setTimeout(() => {
+    toast.style.animation = 'slideUp 0.3s ease';
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+// إضافة أنيميشن CSS للـ Toast
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes slideDown {
+    from { transform: translateX(-50%) translateY(-100%); opacity: 0; }
+    to { transform: translateX(-50%) translateY(0); opacity: 1; }
+  }
+  @keyframes slideUp {
+    from { transform: translateX(-50%) translateY(0); opacity: 1; }
+    to { transform: translateX(-50%) translateY(-100%); opacity: 0; }
+  }
+`;
+document.head.appendChild(style);
 
 /* =======================
-   نظام إعلانات ثلاثي + كولداون
-   - يشغّل ثلاثة إعلانات متتالية قبل منح الرصيد
-   - يفعّل adsBtnn مع timeLeft فور الضغط (كولداون)
-   - يمنع ظهور تحذيرات/رسائل أثناء تشغيل السلسلة ثم يعرض رسالة نهائية بعد انتهائها
-   - يستخدم libtl (show_10245709) إن كانت متوفرة و AdsGram مع نفس blockId "int-20679"
+   عند الضغط على زر الإعلان (محدث)
 ======================= */
-
-let AdsGramController = null;
-let adSequenceRunning = false;
-let suppressAdAlerts = false; // لمنع عرض التنبيهات أثناء السلسلة
-const ADS_COOLDOWN_SECONDS = 60; // مدة الكولداون بالثواني (يمكن تعديلها)
-let adsCooldownInterval = null;
-let adsCooldownRemaining = 0;
-
-function initAdsGram(){
-    try {
-        if (window.Adsgram && typeof window.Adsgram.init === 'function') {
-            AdsGramController = window.Adsgram.init({ blockId: "int-20679" });
-            return true;
-        }
-        console.warn('[AdsGram] SDK not ready');
-        return false;
-    } catch (e) {
-        console.warn('[AdsGram] init error:', e);
-        return false;
+if (adsBtn) {
+  adsBtn.addEventListener("click", async function () {
+    if (isProcessingAd) return;
+    
+    // التحقق من الحد اليومي
+    if (dailyProgres <= 0) {
+      showToast('Daily limit reached! Please wait.', 'warning');
+      return;
     }
-}
 
-async function showAdsGramRewarded(){
-    if (!AdsGramController) initAdsGram();
-
-    if (!AdsGramController || typeof AdsGramController.show !== 'function') {
-        return { ok: false, reason: 'not_ready' };
+    isProcessingAd = true;
+    
+    // إظهار حالة التحميل
+    adsBtn.style.display = "none";
+    if (adsBtnn) {
+      adsBtnn.style.display = "block";
+      adsBtnn.textContent = "Loading...";
+      adsBtnn.disabled = true;
     }
 
     try {
-        const result = await AdsGramController.show();
-        if (result && result.done === false) {
-            return { ok: false, reason: 'not_done', result };
+      // تحميل 3 إعلانات متتالية
+      // إعلان 1: libtl
+      await showLibtlAd();
+      
+      // إعلان 2: libtl
+      await showLibtlAd();
+      
+      // إعلان 3: AdsGram
+      const adsgramResult = await showAdsGramRewarded();
+      
+      if (!adsgramResult.ok) {
+        if (adsgramResult.reason === 'not_ready') {
+          showToast('Ads not ready. Please try again.', 'error');
+        } else if (adsgramResult.reason === 'not_done') {
+          showToast('Please watch the full ad to get reward!', 'warning');
+        } else {
+          showToast('Ad error. Please try again.', 'error');
         }
-        return { ok: true, result };
+        
+        // إعادة الزر للحالة الطبيعية
+        if (adsBtnn) adsBtnn.style.display = "none";
+        adsBtn.style.display = "block";
+        isProcessingAd = false;
+        return;
+      }
+
+      // ✅ جميع الإعلانات شُاهدت بنجاح - إعطاء المكافأة
+      
+      // زيادة الرصيد
+      ADS += 100;
+      if (adsBalance) adsBalance.textContent = ADS;
+      
+      // تحديث الرصيد في صفحة المحفظة
+      if (walletbalance) {
+        walletbalance.innerHTML = `
+          <img src="coins.png" style="width:20px; vertical-align:middle;">
+          ${ADS}
+        `;
+      }
+
+      // تشغيل صوت المكافأة
+      if (soundads) {
+        soundads.currentTime = 0;
+        soundads.play();
+      }
+
+      // إظهار الإشعار
+      if (adsNotfi) {
+        adsNotfi.style.display = "block";
+        adsNotfi.style.opacity = "0.8";
+        adsNotfi.textContent = "+100 ADS!";
+
+        setTimeout(function () {
+          adsNotfi.style.opacity = "0.4";
+        }, 2500);
+
+        adsNotfi.style.transform = "translateY(-150%)";
+
+        setTimeout(function () {
+          adsNotfi.style.transform = "translateY(135px)";
+        }, 100);
+
+        setTimeout(function () {
+          adsNotfi.style.transform = "translateY(-150%)";
+          adsNotfi.style.opacity = "0";
+        }, 3000);
+
+        setTimeout(function () {
+          adsNotfi.style.display = "none";
+          adsNotfi.style.transform = "";
+          adsNotfi.style.opacity = "";
+        }, 3500);
+      }
+
+      // تحديث التقدم اليومي
+      dailyProgres--;
+      if (progres) progres.textContent = dailyProgres;
+      
+      showToast('Great! You earned 100 ADS!', 'success');
+
+      // التحقق من الوصول للحد اليومي
+      if (dailyProgres <= 0) {
+        startDailyLimit();
+      }
+
     } catch (error) {
-        return { ok: false, reason: 'error', error };
+      console.error('Ad error:', error);
+      showToast('Failed to load ads. Please try again.', 'error');
+    } finally {
+      isProcessingAd = false;
+      
+      // إعادة الزر للحالة الطبيعية
+      if (dailyProgres > 0) {
+        if (adsBtnn) adsBtnn.style.display = "none";
+        adsBtn.style.display = "block";
+      }
     }
+  });
 }
 
-async function playLibtlAdSafe() {
-  // wrapper لنداء show_10245709 إن كانت متاحة
-  if (typeof show_10245709 === 'function') {
-    try {
-      await show_10245709();
-      return { ok: true };
-    } catch (e) {
-      console.warn('libtl ad error:', e);
-      return { ok: false, error: e };
-    }
-  } else {
-    console.warn('libtl show_10245709 not available');
-    return { ok: false, error: 'not_available' };
-  }
-}
-
-function startAdsCooldown(seconds) {
-  if (adsCooldownInterval) {
-    clearInterval(adsCooldownInterval);
-    adsCooldownInterval = null;
-  }
-  adsCooldownRemaining = seconds;
+// دالة بدء العد التنازلي للحد اليومي
+function startDailyLimit() {
+  if (adsBtn) adsBtn.style.display = 'none';
   if (adsBtnn) {
-    adsBtnn.style.display = 'block';
-    adsBtnn.textContent = adsCooldownRemaining + "s";
+    adsBtnn.style.display = "block";
+    adsBtnn.textContent = formatTime(progresLimit);
+    adsBtnn.style.background = 'red';
     adsBtnn.disabled = true;
   }
-  if (adsBtn) {
-    adsBtn.style.display = 'none';
-    adsBtn.disabled = true;
-  }
-  adsCooldownInterval = setInterval(() => {
-    adsCooldownRemaining--;
-    if (adsBtnn) adsBtnn.textContent = adsCooldownRemaining + "s";
-    if (adsCooldownRemaining <= 0) {
-      clearInterval(adsCooldownInterval);
-      adsCooldownInterval = null;
-      if (adsBtnn) {
-        adsBtnn.style.display = 'none';
-        adsBtnn.textContent = "";
-        adsBtnn.disabled = false;
-        adsBtnn.style.background = "";
-      }
+  
+  dailyLimit = setInterval(function() {
+    progresLimit -= 1000;
+    if (adsBtnn) adsBtnn.textContent = formatTime(progresLimit);
+    
+    if (progresLimit <= 0) {
+      clearInterval(dailyLimit);
+      
+      if (adsBtnn) adsBtnn.style.display = 'none';
       if (adsBtn) {
         adsBtn.style.display = 'block';
         adsBtn.disabled = false;
       }
+      if (adsBtnn) adsBtnn.style.background = '';
+      progresLimit = 60 * 60000;
+      dailyProgres = 100;
+      if (progres) progres.textContent = dailyProgres;
     }
   }, 1000);
 }
 
-// override عرض التنبيهات العالمية أثناء السلسلة (إن وجدت)
-if (typeof window.showCustomAlert === 'function') {
-  const _origAlert = window.showCustomAlert;
-  window.showCustomAlert = function(title, msg, type) {
-    if (suppressAdAlerts) {
-      // تجاهل مؤقت للرسائل أثناء إتمام سلسلة الإعلانات
-      console.log('Alert suppressed during ad sequence:', title);
-      return;
-    }
-    return _origAlert(title, msg, type);
-  };
-}
-
-if (adsBtn) {
-  adsBtn.addEventListener("click", async function () {
-    if (adSequenceRunning) return;
-
-    adSequenceRunning = true;
-    suppressAdAlerts = true;
-
-    // ابدأ الكولداون فوراً
-    startAdsCooldown(ADS_COOLDOWN_SECONDS);
-
-    // تأكد من تهيئة AdsGram
-    if (!AdsGramController) initAdsGram();
-
-    const adResults = []; // نجمع نتائج كل إعلان { idx, ok, info?, error? }
-
-    try {
-      // Ad 1
-      if (adsBtnn) adsBtnn.textContent = "Ad 1 / 3";
-      try {
-        const r1 = await playLibtlAdSafe();
-        adResults.push({ idx: 1, ok: !!r1.ok, info: r1 });
-      } catch (e) {
-        adResults.push({ idx: 1, ok: false, error: e });
-      }
-
-      // Ad 2
-      if (adsBtnn) adsBtnn.textContent = "Ad 2 / 3";
-      try {
-        const r2 = await playLibtlAdSafe();
-        adResults.push({ idx: 2, ok: !!r2.ok, info: r2 });
-      } catch (e) {
-        adResults.push({ idx: 2, ok: false, error: e });
-      }
-
-      // Ad 3 (prefer AdsGram ثم fallback إلى libtl)
-      if (adsBtnn) adsBtnn.textContent = "Ad 3 / 3";
-      try {
-        let r3 = await showAdsGramRewarded();
-        if (!r3.ok && typeof show_10245709 === 'function') {
-          const fallback = await playLibtlAdSafe();
-          r3 = fallback;
-        }
-        adResults.push({ idx: 3, ok: !!r3.ok, info: r3 });
-      } catch (e) {
-        adResults.push({ idx: 3, ok: false, error: e });
-      }
-
-      // قرّر النتيجة النهائية بعد انتهاء الثلاثة إعلانات
-      const allCompleted = adResults.every(ar => ar.ok === true);
-
-      suppressAdAlerts = false; // الآن نعرض الرسالة النهائية
-
-      if (allCompleted) {
-        // منح الرصيد
-        ADS += 100;
-        if (adsBalance) adsBalance.textContent = ADS;
-
-        // تشغيل صوت المكافأة
-        try { if (soundads) { soundads.currentTime = 0; soundads.play(); } } catch(e){}
-
-        // إظهار إشعار بصري (حافظت على نفس الحركة)
-        if (adsNotfi) {
-          adsNotfi.style.display = "block";
-          adsNotfi.style.opacity = "0.8";
-
-          setTimeout(function () {
-            adsNotfi.style.opacity = "0.4";
-          }, 2500);
-
-          adsNotfi.style.transform = "translateY(-150%)";
-
-          setTimeout(function () {
-            adsNotfi.style.transform = "translateY(135px)";
-          }, 100);
-
-          setTimeout(function () {
-            adsNotfi.style.transform = "translateY(-150%)";
-            adsNotfi.style.opacity = "0";
-          }, 3000);
-
-          setTimeout(function () {
-            adsNotfi.style.display = "none";
-            adsNotfi.style.transform = "";
-            adsNotfi.style.opacity = "";
-          }, 3500);
-        }
-
-        // تحديث dailyProgres كما في المنطق القديم
-        dailyProgres--;
-        if (progres) progres.textContent = dailyProgres;
-        if (dailyProgres <= 0) {
-          if (adsBtn) adsBtn.style.display = 'none';
-          if (adsBtnn) {
-            adsBtnn.style.display = "block";
-            adsBtnn.textContent = progresLimit;
-            adsBtnn.style.background = 'red';
-          }
-          dailyLimit = setInterval(function(){
-            progresLimit--;
-            if (adsBtnn) adsBtnn.textContent = progresLimit;
-            if (progresLimit <= 0) {
-              clearInterval(dailyLimit);
-
-              if (adsBtnn) adsBtnn.style.display = 'none';
-              if (adsBtn) adsBtn.style.display = 'block';
-              if (adsBtnn) adsBtnn.style.background = ''
-              progresLimit = 60* 60000;
-              dailyProgres = 100;
-              if (progres) progres.textContent = dailyProgres;
-            }
-          }, 1000)
-        }
-
-        // رسالة نجاح موحدة
-        try {
-          if (typeof showCustomAlert === 'function') showCustomAlert('Reward Granted!', 'You received 100 SHIB for watching the ads.', 'success');
-          else alert('You received 100 SHIB for watching the ads.');
-        } catch (e) { /* ignore */ }
-
-      } else {
-        // فشل أو إلغاء: عرض رسالة موحدة
-        let wasCancelled = adResults.some(r => {
-          const reason = (r.info && r.info.reason) ? String(r.info.reason).toLowerCase() : '';
-          const err = String(r.error || '');
-          return reason.includes('not_done') || err.toLowerCase().includes('cancel') || err.toLowerCase().includes('not_done');
-        });
-
-        try {
-          if (typeof showCustomAlert === 'function') {
-            if (wasCancelled) {
-              showCustomAlert('Ad Cancelled', 'You must watch each ad fully to receive the reward. Try again after the cooldown.', 'warning');
-            } else {
-              showCustomAlert('Ad Error', 'One or more ads failed to complete. Try again after the cooldown.', 'error');
-            }
-          } else {
-            alert(wasCancelled ? 'Ad Cancelled: watch full ads to get reward.' : 'Ad Error: some ads failed.');
-          }
-        } catch (e) {}
-      }
-
-    } catch (outerErr) {
-      suppressAdAlerts = false;
-      console.error('Unexpected ad-sequence error', outerErr);
-      try { if (typeof showCustomAlert === 'function') showCustomAlert('Ad Error', 'Unexpected error occurred. Please try again after the cooldown.', 'error'); } catch(e){}
-    } finally {
-      adSequenceRunning = false;
-      suppressAdAlerts = false;
-      // تأكد من تحديث عرض الرصيد
-      if (adsBalance) adsBalance.textContent = ADS;
-      // ملاحظة: الكولداون يبقى مفعلًا حتى ينتهي الوقت
-    }
-  });
+// تنسيق الوقت
+function formatTime(ms) {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
 /* =======================
    شاشة التحميل عند الدخول
 ======================= */
-if (loadpage) loadpage.style.display = "block";
-if (pagename) pagename.style.display = "none";
+if (loadpage) {
+  loadpage.style.display = "block";
+  if (pagename) {
+    pagename.style.display = "none";
+  }
 
-setTimeout(function () {
-  if (loadpage) loadpage.style.display = "none";
-  if (loadpage) loadpage.style.background = "black";
-  if (pagename) pagename.style.display = "block";
-}, 8000);
-
-let menubtn = document.querySelector(".menub")
-if (menubtn) {
-  menubtn.style.display = 'none'
-  setTimeout(function(){
-   menubtn.style.display = 'block'
-   menubtn.style.display = 'flex'
-  }, 8100)
+  setTimeout(function () {
+    loadpage.style.display = "none";
+    loadpage.style.background = "black";
+    if (pagename) pagename.style.display = "block";
+  }, 8000);
 }
 
+let menubtn = document.querySelector(".menub");
+if (menubtn) {
+  menubtn.style.display = 'none';
+  setTimeout(function(){
+    menubtn.style.display = 'block';
+    menubtn.style.display = 'flex';
+  }, 8100);
+}
 
-//نسخ رابط احاله//
+/* =======================
+   نسخ رابط إحالة
+======================= */
 let copyrefal = document.getElementById("copy");
 let link = document.getElementById("link");
-let refaltext = link ? link.textContent : '';
-let copyImge = document.getElementById("copyImg")
-let copynotifi = document.querySelector(".copynotifi")
+let copyImge = document.getElementById("copyImg");
+let copynotifi = document.querySelector(".copynotifi");
 
-if (copyrefal) {
-  copyrefal.addEventListener("click",function(){
-    if (copyImge) copyImge.src = 'approve.png'
+if (copyrefal && link) {
+  let refaltext = link.textContent;
+  
+  copyrefal.addEventListener("click", function(){
+    if (copyImge) copyImge.src = 'approve.png';
     if (copynotifi) {
-      copynotifi.style.display = 'block'
-      copynotifi.style.top = '-48%'
+      copynotifi.style.display = 'block';
+      copynotifi.style.top = '-48%';
     }
-    if (copyrefal) copyrefal.style.boxShadow = '0 0px 0 #EBEBF0'
+    copyrefal.style.boxShadow = '0 0px 0 #EBEBF0';
 
     setTimeout(function(){
-      if (copynotifi) { copynotifi.style.display = 'none'; copynotifi.style.top = '';}
-    }, 2000)
+      if (copynotifi) {
+        copynotifi.style.display = 'none';
+        copynotifi.style.top = '';
+      }
+    }, 2000);
+    
     navigator.clipboard.writeText(refaltext).then(function() {
       setTimeout(function(){
-       if (copyImge) copyImge.src = 'copy.png'
-       if (copyrefal) copyrefal.style.boxShadow = '0 5px 0 #7880D3'
+        if (copyImge) copyImge.src = 'copy.png';
+        copyrefal.style.boxShadow = '0 5px 0 #7880D3';
       }, 800);
     });
   });
 }
 
-//اضافه مهمه تاسك//
+/* =======================
+   إضافة مهمة تاسك
+======================= */
 let creatTask = document.getElementById("creatTask");
 
-
 if (creatTask) {
-  creatTask.addEventListener("click",function(){
-   let nametask = document.getElementById("taskNameInput").value;
-   let linktask = document.getElementById("taskLinkInput").value;
-   let taskcontainer = document.querySelector(".task-container")
-   let taskcard = document.createElement("div")
-   taskcard.className = "task-card"
-
+  creatTask.addEventListener("click", function(){
+    let nametask = document.getElementById("taskNameInput").value;
+    let linktask = document.getElementById("taskLinkInput").value;
+    let taskcontainer = document.querySelector(".task-container");
+    
+    if (!nametask || !linktask) {
+      showToast('Please fill all fields!', 'warning');
+      return;
+    }
+    
+    let taskcard = document.createElement("div");
+    taskcard.className = "task-card";
+    
     taskcard.innerHTML = `
-    <span class="task-name">${nametask}</span>
-    <span class="task-prize">30 <img src="coins.png" width="25" ></span>
-    <a class="task-link" href="${linktask}">start</a>
+      <span class="task-name">${nametask}</span>
+      <span class="task-prize">30 <img src="coins.png" width="25"></span>
+      <a class="task-link" href="${linktask}" target="_blank">start</a>
     `;
-  if (taskcontainer) taskcontainer.appendChild(taskcard)
+    
+    if (taskcontainer) taskcontainer.appendChild(taskcard);
 
-
-  if (document.getElementById("taskNameInput")) document.getElementById("taskNameInput").value = ''
-   if (document.getElementById("taskLinkInput")) document.getElementById("taskLinkInput").value = ''
-
+    document.getElementById("taskNameInput").value = '';
+    document.getElementById("taskLinkInput").value = '';
+    
+    showToast('Task added successfully!', 'success');
   });
 }
+
+/* =======================
+   منع double-tap zoom (iOS)
+======================= */
+(function(){
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', function (event) {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 300) {
+      event.preventDefault();
+    }
+    lastTouchEnd = now;
+  }, { passive: false });
+})();
+
+// تهيئة AdsGram عند تحميل الصفحة
+document.addEventListener('DOMContentLoaded', function() {
+  initAdsGram();
+});
