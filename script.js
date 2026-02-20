@@ -106,7 +106,6 @@ const adsBtnn    = document.getElementById("adsbtnn");
 const adsBalance = document.getElementById("adsbalance");
 const adsNotfi   = document.getElementById("adsnotifi");
 let progres = document.getElementById("progres");
-let adstime = document.getElementById("adstime");
 
 let ADS   = 0;
 let timer = null;
@@ -178,84 +177,70 @@ adsBtn.addEventListener("click", async function () {
 
       dailyProgres--;
       progres.textContent = dailyProgres;
+
+      if (dailyProgres <= 0) {
+        adsBtn.style.display = 'none';
+        adsBtnn.style.display = "block";
+        adsBtnn.textContent = progresLimit;
+        adsBtnn.style.background = 'red';
+
+        dailyLimit = setInterval(function(){
+
+          progresLimit--;
+          adsBtnn.textContent = progresLimit;
+
+          if (progresLimit <= 0) {
+            clearInterval(dailyLimit);
+
+            adsBtnn.style.display = 'none';
+            adsBtn.style.display = 'block';
+            adsBtnn.style.background = '';
+            progresLimit = 24 * 60 * 60;
+            dailyProgres = 100;
+            progres.textContent = dailyProgres;
+          }
+
+        }, 1000);
+      }
     }
 
   }, 1000);
 
-  let ad1 = await showSingleAd();
-  if (!ad1) return;
-
-  let ad2 = await showSingleAd();
-  if (!ad2) return;
-
-  let ad3 = await showSingleAd();
-  if (!ad3) return;
-
-  let ad4 = await showSingleAd();
-  if (!ad4) return;
+  await showSingleAd();
+  await showSingleAd();
+  await showSingleAd();
+  await showSingleAd();
 
 });
 
-loadpage.style.display = "block";
-pagename.style.display = "none";
+/* =======================
+   Telegram User Data Integration
+======================= */
 
-setTimeout(function () {
-  loadpage.style.display = "none";
-  loadpage.style.background = "black";
-  pagename.style.display = "block";
-}, 8000);
+const tg = window.Telegram.WebApp;
+tg.expand();
 
-let menubtn = document.querySelector(".menub");
-menubtn.style.display = 'none';
+let userPhotoContainer = document.querySelector(".user-fhoto");
+let linkSpan = document.getElementById("link");
 
-setTimeout(function(){
-  menubtn.style.display = 'flex';
-}, 8100);
+if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
 
-let copyrefal = document.getElementById("copy");
-let link = document.getElementById("link");
-let refaltext = document.getElementById("link").textContent;
-let copyImge = document.getElementById("copyImg");
-let copynotifi = document.querySelector(".copynotifi");
+  let user = tg.initDataUnsafe.user;
+  let userId = user.id;
+  let firstName = user.first_name ? user.first_name : "";
+  let photoUrl = user.photo_url ? user.photo_url : "";
 
-copyrefal.addEventListener("click",function(){
-  copyImge.src = 'https://files.catbox.moe/cr5q08.png';
-  copynotifi.style.display = 'block';
-  copynotifi.style.top = '-48%';
-  copyrefal.style.boxShadow = '0 0px 0 #EBEBF0';
+  if (photoUrl !== "") {
+    userPhotoContainer.innerHTML = `
+      <img src="${photoUrl}" style="width:80px;height:80px;border-radius:50%;">
+    `;
+  } else {
+    userPhotoContainer.innerHTML = `
+      <div style="width:80px;height:80px;border-radius:50%;background:#444;color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;">
+        ${firstName.charAt(0)}
+      </div>
+    `;
+  }
 
-  setTimeout(function(){
-    copynotifi.style.display = 'none';
-    copynotifi.style.top = '';
-  }, 2000);
-
-  navigator.clipboard.writeText(refaltext).then(function() {
-
-    setTimeout(function(){
-      copyImge.src = 'copy.png';
-      copyrefal.style.boxShadow = '0 5px 0 #7880D3';
-    }, 800);
-
-  });
-});
-
-let creatTask = document.getElementById("creatTask");
-
-creatTask.addEventListener("click",function(){
-  let nametask = document.getElementById("taskNameInput").value;
-  let linktask = document.getElementById("taskLinkInput").value;
-  let taskcontainer = document.querySelector(".task-container");
-  let taskcard = document.createElement("div");
-  taskcard.className = "task-card";
-
-  taskcard.innerHTML = `
-  <span class="task-name">${nametask}</span>
-  <span class="task-prize">30 <img src="coins.png" width="25"></span>
-  <a class="task-link" href="${linktask}">start</a>
-  `;
-
-  taskcontainer.appendChild(taskcard);
-
-  document.getElementById("taskNameInput").value = '';
-  document.getElementById("taskLinkInput").value = '';
-});
+  linkSpan.textContent = `https://t.me/Bot_ad_watchbot/earn?startapp=ref_${userId}`;
+}
