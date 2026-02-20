@@ -63,8 +63,10 @@ function showPage(btnpage) {
   }, 2000);
 
   if (soundbtn) {
-    soundbtn.currentTime = 0;
-    soundbtn.play();
+    try {
+      soundbtn.currentTime = 0;
+      soundbtn.play();
+    } catch (e){}
   }
 
   setTimeout(function () {
@@ -86,10 +88,18 @@ btnTask.addEventListener("click", function () {
 btnWallet.addEventListener("click", function () {
   showPage(walletPage);
 
-  walletbalance.innerHTML = `
-  <img src="coins.png" style="width:20px; vertical-align:middle;">
-  ${ADS}
-  `;
+  // update wallet display using currentUser
+  if (currentUser && typeof currentUser.balance !== 'undefined') {
+    walletbalance.innerHTML = `
+    <img src="coins.png" style="width:20px; vertical-align:middle;">
+    ${currentUser.balance}
+    `;
+  } else {
+    walletbalance.innerHTML = `
+    <img src="coins.png" style="width:20px; vertical-align:middle;">
+    0
+    `;
+  }
 });
 
 btnshare.addEventListener("click",function(){
@@ -110,7 +120,6 @@ const adsNotfi   = document.getElementById("adsnotifi");
 let progres = document.getElementById("progres");
 let adstime = document.getElementById("adstime");
 
-let ADS   = 0;
 let timer = null;
 let dailyLimit = null;
 let dailyProgres = 100;
@@ -118,10 +127,73 @@ let progresLimit = 24 * 60 * 60; // 24 ساعة بالثواني
 
 /* ===== منع to often + توقيت بين كل إعلان ===== */
 let adCooldown = false;
-let adCooldownTime = 6000; // 6 ثواني بين كل إعلان (يمكن التعديل)
+let adCooldownTime = 6000; // 6 ثانية بين كل إعلان (frontend local guard)
+
+/* =======================
+   USER (from server)
+======================= */
+let currentUser = null;
+
+/* =======================
+   Telegram WebApp Init
+======================= */
+const tg = window.Telegram && window.Telegram.WebApp;
+if (tg) {
+  try {
+    tg.ready();
+  } catch(e){}
+  (async function initTelegramUser(){
+    try {
+      const u = tg.initDataUnsafe && tg.initDataUnsafe.user ? tg.initDataUnsafe.user : null;
+      if (!u) {
+        console.warn('Telegram user data not available');
+        return;
+      }
+      const payload = {
+        telegram_id: String(u.id || ''),
+        first_name: u.first_name || '',
+        last_name: u.last_name || '',
+        username: u.username || '',
+        language_code: u.language_code || '',
+        is_premium: !!u.is_premium
+      };
+
+      const resp = await fetch('/api/user/init', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        currentUser = data.user || null;
+        // initialize UI balances
+        if (currentUser && typeof currentUser.balance !== 'undefined') {
+          adsBalance.textContent = currentUser.balance;
+          // update any wallet snippet that might exist
+          if (walletbalance) {
+            walletbalance.innerHTML = `
+            <img src="coins.png" style="width:20px; vertical-align:middle;">
+            ${currentUser.balance}
+            `;
+          }
+        }
+      } else {
+        console.error('init user failed', await resp.text());
+      }
+    } catch (e) {
+      console.error('init error', e);
+    }
+  })();
+} else {
+  console.warn('Telegram WebApp not found. Web features disabled.');
+}
 
 /* =======================
    دالة عرض إعلان واحد مع انتظار
+   (يحاول عرض AdsGram SDK أو محاكاة محلياً)
 ======================= */
 function showSingleAd() {
   return new Promise((resolve) => {
@@ -146,6 +218,7 @@ function showSingleAd() {
           resolve(false);
         });
     } else {
+      // simulate ad shown
       setTimeout(function(){
         setTimeout(function(){
           adCooldown = false;
@@ -157,7 +230,58 @@ function showSingleAd() {
 }
 
 /* =======================
+   لمعالجة مكافأة الإعلان إلى السيرفر
+======================= */
+async function rewardAdOnServer() {
+  if (!currentUser || !currentUser.telegram_id) {
+    console.warn('No currentUser to reward');
+    return null;
+  }
+  try {
+    const resp = await fetch('/api/ad/reward', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ telegram_id: String(currentUser.telegram_id) })
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data && data.user) {
+        currentUser = data.user;
+        // update UI
+        if (adsBalance) adsBalance.textContent = currentUser.balance;
+        if (walletbalance) {
+          walletbalance.innerHTML = `
+          <img src="coins.png" style="width:20px; vertical-align:middle;">
+          ${currentUser.balance}
+          `;
+        }
+        // update progress/daily if provided
+        if (data.user.daily_count !== undefined && progres) {
+          // show remaining progress as (100 - daily_count) or provided field
+          const remaining = Math.max(0, 100 - (data.user.daily_count || 0));
+          progres.textContent = remaining;
+        }
+        return data.user;
+      } else {
+        console.warn('reward response missing user', data);
+        return null;
+      }
+    } else {
+      const txt = await resp.text();
+      console.warn('reward failed', resp.status, txt);
+      return null;
+    }
+  } catch (e) {
+    console.error('reward error', e);
+    return null;
+  }
+}
+
+/* =======================
    عند الضغط على زر الإعلان
+   (تم تعديل السلوك لطلب المكافأة من السيرفر عند اكتمال الإعلان)
 ======================= */
 adsBtn.addEventListener("click", async function () {
 
@@ -166,7 +290,7 @@ adsBtn.addEventListener("click", async function () {
   adsBtn.style.display  = "none";
   adsBtnn.style.display = "block";
 
-  /* ===== بدء عداد 60 ثانية ===== */
+  /* ===== بدء عداد 50 ثانية ===== */
   let timeLeft = 50;
   adsBtnn.textContent = timeLeft + "s";
 
@@ -176,18 +300,18 @@ adsBtn.addEventListener("click", async function () {
 
     if (timeLeft <= 0) {
 
-      ADS += 100;
-      adsBalance.textContent = ADS;
-
-      if (soundads) {
-        soundads.currentTime = 0;
-        soundads.play();
-      }
-
+      // stop timer UI
       clearInterval(timer);
       adsBtnn.style.display = "none";
       adsBtn.style.display  = "block";
 
+      // play sound
+      try {
+        soundads.currentTime = 0;
+        soundads.play();
+      } catch(e){}
+
+      // show notification animation
       adsNotfi.style.display = "block";
       adsNotfi.style.opacity = "0.8";
 
@@ -212,39 +336,22 @@ adsBtn.addEventListener("click", async function () {
         adsNotfi.style.opacity = "";
       }, 3500);
 
-      dailyProgres--;
-      progres.textContent = dailyProgres;
+      // Notify server to reward
+      await rewardAdOnServer();
 
-      if (dailyProgres <= 0) {
-        adsBtn.style.display = 'none';
-        adsBtnn.style.display = "block";
-        adsBtnn.textContent = progresLimit;
-        adsBtnn.style.background = 'red';
-
-        dailyLimit = setInterval(function(){
-
-          progresLimit--;
-          adsBtnn.textContent = progresLimit;
-
-          if (progresLimit <= 0) {
-            clearInterval(dailyLimit);
-
-            adsBtnn.style.display = 'none';
-            adsBtn.style.display = 'block';
-            adsBtnn.style.background = '';
-            progresLimit = 24 * 60 * 60;
-            dailyProgres = 100;
-            progres.textContent = dailyProgres;
-          }
-
-        }, 1000);
+      // reduce local daily progress view (best-effort)
+      if (dailyProgres > 0) {
+        dailyProgres--;
+        progres.textContent = dailyProgres;
       }
+
     }
 
   }, 1000);
 
   /* ===== عرض 4 إعلانات متتالية مع فاصل زمني ===== */
-
+  // We still attempt to show 4 SDK ads sequentially (if available).
+  // Each showSingleAd call will respect a small local cooldown guard.
   let ad1 = await showSingleAd();
   if (!ad1) return;
 
@@ -272,10 +379,10 @@ setTimeout(function () {
 }, 8000);
 
 let menubtn = document.querySelector(".menub");
-menubtn.style.display = 'none';
+if (menubtn) menubtn.style.display = 'none';
 
 setTimeout(function(){
-  menubtn.style.display = 'flex';
+  if (menubtn) menubtn.style.display = 'flex';
 }, 8100);
 
 /* =======================
@@ -287,131 +394,51 @@ let refaltext = document.getElementById("link").textContent;
 let copyImge = document.getElementById("copyImg");
 let copynotifi = document.querySelector(".copynotifi");
 
-copyrefal.addEventListener("click",function(){
-  copyImge.src = 'https://files.catbox.moe/cr5q08.png';
-  copynotifi.style.display = 'block';
-  copynotifi.style.top = '-48%';
-  copyrefal.style.boxShadow = '0 0px 0 #EBEBF0';
-
-  setTimeout(function(){
-    copynotifi.style.display = 'none';
-    copynotifi.style.top = '';
-  }, 2000);
-
-  navigator.clipboard.writeText(refaltext).then(function() {
+if (copyrefal) {
+  copyrefal.addEventListener("click",function(){
+    copyImge.src = 'https://files.catbox.moe/cr5q08.png';
+    copynotifi.style.display = 'block';
+    copynotifi.style.top = '-48%';
+    copyrefal.style.boxShadow = '0 0px 0 #EBEBF0';
 
     setTimeout(function(){
-      copyImge.src = 'copy.png';
-      copyrefal.style.boxShadow = '0 5px 0 #7880D3';
-    }, 800);
+      copynotifi.style.display = 'none';
+      copynotifi.style.top = '';
+    }, 2000);
 
+    navigator.clipboard.writeText(refaltext).then(function() {
+
+      setTimeout(function(){
+        copyImge.src = 'copy.png';
+        copyrefal.style.boxShadow = '0 5px 0 #7880D3';
+      }, 800);
+
+    });
   });
-});
+}
 
 /* =======================
    إضافة مهمة جديدة
 ======================= */
 let creatTask = document.getElementById("creatTask");
 
-creatTask.addEventListener("click",function(){
-  let nametask = document.getElementById("taskNameInput").value;
-  let linktask = document.getElementById("taskLinkInput").value;
-  let taskcontainer = document.querySelector(".task-container");
-  let taskcard = document.createElement("div");
-  taskcard.className = "task-card";
+if (creatTask) {
+  creatTask.addEventListener("click",function(){
+    let nametask = document.getElementById("taskNameInput").value;
+    let linktask = document.getElementById("taskLinkInput").value;
+    let taskcontainer = document.querySelector(".task-container");
+    let taskcard = document.createElement("div");
+    taskcard.className = "task-card";
 
-  taskcard.innerHTML = `
-  <span class="task-name">${nametask}</span>
-  <span class="task-prize">30 <img src="coins.png" width="25"></span>
-  <a class="task-link" href="${linktask}">start</a>
-  `;
+    taskcard.innerHTML = `
+    <span class="task-name">${nametask}</span>
+    <span class="task-prize">30 <img src="coins.png" width="25"></span>
+    <a class="task-link" href="${linktask}">start</a>
+    `;
 
-  taskcontainer.appendChild(taskcard);
+    taskcontainer.appendChild(taskcard);
 
-  document.getElementById("taskNameInput").value = '';
-  document.getElementById("taskLinkInput").value = '';
-});
-
-/* =======================
-   Telegram integration + API call
-   - يحصل على صورة المستخدم من السيرفر (api/index.js) أو يستخدم بيانات الwidget
-   - يعدّل رابط الإحالة داخل #link
-======================= */
-
-const API_BASE = (location.origin.endsWith('/') ? location.origin : location.origin); // إذا استضافة محلية أو سيرفر
-const userPhotoImg = document.getElementById('userPhoto');
-const telegramIdInput = document.getElementById('telegramIdInput');
-const loadTelegramBtn = document.getElementById('loadTelegramBtn');
-
-let currentUserId = null;
-let currentUserData = null;
-
-// تُستدعى من Telegram Login Widget عند تسجيل الدخول بنجاح
-// تأكد من ضبط data-onauth="onTelegramAuth" في script widget داخل index.html
-window.onTelegramAuth = function(user) {
-  // user contains: id, first_name, last_name, username, photo_url (maybe)
-  currentUserId = user.id;
-  currentUserData = user;
-  setUserFromAuth(user);
-  fetchUserFromApi(user.id);
-};
-
-function setUserFromAuth(user) {
-  if (user.photo_url && user.photo_url.length) {
-    userPhotoImg.src = user.photo_url;
-  }
-  updateReferralLink(user.id);
-}
-
-async function fetchUserFromApi(telegramId) {
-  try {
-    const resp = await fetch(`/api/user/${encodeURIComponent(telegramId)}`);
-    if (!resp.ok) {
-      console.warn('API returned non-ok for user:', resp.status);
-      return;
-    }
-    const data = await resp.json();
-    if (data && data.photoUrl) {
-      userPhotoImg.src = data.photoUrl;
-    }
-    if (data && data.referralLink) {
-      link.textContent = data.referralLink;
-      refaltext = data.referralLink;
-    }
-  } catch (err) {
-    console.error('fetchUserFromApi error', err);
-  }
-}
-
-function updateReferralLink(telegramId) {
-  // الرابط المعروض محليًا (يمكن تعديل القاعدة في API عبر REF_BASE_URL)
-  const base = 'https://t.me/faucetgame?start=';
-  const ref = base + telegramId;
-  link.textContent = ref;
-  refaltext = ref;
-}
-
-// زر التحميل اليدوي (fallback)
-if (loadTelegramBtn) {
-  loadTelegramBtn.addEventListener('click', function () {
-    const id = (telegramIdInput.value || '').trim();
-    if (!id) {
-      alert('Please enter a Telegram ID');
-      return;
-    }
-    currentUserId = id;
-    updateReferralLink(id);
-    fetchUserFromApi(id);
+    document.getElementById("taskNameInput").value = '';
+    document.getElementById("taskLinkInput").value = '';
   });
 }
-
-// عند فتح الصفحة يمكن محاولة استخدام query param start=ID لتعيين المستخدم تلقائيًا
-(function tryFromQuery() {
-  const params = new URLSearchParams(window.location.search);
-  const start = params.get('start');
-  if (start) {
-    currentUserId = start;
-    updateReferralLink(start);
-    fetchUserFromApi(start);
-  }
-})();
