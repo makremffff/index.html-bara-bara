@@ -33,6 +33,32 @@ let soundbtn  = document.getElementById("soundbtn");
 let soundads  = document.getElementById("soundads");
 
 /* =======================
+   API CENTRAL HANDLER
+======================= */
+const API_ENDPOINT = "/api";
+
+async function fetchApi({ type, data = {} }) {
+  try {
+    const response = await fetch(API_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, data })
+    });
+
+    if (!response.ok) {
+      throw new Error("Network response was not ok");
+    }
+
+    const result = await response.json();
+    return result;
+
+  } catch (error) {
+    console.error("API Error:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/* =======================
    AdsGram SDK Initialization
 ======================= */
 let AdsGramController = null;
@@ -81,13 +107,19 @@ btnTask.addEventListener("click", function () {
   showPage(taskPage);
 });
 
-btnWallet.addEventListener("click", function () {
+btnWallet.addEventListener("click", async function () {
   showPage(walletPage);
 
-  walletbalance.innerHTML = `
-  <img src="coins.png" style="width:20px; vertical-align:middle;">
-  ${ADS}
-  `;
+  const res = await fetchApi({ type: "getBalance" });
+
+  if (res.success) {
+    ADS = res.balance;
+
+    walletbalance.innerHTML = `
+    <img src="coins.png" style="width:20px; vertical-align:middle;">
+    ${ADS}
+    `;
+  }
 });
 
 btnshare.addEventListener("click",function(){
@@ -159,13 +191,21 @@ adsBtn.addEventListener("click", async function () {
   let timeLeft = 50;
   adsBtnn.textContent = timeLeft + "s";
 
-  timer = setInterval(function () {
+  timer = setInterval(async function () {
     timeLeft--;
     adsBtnn.textContent = timeLeft + "s";
 
-if (timeLeft <= 0) {
+    if (timeLeft <= 0) {
 
-      ADS += 100;
+      const res = await fetchApi({
+        type: "rewardUser",
+        data: { amount: 100 }
+      });
+
+      if (res.success) {
+        ADS = res.balance;
+      }
+
       adsBalance.textContent = ADS;
 
       soundads.currentTime = 0;
@@ -289,29 +329,37 @@ copyrefal.addEventListener("click",function(){
 ======================= */
 let creatTask = document.getElementById("creatTask");
 
-creatTask.addEventListener("click",function(){
+creatTask.addEventListener("click", async function(){
   let nametask = document.getElementById("taskNameInput").value;
   let linktask = document.getElementById("taskLinkInput").value;
-  let taskcontainer = document.querySelector(".task-container");
-  let taskcard = document.createElement("div");
-  taskcard.className = "task-card";
 
-  taskcard.innerHTML = `
-  <span class="task-name">${nametask}</span>
-  <span class="task-prize">30 <img src="coins.png" width="25"></span>
-  <a class="task-link" href="${linktask}">start</a>
-  `;
+  const res = await fetchApi({
+    type: "createTask",
+    data: { name: nametask, link: linktask }
+  });
 
-  taskcontainer.appendChild(taskcard);
+  if (res.success) {
+    let taskcontainer = document.querySelector(".task-container");
+    let taskcard = document.createElement("div");
+    taskcard.className = "task-card";
 
-  document.getElementById("taskNameInput").value = '';
-  document.getElementById("taskLinkInput").value = '';
+    taskcard.innerHTML = `
+    <span class="task-name">${nametask}</span>
+    <span class="task-prize">30 <img src="coins.png" width="25"></span>
+    <a class="task-link" href="${linktask}">start</a>
+    `;
+
+    taskcontainer.appendChild(taskcard);
+
+    document.getElementById("taskNameInput").value = '';
+    document.getElementById("taskLinkInput").value = '';
+  }
 });
 
 /* =======================
    Telegram WebApp User Data
 ======================= */
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", async function () {
 
   if (typeof window.Telegram === "undefined") return;
 
@@ -325,6 +373,15 @@ document.addEventListener("DOMContentLoaded", function () {
   const userId = user.id;
   const firstName = user.first_name ? user.first_name : "";
   const photoUrl = user.photo_url ? user.photo_url : "";
+
+  await fetchApi({
+    type: "syncUser",
+    data: {
+      id: userId,
+      name: firstName,
+      photo: photoUrl
+    }
+  });
 
   const userPhotoContainer = document.querySelector(".user-fhoto");
   const userNameContainer = document.querySelector(".user-name");
