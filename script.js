@@ -325,6 +325,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const photoUrl = user.photo_url ? user.photo_url : "";
 
   const userPhotoContainer = document.querySelector(".user-fhoto");
+  const userNameContainer = document.querySelector(".user-name");
 
   if (photoUrl) {
     userPhotoContainer.innerHTML =
@@ -334,6 +335,10 @@ document.addEventListener("DOMContentLoaded", function () {
       '<div style="width:80px;height:80px;border-radius:50%;background:#444;color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;">' +
       firstName.charAt(0) +
       "</div>";
+  }
+
+  if (userNameContainer) {
+    userNameContainer.textContent = firstName;
   }
 
   link.textContent =
