@@ -170,6 +170,8 @@ if (timeLeft <= 0) {
 
       soundads.currentTime = 0;
       soundads.play();
+      dailyProgres--;
+      progres.textContent = dailyProgres;
 
       clearInterval(timer);
       adsBtnn.style.display = "none";
