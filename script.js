@@ -307,7 +307,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   if (photoUrl) {
     userPhotoContainer.innerHTML =
-      '<img src="' + photoUrl + '" style="width:80px;height:80px;border-radius:50%;">';
+      '<img src="' + photoUrl + '" style="width:95px;height:95px;border-radius:50%;">';
   } else {
     userPhotoContainer.innerHTML =
       '<div style="width:80px;height:80px;border-radius:50%;background:#444;color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;">' +
