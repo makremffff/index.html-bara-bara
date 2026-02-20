@@ -163,7 +163,7 @@ adsBtn.addEventListener("click", async function () {
     timeLeft--;
     adsBtnn.textContent = timeLeft + "s";
 
-    if (timeLeft <= 0) {
+if (timeLeft <= 0) {
 
       ADS += 100;
       adsBalance.textContent = ADS;
@@ -175,8 +175,29 @@ adsBtn.addEventListener("click", async function () {
       adsBtnn.style.display = "none";
       adsBtn.style.display  = "block";
 
-      dailyProgres--;
-      progres.textContent = dailyProgres;
+      adsNotfi.style.display = "block";
+      adsNotfi.style.opacity = "0.8";
+
+      setTimeout(function () {
+        adsNotfi.style.opacity = "0.4";
+      }, 2500);
+
+      adsNotfi.style.transform = "translateY(-150%)";
+
+      setTimeout(function () {
+        adsNotfi.style.transform = "translateY(135px)";
+      }, 100);
+
+      setTimeout(function () {
+        adsNotfi.style.transform = "translateY(-150%)";
+        adsNotfi.style.opacity = "0";
+      }, 3000);
+
+      setTimeout(function () {
+        adsNotfi.style.display = "none";
+        adsNotfi.style.transform = "";
+        adsNotfi.style.opacity = "";
+      }, 3500);
 
       if (dailyProgres <= 0) {
         adsBtn.style.display = 'none';
