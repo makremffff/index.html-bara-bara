@@ -149,7 +149,7 @@ font-weight: bold;
  
   z-index: 9999;
 transition: 1s;
-background: #ffeedd;
+background: #000;
 }
 #page-load{
   color: blue;
