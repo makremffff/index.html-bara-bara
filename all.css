@@ -278,8 +278,8 @@ top: 60%;
 .refal-link{
   position: relative;
   top: 30%;
-  left: 15%;
-  width: 70%;
+  left: 5%;
+  width: 90%;
   color: #AFB5FF;
   font-size: 15px;
   font-family: DynaPuff;
@@ -315,11 +315,11 @@ top: 60%;
 }
 
 .copynotifi{
-  color: navy;
+  color: white;
   width: 70%;
   font-size: 23px;
   font-family: DynaPuff;
-  background: papayawhip;
+  background: black;
   height: 80px;
   padding: 5px 5px;
   padding-top: 30px;
