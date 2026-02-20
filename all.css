@@ -55,7 +55,7 @@ left: -2%;
  position: relative;
  top: 30px;
  left: -30px;
- font-size: 15px;
+ font-size: 5px;
  color: #717CFF;
  font-family: Story Script;
  letter-spacing: 2px;
@@ -344,69 +344,14 @@ font-weight: bold;
 
 
 }
-.task-container{
-  background: #ffeedd;
-  width: 100%;
-  height: 70%;
-  border-radius: 20px;
-  position: relative;
-  top: -20px;
-  font-family: DynaPuff;
-  text-align: center;
-  opacity: 0.6;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  overflow: auto;
-  scroll-behavior: smooth;
-}
 
-.task-container span{
-  font-size: 25px;
-  color: navy;
-  background: na;
-  width: 100%;
-  display: inline-block;
-  border-radius: 10px 10px 0 0;
-}
-.task-card{
-  background: #3A3B48;
-  width: 90%;
-  height: 15%;
-  border: solid white;
-  margin-top: 20px;
-  border-radius: 20px;
-  opacity: 0.8;
-  display: flex;
- align-items: center;
-padding: 10px 4px;
- gap: 40px;
 
-  
-}
-.task-card .task-name{
-  font-size: 16px;
-  color: white;
-  
-}
-.task-card .task-prize{
-  color: gold;
-  display: inline-flex;
-  
-}
-.task-card .task-link{
-  background: red;
-  border-radius: 15px;
-  padding: 10px 10px;
-  width: 20%;
- 
-  
-}
+
 .taskbalance-container .balance{
   position: relative;
  top: 35px;
  left: -30px;
- font-size: 15px;
+ font-size: 5px;
  color: #717CFF;
  font-family: Story Script;
  letter-spacing: 1px;
@@ -441,4 +386,106 @@ left: -2%;
  font-weight: bold;
  font-family: DynaPuff;
 font-size: 25px;
+}
+/* ===== Task Container ===== */
+.task-container {
+  background: linear-gradient(145deg, #1e1f29, #2a2b3b);
+  width: 100%;
+  height: 70%;
+  border-radius: 25px;
+  position: relative;
+  top: -20px;
+  font-family: 'DynaPuff', cursive;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  padding: 15px 0;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+}
+
+/* ===== Task Header ===== */
+.task-container .header-task {
+  position: sticky;
+  top: 0%;
+  z-index: 10;
+  font-size: 26px;
+  font-weight: 600;
+  color: #FFD700;
+  width: 30%;
+  padding: 10px 20px;
+  display: inline-block;
+  border-radius: 12px 12px ;
+ 
+  background: red;
+  
+  margin-bottom: 10px;
+  text-shadow: 1px 1px 4px rgba(0,0,0,0.7);
+}
+
+/* ===== Task Card ===== */
+.task-card {
+  background: navy;
+  width: 90%;
+  min-height: 80px;
+  border-radius: 20px;
+  margin: 15px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 20px;
+  gap: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 6px 15px rgba(0,0,0,0.4);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.task-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+}
+
+/* ===== Task Name ===== */
+.task-card .task-name {
+  font-size: 18px;
+  color: #ffffff;
+  font-weight: 500;
+  flex: 2;
+  margin-left: -20px;
+}
+
+/* ===== Task Prize ===== */
+.task-card .task-prize {
+  font-size: 23px;
+  color: #FFD700;
+  font-weight: bold;
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* ===== Task Link Button ===== */
+.task-card .task-link {
+  background: #FF4C4C;
+  color: white;
+  border-radius: 15px;
+  padding: 10px 15px;
+  text-align: center;
+  text-decoration: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s ease, transform 0.2s ease;
+  flex: 1;
+  margin-left: -20px;
+  position: relative;
+  left: 20px;
+  top: -3px;
+}
+
+.task-card .task-link:hover {
+  background: #FF1F1F;
+  transform: scale(1.05);
 }
