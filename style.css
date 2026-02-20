@@ -199,36 +199,45 @@ background: #000;
  }
  
 
- .progres-ads{
-   background: black;
-   position: absolute;
-   top: 30%;
-   left: 15%;
-   text-align: center;
-   width: 70%;
-   padding: 20px ;
-   border-radius: 20px;
-   display: flex;
-   flex-direction: column;
-   height: 160px;
+ .progres-ads {
+  background: linear-gradient(145deg, #0f0f0f, #1b1b1b);
+  position: absolute;
+  top: 30%;
+  left: 15%;
+  text-align: center;
+  width: 70%;
+  max-width: 350px;
+  padding: 25px;
+  border-radius: 25px;
+  display: flex;
+  flex-direction: column;
+  height: 170px;
   align-items: center;
-  transition: 0.7s;
-  box-shadow: 0px 0.4px 2px 1px #3A3C53;
-   justify-content: space-between;
+  justify-content: center;
+  gap: 20px;
+  transition: 0.4s ease;
+  box-shadow:
+    0 10px 25px rgba(0, 0, 0, 0.6),
+    inset 0 1px 1px rgba(255, 255, 255, 0.05);
+}
 
+.progres-ads:hover {
+  transform: scale(1.03);
+}
 
- }
- .progres-ads :nth-child(1){
-   color: white;
-   font-weight: bold;
-   position: relative;
-   bottom: 20px;
-   letter-spacing: 5px;
-   font-size: 20px;
+.progres-ads :nth-child(1) {
+  color: white;
+  font-weight: bold;
+  letter-spacing: 5px;
+  font-size: 22px;
   font-family: DynaPuff;
-   padding: 0 3px;
-   border-radius: 10px;
- }
+  padding: 5px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  position: relative;
+  top: -60px;
+}
+
  #progres{
    color: gold;
    font-family: DynaPuff;
@@ -414,6 +423,8 @@ font-weight: bold;
   border-radius: 50%;
   position: fixed;
   left: 35%;
-  top: 20%;
+  top: 5%;
  
 }
+
+

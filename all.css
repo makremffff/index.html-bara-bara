@@ -3,6 +3,8 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Google+Sans+Code:ital,wght@0,300..800;1,300..800&display=swap');
 
+@import url('https://fonts.googleapis.com/css2?family=Aleo:ital,wght@0,100..900;1,100..900&display=swap');
+
 
 .ads{
   display: flex;
@@ -40,19 +42,19 @@ letter-spacing: 1px;
  position: relative;
  background: #DD919;
  border-radius: 15px;
-top: -25px;
-left: 32%;
+top: 5px;
+left: -2%;
 
 
 }
 
 .balance-container .balance{
  position: relative;
- top: 10px;
- left: 0px;
- font-size: 20px;
- color: gray;
- font-family: DynaPuff;
+ top: 27px;
+ left: -30px;
+ font-size: 15px;
+ color: #717CFF;
+ font-family: Story Script;
  letter-spacing: 2px;
 }
 
@@ -263,13 +265,13 @@ top: 60%;
   position: absolute;
   top: 40%;
   left: 0%;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: bold;
   color: #ffeedd;
   background: ;
   border-radius: 10px;
   padding: 10px 10px;
-  font-family: Google+Sans+Code;
+  font-family:  "Aleo", serif;
   letter-spacing: 2.3px;
   background: black;
   height: 60vh;
@@ -282,7 +284,7 @@ top: 60%;
   width: 90%;
   color: #AFB5FF;
   font-size: 15px;
-  font-family: DynaPuff;
+  font-family: "Aleo", serif;
   text-align: center;
   border-radius: 15px;
   padding: 5px 0;
@@ -397,27 +399,28 @@ padding: 10px 4px;
 }
 .taskbalance-container .balance{
   position: relative;
- top: 10px;
- left: 0px;
+ top: 30px;
+ left: -30px;
  font-size: 15px;
- color: gray;
- font-family: DynaPuff;
- font-weight: bold;
+ color: #717CFF;
+ font-family: Story Script;
  letter-spacing: 1px;
+
+
 
 
 }
 .task-balance{
   height: fit-content;
- width: 30%;
+ width: 50%;
  padding: 7px;
  display: flex;
  align-items: start;
  position: relative;
  background: #DD919;
  border-radius: 15px;
-top: -24px;
-left: 32%;
+top: 25px;
+left: -2%;
 
 
 }
