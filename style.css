@@ -49,11 +49,11 @@ a{
 
 
 #adsnotifi{
-  color: navy;
+  color: white;
   min-width: fit-content;
   font-size: 23px;
   font-family: DynaPuff;
-  background: papayawhip;
+  background: black;
   height: fit-content;
   padding: 5px 50px;
   padding-bottom: 60px;
@@ -200,7 +200,7 @@ background: #000;
  
 
  .progres-ads{
-   background: linear-gradient(black,#2A2C37,black);
+   background: black;
    position: absolute;
    top: 30%;
    left: 15%;
@@ -406,4 +406,14 @@ z-index: 9999;
 text-align: center;
 font-weight: bold;
 
+}
+.user-fhoto{
+  width: 95px;
+  height: 95px;
+  border: navy solid 0.5px;
+  border-radius: 50%;
+  position: fixed;
+  left: 35%;
+  top: 20%;
+ 
 }
