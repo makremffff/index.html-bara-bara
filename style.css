@@ -62,7 +62,7 @@ a{
   position: relative;
   left: 10%;
   top: -50%;
-  display: none;
+  display: one;
 transition: 0.3s linear;
 z-index: 9999;
 text-align: center;
@@ -233,9 +233,9 @@ background: #000;
   font-family: DynaPuff;
   padding: 5px 12px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
   position: relative;
   top: -60px;
+  
 }
 
  #progres{
@@ -246,10 +246,11 @@ background: #000;
    lft: 35%;
    top: 43%;
    letter-spacing: 3px;
-   background: #3E3F4D;
+   bakground: #3E3F4D;
    border-radius: 10px;
    padding: 7px;
-     box-shadow: 0px 5px 0px  #494A58;
+    background: rgba(255, 255, 255, 0.05);
+
 
  }
  .btnSumbit{
@@ -419,12 +420,18 @@ font-weight: bold;
 .user-fhoto{
   width: 95px;
   height: 95px;
-  border: navy solid 0.5px;
+  border: navy solid 0.1px;
   border-radius: 50%;
   position: fixed;
   left: 35%;
-  top: 5%;
+  top: 2%;
  
 }
-
+.user-name{
+  position: fixed;
+  top: 18%;
+  left: 39%;
+  font-size: 22px;
+  color: gold;
+}
 

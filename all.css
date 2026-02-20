@@ -47,15 +47,20 @@ left: -2%;
 
 
 }
+.balance-container{
+ 
+}
 
 .balance-container .balance{
  position: relative;
- top: 27px;
+ top: 30px;
  left: -30px;
  font-size: 15px;
  color: #717CFF;
  font-family: Story Script;
  letter-spacing: 2px;
+   background: rgba(255, 255, 255, 0.05);
+
 }
 
 .user-balance span{
@@ -67,7 +72,7 @@ left: -2%;
  width: fit-content;
  border-radius: 10px;
  padding: 4px;
- text-shadow: 0px 1.7px 1px ;
+ font-weight: bold;
  font-family: DynaPuff;
 }
 #adsbtnn{
@@ -399,12 +404,13 @@ padding: 10px 4px;
 }
 .taskbalance-container .balance{
   position: relative;
- top: 30px;
+ top: 35px;
  left: -30px;
  font-size: 15px;
  color: #717CFF;
  font-family: Story Script;
  letter-spacing: 1px;
+  background: rgba(255, 255, 255, 0.05);
 
 
 
@@ -419,7 +425,7 @@ padding: 10px 4px;
  position: relative;
  background: #DD919;
  border-radius: 15px;
-top: 25px;
+top: 45px;
 left: -2%;
 
 
@@ -432,7 +438,7 @@ left: -2%;
  width: fit-content;
  border-radius: 10px;
  padding: 4px;
- text-shadow: 0px 1.7px 1px ;
+ font-weight: bold;
  font-family: DynaPuff;
 font-size: 25px;
 }
