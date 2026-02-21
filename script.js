@@ -122,13 +122,6 @@ async function updateUserBalance() {
     ADS = res.balance;
     dailyProgres = 100 - res.dailyAds;
 
-    if (userbalancce) {
-      userbalancce.innerHTML = `
-        <img src="coins.png" style="width:20px; vertical-align:middle;">
-        ${ADS}
-      `;
-    }
-
     let progres = document.getElementById("progres");
     if (progres) {
       progres.textContent = dailyProgres;
@@ -326,23 +319,37 @@ async function loadTasks() {
     let taskcontainer = document.querySelector(".task-container");
     if (!taskcontainer) return;
 
-    taskcontainer.innerHTML = '';
+    taskcontainer.textContent = '';
 
     if (res.tasks && res.tasks.length > 0) {
       res.tasks.forEach(task => {
         let taskcard = document.createElement("div");
         taskcard.className = "task-card";
 
-        taskcard.innerHTML = `
-          <span class="task-name">${task.name}</span>
-          <span class="task-prize">${task.reward} <img src="coins.png" width="25"></span>
-          <a class="task-link" href="${task.link}" target="_blank">start</a>
-        `;
+        let taskName = document.createElement("span");
+        taskName.className = "task-name";
+        taskName.textContent = task.name;
 
+        let taskPrize = document.createElement("span");
+        taskPrize.className = "task-prize";
+        taskPrize.textContent = task.reward + " ";
+        
+        let prizeImg = document.createElement("img");
+        prizeImg.src = "coins.png";
+        prizeImg.width = "25";
+        taskPrize.appendChild(prizeImg);
+
+        let taskLink = document.createElement("a");
+        taskLink.className = "task-link";
+        taskLink.href = task.link;
+        taskLink.target = "_blank";
+        taskLink.textContent = "start";
+
+        taskcard.appendChild(taskName);
+        taskcard.appendChild(taskPrize);
+        taskcard.appendChild(taskLink);
         taskcontainer.appendChild(taskcard);
       });
-    } else {
-      taskcontainer.innerHTML = '<p>لا توجد مهام حالياً</p>';
     }
   }
 }
@@ -419,12 +426,28 @@ creatTask.addEventListener("click", async function(){
     let taskcard = document.createElement("div");
     taskcard.className = "task-card";
 
-    taskcard.innerHTML = `
-      <span class="task-name">${nametask}</span>
-      <span class="task-prize">30 <img src="coins.png" width="25"></span>
-      <a class="task-link" href="${linktask}" target="_blank">start</a>
-    `;
+    let taskName = document.createElement("span");
+    taskName.className = "task-name";
+    taskName.textContent = nametask;
 
+    let taskPrize = document.createElement("span");
+    taskPrize.className = "task-prize";
+    taskPrize.textContent = "30 ";
+    
+    let prizeImg = document.createElement("img");
+    prizeImg.src = "coins.png";
+    prizeImg.width = "25";
+    taskPrize.appendChild(prizeImg);
+
+    let taskLink = document.createElement("a");
+    taskLink.className = "task-link";
+    taskLink.href = linktask;
+    taskLink.target = "_blank";
+    taskLink.textContent = "start";
+
+    taskcard.appendChild(taskName);
+    taskcard.appendChild(taskPrize);
+    taskcard.appendChild(taskLink);
     taskcontainer.appendChild(taskcard);
 
     document.getElementById("taskNameInput").value = '';
@@ -467,13 +490,27 @@ document.addEventListener("DOMContentLoaded", async function () {
   const userNameContainer = document.querySelector(".user-name");
 
   if (photoUrl) {
-    userPhotoContainer.innerHTML =
-      '<img src="' + photoUrl + '" style="width:95px;height:95px;border-radius:50%;">';
+    userPhotoContainer.textContent = '';
+    const img = document.createElement('img');
+    img.src = photoUrl;
+    img.style.width = "95px";
+    img.style.height = "95px";
+    img.style.borderRadius = "50%";
+    userPhotoContainer.appendChild(img);
   } else {
-    userPhotoContainer.innerHTML =
-      '<div style="width:80px;height:80px;border-radius:50%;background:#444;color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;">' +
-      firstName.charAt(0) +
-      "</div>";
+    userPhotoContainer.textContent = '';
+    const div = document.createElement('div');
+    div.style.width = "80px";
+    div.style.height = "80px";
+    div.style.borderRadius = "50%";
+    div.style.background = "#444";
+    div.style.color = "#fff";
+    div.style.display = "flex";
+    div.style.alignItems = "center";
+    div.style.justifyContent = "center";
+    div.style.fontSize = "30px";
+    div.textContent = firstName.charAt(0);
+    userPhotoContainer.appendChild(div);
   }
 
   if (userNameContainer) {
