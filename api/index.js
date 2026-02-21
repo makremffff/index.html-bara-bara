@@ -5,7 +5,6 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  // If these env vars are missing, throw early so developer notices
   console.error("Missing SUPABASE environment variables.");
 }
 
@@ -14,7 +13,6 @@ function eqFilter(field, value) {
   if (typeof value === "number" || (/^\d+$/.test(String(value)))) {
     return `${field}=eq.${value}`;
   }
-  // escape single quotes by doubling them per PostgREST requirements
   const escaped = String(value).replace(/'/g, "''");
   return `${field}=eq.'${escaped}'`;
 }
@@ -47,7 +45,6 @@ async function supabaseRequest(path, options = {}) {
 
     return res.status === 204 ? null : res.json();
   } catch (e) {
-    // Bubble up with context
     throw new Error(`Supabase request failed (${url}): ${e.message || String(e)}`);
   }
 }
@@ -80,11 +77,9 @@ export default async function handler(req, res) {
 
       const today = new Date().toISOString().split("T")[0];
 
-      // Check if user exists
       const existing = await supabaseRequest(`users?${eqFilter("id", id)}&select=*`);
 
       if (!existing || existing.length === 0) {
-        // Create new user with initial values. Save referrer if provided.
         const created = await supabaseRequest("users", {
           method: "POST",
           body: JSON.stringify({
@@ -103,7 +98,6 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, created: Array.isArray(created) ? created[0] : created });
       }
 
-      // If user exists, but a referrerId is provided and the user doesn't already have a referrer, set it (prevent self-referral)
       const user = existing[0];
       if (referrerId && !user.referrer_id && String(user.id) !== String(referrerId)) {
         try {
@@ -152,7 +146,7 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // Reward User (Save Balance + Ads) and handle referral activation
+    // Reward User -> now calls atomic RPC reward_user
     // ===============================
     if (type === "rewardUser") {
       const { userId, amount } = data || {};
@@ -165,104 +159,28 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing amount" });
       }
 
-      const result = await supabaseRequest(
-        `users?${eqFilter("id", userId)}&select=*`
-      );
-
-      if (!result || result.length === 0) {
-        return res.status(404).json({ success: false, error: "User not found" });
-      }
-
-      let user = result[0];
-      const today = new Date().toISOString().split("T")[0];
-
-      let dailyAds = user.daily_ads || 0;
-      if (user.last_ad_date !== today) {
-        dailyAds = 0;
-      }
-
-      const DAILY_LIMIT = 100;
-
-      if (dailyAds >= DAILY_LIMIT) {
-        return res.status(400).json({
-          success: false,
-          error: "Daily limit reached",
-          dailyAds
+      // Call the Postgres function we created: public.reward_user(p_user_id text, p_amount numeric)
+      try {
+        const rpcPayload = { p_user_id: String(userId), p_amount: Number(amount) };
+        const rpcRes = await supabaseRequest(`rpc/reward_user`, {
+          method: "POST",
+          body: JSON.stringify(rpcPayload)
         });
-      }
 
-      const parsedAmount = Number(amount) || 0;
-      const newBalance = (Number(user.balance) || 0) + parsedAmount;
-      const newAdsWatched = (Number(user.ads_watched) || 0) + 1;
-      const newDailyAds = dailyAds + 1;
+        // rpcRes should be a JSONB object or array depending on Supabase; normalize to object
+        let rpcObj = Array.isArray(rpcRes) && rpcRes.length > 0 ? rpcRes[0] : rpcRes;
 
-      // Update the user's balance and ad counters
-      const updatedUser = await supabaseRequest(
-        `users?${eqFilter("id", userId)}`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({
-            balance: newBalance,
-            ads_watched: newAdsWatched,
-            daily_ads: newDailyAds,
-            last_ad_date: today
-          })
+        // If rpc returned error structure
+        if (!rpcObj || rpcObj.success === false) {
+          return res.status(400).json({ success: false, error: rpcObj && rpcObj.error ? rpcObj.error : "Reward failed", details: rpcObj });
         }
-      );
 
-      // Check referral activation: if the user was referred and not already activated, and has reached 10 watched ads
-      let referralActivated = false;
-      let inviterRewarded = false;
-      let inviterId = user.referrer_id || null;
-      let inviterNewBalance = null;
-
-      if (inviterId && !user.referral_active) {
-        // Determine total ads watched after increment (we used newAdsWatched)
-        if (newAdsWatched >= 10) {
-          // Reward inviter with 100 coins
-          try {
-            // Fetch inviter current balance
-            const inviterRes = await supabaseRequest(`users?${eqFilter("id", inviterId)}&select=balance`);
-            if (inviterRes && inviterRes.length > 0) {
-              const inviter = inviterRes[0];
-              const inviterBalance = Number(inviter.balance) || 0;
-              inviterNewBalance = inviterBalance + 100;
-
-              // Update inviter balance
-              await supabaseRequest(`users?${eqFilter("id", inviterId)}`, {
-                method: "PATCH",
-                body: JSON.stringify({ balance: inviterNewBalance })
-              });
-
-              // Mark referral as activated on the referred user
-              await supabaseRequest(`users?${eqFilter("id", userId)}`, {
-                method: "PATCH",
-                body: JSON.stringify({ referral_active: true })
-              });
-
-              referralActivated = true;
-              inviterRewarded = true;
-            } else {
-              console.warn("Inviter not found when attempting to reward inviterId=", inviterId);
-            }
-          } catch (e) {
-            // If inviter update failed, log but continue
-            console.error("Failed to reward inviter:", e);
-          }
-        }
+        // Return RPC response directly to client
+        return res.status(200).json(Object.assign({ success: true }, rpcObj));
+      } catch (e) {
+        console.error("RPC reward_user failed:", e);
+        return res.status(500).json({ success: false, error: "Server failed to reward user", details: e.message || String(e) });
       }
-
-      // return updated state, include inviterNewBalance when available for client-side visibility
-      return res.status(200).json({
-        success: true,
-        balance: newBalance,
-        adsWatched: newAdsWatched,
-        dailyAds: newDailyAds,
-        referralActivated,
-        inviterRewarded,
-        inviterId: referralActivated ? inviterId : null,
-        inviterNewBalance: inviterNewBalance !== null ? inviterNewBalance : null
-      });
     }
 
     // ===============================
