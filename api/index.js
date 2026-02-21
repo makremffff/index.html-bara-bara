@@ -281,6 +281,38 @@ export default async function handler(req, res) {
     }
 
     // ===============================
+    // Get Referrals counts for inviter (active / pending)
+    // ===============================
+    if (type === "getReferrals") {
+      const { userId } = data || {};
+
+      if (!userId) {
+        return res.status(400).json({ success: false, error: "Missing userId" });
+      }
+
+      const referrals = await supabaseRequest(`users?referrer_id=eq.${userId}&select=referral_active`);
+
+      if (!referrals) {
+        return res.status(200).json({ success: true, active: 0, pending: 0 });
+      }
+
+      let active = 0;
+      let total = 0;
+      referrals.forEach(r => {
+        total++;
+        if (r.referral_active) active++;
+      });
+
+      const pending = total - active;
+
+      return res.status(200).json({
+        success: true,
+        active,
+        pending
+      });
+    }
+
+    // ===============================
     // Unknown Action
     // ===============================
     return res.status(400).json({
