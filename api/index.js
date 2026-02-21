@@ -197,7 +197,7 @@ export default async function handler(req, res) {
 
       if (inviterId && !user.referral_active) {
         // Determine total ads watched after increment (we used newAdsWatched)
-        if (newAdsWatched >= 1) {
+        if (newAdsWatched >= 10) {
           // Reward inviter with 100 coins
           try {
             // Fetch inviter current balance
