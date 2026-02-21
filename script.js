@@ -1,10 +1,10 @@
 /* =======================
    أزرار التنقّل
 ======================= */
-let btnMain   = document.querySelector("button");
-let btnTask   = document.getElementById("btn2");
-let btnWallet = document.getElementById("btn3");
-let btnshare  = document.getElementById("sharebtn");
+let btnMain    = document.querySelector("button");
+let btnTask    = document.getElementById("btn2");
+let btnWallet  = document.getElementById("btn3");
+let btnshare   = document.getElementById("sharebtn");
 let bntaddTask = document.getElementById("addtask");
 
 /* =======================
@@ -22,12 +22,12 @@ let addTaskpage = document.getElementById("addTask");
 let loadpage = document.getElementById("loading");
 let pagename = document.getElementById("page-load");
 
-let userBalanceEl = document.querySelector('.user-balance'); // عنصر عرض رصيد المستخدم (الصفحة الرئيسية إن وجد)
-let walletBalanceEl = document.getElementById("adsbalancce"); // عنصر المحفظة
-let adsBalanceEl = document.getElementById("adsbalance"); // عنصر آخر لعرض الرصيد إن وجد
-let adsNotfi   = document.getElementById("adsnotifi");
-let progres = document.getElementById("progres");
-let barbtn = document.querySelector(".bar");
+let userbalancce    = document.querySelector('.user-balance'); // عنصر عرض رصيد في الصفحة الرئيسية (اسم كما في ملفك الأصلي)
+let walletbalance   = document.getElementById("adsbalancce");  // عنصر عرض رصيد المحفظة
+let adsBalance      = document.getElementById("adsbalance");   // عنصر آخر لعرض الرصيد إن وُجد
+let adsNotfi        = document.getElementById("adsnotifi");
+let progres         = document.getElementById("progres");
+let barbtn          = document.querySelector(".bar");
 
 /* =======================
    الأصوات
@@ -36,17 +36,19 @@ let soundbtn  = document.getElementById("soundbtn");
 let soundads  = document.getElementById("soundads");
 
 /* =======================
-   API CENTRAL HANDLER
-   - يرسل userId من localStorage تلقائياً
+   حالة واحدة مشتركة (state)
+   - userId, balance, dailyAds
+   - لا تستخدم متغيرات مكررة مثل ADS
 ======================= */
-const API_ENDPOINT = "/api";
-
 const state = {
   userId: null,
-  balance: null,   // null يعني لم يُحمّل بعد
+  balance: null,   // null = لم يتم جلبه بعد
   dailyAds: null
 };
 
+/* =======================
+   localStorage helpers لحفظ userId
+======================= */
 function getStoredUserId() {
   try {
     return localStorage.getItem("tg_user_id");
@@ -54,16 +56,20 @@ function getStoredUserId() {
     return null;
   }
 }
-
 function setStoredUserId(id) {
   try {
     if (id != null) localStorage.setItem("tg_user_id", String(id));
   } catch (e) {}
 }
 
+/* =======================
+   API CENTRAL HANDLER
+   - يرسل userId تلقائياً إذا وُجد في state أو localStorage
+======================= */
+const API_ENDPOINT = "/api";
+
 async function fetchApi({ type, data = {} }) {
   try {
-    // attach userId automatically when available and not explicitly provided
     const stored = getStoredUserId();
     if (stored && !data.userId) {
       data.userId = stored;
@@ -80,7 +86,6 @@ async function fetchApi({ type, data = {} }) {
     const result = await response.json();
 
     if (!response.ok) {
-      // Normalize error shape
       return { success: false, error: result.error || result || "Network response was not ok" };
     }
 
@@ -96,14 +101,12 @@ async function fetchApi({ type, data = {} }) {
    AdsGram SDK Initialization
 ======================= */
 let AdsGramController = null;
-
 if (window.Adsgram && typeof window.Adsgram.init === "function") {
   AdsGramController = window.Adsgram.init({ blockId: "int-20679" });
 }
 
 /* =======================
    دالة إخفاء كل الصفحات
-   (تحافظ على الميزات كما هي)
 ======================= */
 function showPage(btnpage) {
 
@@ -117,10 +120,10 @@ function showPage(btnpage) {
 
   loadpage.style.display = "block";
   pagename.textContent = "Loading";
-  barbtn.style.display = 'none';
+  if (barbtn) barbtn.style.display = 'none';
 
   setTimeout(function(){
-    barbtn.style.display = 'block';
+    if (barbtn) barbtn.style.display = 'block';
   }, 2000);
 
   if (soundbtn) {
@@ -136,65 +139,58 @@ function showPage(btnpage) {
 }
 
 /* =======================
-   Utility: تحديث نص الرصيد دون innerHTML
-   - استخدام textContent فقط
-   - لا تضيف عناصر HTML جديدة
-   - لا تغير بنية DOM
-   - إذا كان عنصر الرصيد يحتوي على عقدة نصية موجودة نحدثها، أما إن لم تكن موجودة فسنجري تعيين نصي (fallback)
+   تحديث نص الرصيد بطريقة آمنة (بدون innerHTML)
+   - نحاول تحديث عنصر داخلي مخصص إن وُجد [data-balance-value] أو .balance-number
+   - إن لم يوجد، نحدّث عقدة نصية داخل العنصر إن وُجدت لإبقاء الصور/العناصر الأخرى كما هي
+   - كخيار أخير نحدث textContent (قد يستبدل المحتوى)
+   - لا نضيف عناصر HTML جديدة ولا نغيّر بنية DOM
 ======================= */
-function setBalanceText(el, value) {
+function updateBalanceInElement(el, value) {
   if (!el) return;
 
-  // حاول إيجاد عنصر داخلي مخصص لقيمة الرصيد
-  const candidateSelectors = [
-    '[data-balance-value]',
-    '.balance-value',
-    '.ads-value',
-    '.user-balance-value'
-  ];
-
-  for (let sel of candidateSelectors) {
-    const child = el.querySelector && el.querySelector(sel);
-    if (child) {
-      child.textContent = String(value);
-      return;
-    }
-  }
-
-  // إذا وُجدت عقدة نصية (Text node) داخل العنصر عدّلها بدلاً من استبدال الـ innerHTML
-  const textNode = Array.from(el.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
-  if (textNode) {
-    // حافظ إن كان هناك ثوابت نصية قبل/بعد، فنحدث قيمة العقدة النصية فقط
-    textNode.nodeValue = ' ' + String(value);
+  // 1) عنصر داخلي مخصص للقيمة
+  const inner = el.querySelector && (el.querySelector('[data-balance-value]') || el.querySelector('.balance-number'));
+  if (inner) {
+    inner.textContent = String(value);
     return;
   }
 
-  // كملاذ أخير: حدّث textContent (هذا قد يستبدل المحتوى الموجود)
-  // نستخدمه كخيار أخير لأن بعض الشاشات قد لا تحتوي نصاً افتراضياً، وفي هذه الحالة نحتاج لعرض القيمة.
+  // 2) البحث عن عقدة نصية داخل العنصر (نحافظ على العناصر الأخرى مثل الصور)
+  const textNodes = Array.from(el.childNodes).filter(n => n.nodeType === Node.TEXT_NODE);
+  if (textNodes.length > 0) {
+    // اختر عقدة نصية تحتوي أرقام إن وُجدت، وإلا اختر الأخيرة
+    let target = textNodes.find(n => /\d/.test(n.nodeValue));
+    if (!target) target = textNodes[textNodes.length - 1];
+    target.nodeValue = ' ' + String(value);
+    return;
+  }
+
+  // 3) كخيار أخير: نعيد ضبط النص (هذا قد يستبدل المحتوى، لكنه حل احتياطي)
   el.textContent = String(value);
 }
 
 /* =======================
-   دالة موحدة لتحديث واجهة الرصيد
-   - اسم الدالة ثابت كما طُلِب: updateBalanceUI(balance, dailyAds)
+   الدالة الموحدة لتحديث الواجهة: updateBalanceUI(balance, dailyAds)
+   - تحفظ الحالة وتحدّث كل عناصر الرصيد
    - لا تستخدم innerHTML لتحديث الرصيد
-   - تُحدّث جميع العناصر المتعلقة بالرصيد
 ======================= */
 function updateBalanceUI(balance, dailyAds) {
-  // حفظ الحالة محلياً
-  state.balance = (typeof balance === "number") ? balance : Number(balance) || 0;
-  state.dailyAds = (typeof dailyAds === "number") ? dailyAds : (dailyAds != null ? Number(dailyAds) : state.dailyAds);
+  // normalize values
+  const b = (typeof balance === "number") ? balance : (balance != null ? Number(balance) : null);
+  const d = (typeof dailyAds === "number") ? dailyAds : (dailyAds != null ? Number(dailyAds) : null);
 
-  // تحديث كل عناصر الواجهة التي تعرض الرصيد
-  // لا تضف صور عبر JS؛ لا تستخدم innerHTML هنا
-  setBalanceText(userBalanceEl, state.balance);
-  setBalanceText(walletBalanceEl, state.balance);
-  setBalanceText(adsBalanceEl, state.balance);
+  if (b != null && !Number.isNaN(b)) state.balance = b;
+  if (d != null && !Number.isNaN(d)) state.dailyAds = d;
 
-  // تحديث عنصر التقدّم اليومي إن وجد
+  // تحديث عناصر الواجهة المرتبطة بالرصيد
+  updateBalanceInElement(userbalancce, state.balance != null ? state.balance : "");
+  updateBalanceInElement(walletbalance, state.balance != null ? state.balance : "");
+  updateBalanceInElement(adsBalance, state.balance != null ? state.balance : "");
+
+  // تحديث تقدم الإعلانات اليومية إن وُجد
   if (progres) {
     const DAILY_LIMIT = 100;
-    let remaining = DAILY_LIMIT - (Number(state.dailyAds) || 0);
+    let remaining = (state.dailyAds != null) ? (DAILY_LIMIT - Number(state.dailyAds)) : DAILY_LIMIT;
     if (remaining < 0) remaining = 0;
     progres.textContent = String(remaining);
   }
@@ -219,7 +215,7 @@ if (btnWallet) {
   btnWallet.addEventListener("click", async function () {
     showPage(walletPage);
 
-    // مباشرة استدعاء getBalance وتحديث الواجهة عبر الدالة الموحدة
+    // جلب الرصيد بعد الانتقال للصفحة وتحديث الواجهة عبر الدالة الموحدة
     const res = await fetchApi({ type: "getBalance" });
 
     if (res.success) {
@@ -244,15 +240,14 @@ if (bntaddTask) {
 
 /* =======================
    أزرار الإعلانات + الرصيد
-   - المحافظة على المنطق الحالي، مع استخدام updateBalanceUI
-   - إزالة المتغيرات المتضاربة (مثل ADS)
+   - نحافظ على باقي المنطق (مؤقت، حد يومي، أصوات، إشعارات)
+   - عند مكافأة المستخدم نحدث الواجهة باستخدام updateBalanceUI فقط
 ======================= */
-const adsBtn     = document.getElementById("adsbtn");
-const adsBtnn    = document.getElementById("adsbtnn");
+const adsBtn = document.getElementById("adsbtn");
+const adsBtnn = document.getElementById("adsbtnn");
 
 let timer = null;
 let dailyLimit = null;
-let dailyProgres = 100;
 let progresLimit = 24 * 60 * 60;
 
 let adCooldown = false;
@@ -315,12 +310,12 @@ if (adsBtn) {
         });
 
         if (res.success) {
-          // Server returned balance/dailyAds — استخدم الدالة الموحدة
+          // استخدم الدالة الموحدة لتحديث الرصيد/التقدّم
           updateBalanceUI(Number(res.balance) || state.balance || 0, res.dailyAds);
         } else {
           console.warn("rewardUser failed:", res.error);
           if (res.error && res.error.toString().toLowerCase().includes("daily limit")) {
-            // reflect limit in UI
+            // reflect limit in UI (محافظة على المنطق الأصلي)
             if (adsBtn) adsBtn.style.display = 'none';
             if (adsBtnn) {
               adsBtnn.style.display = 'block';
@@ -342,15 +337,14 @@ if (adsBtn) {
                 if (adsBtn) adsBtn.style.display = 'block';
 
                 progresLimit = 24 * 60 * 60;
-                dailyProgres = 100;
-                if (progres) progres.textContent = String(dailyProgres);
+                if (progres) progres.textContent = String(100);
               }
 
             }, 1000);
           }
         }
 
-        // UI feedback for success (or even for failure it's fine to show)
+        // صوت وإشعار كما في الكود الأصلي
         if (res.success) {
           try {
             if (soundads) {
@@ -358,7 +352,6 @@ if (adsBtn) {
               soundads.play();
             }
           } catch (e) {}
-          // visual notification (existing element)
           if (adsNotfi) {
             adsNotfi.style.display = "block";
             adsNotfi.style.opacity = "0.8";
@@ -390,7 +383,7 @@ if (adsBtn) {
         if (adsBtnn) adsBtnn.style.display = "none";
         if (adsBtn) adsBtn.style.display  = "block";
 
-        // if dailyProgres depleted, set long cooldown
+        // إذا استنفدت الحصة اليومية حسب state.dailyAds
         if (state.dailyAds != null) {
           const DAILY_LIMIT = 100;
           let remaining = DAILY_LIMIT - (Number(state.dailyAds) || 0);
@@ -416,8 +409,7 @@ if (adsBtn) {
                 if (adsBtn) adsBtn.style.display = 'block';
 
                 progresLimit = 24 * 60 * 60;
-                dailyProgres = 100;
-                if (progres) progres.textContent = String(dailyProgres);
+                if (progres) progres.textContent = String(100);
               }
 
             }, 1000);
@@ -427,7 +419,7 @@ if (adsBtn) {
 
     }, 1000);
 
-    // Show the ad(s) — showSingleAd handles cooldowns itself
+    // عرض الإعلان / الإعلانات
     await showSingleAd();
     await showSingleAd();
     await showSingleAd();
@@ -492,6 +484,7 @@ if (copyrefal) {
 
 /* =======================
    إضافة مهمة جديدة
+   - يبقى كما في الأصل (يستخدم innerHTML لإنشاء كرت المهمة كما كان)
 ======================= */
 let creatTask = document.getElementById("creatTask");
 
@@ -515,7 +508,6 @@ if (creatTask) {
       let taskcard = document.createElement("div");
       taskcard.className = "task-card";
 
-      // لا نغيّر شكل DOM الأصلي بشكل جوهري — نستخدم نفس البنية المستخدمة سابقاً
       taskcard.innerHTML = `
       <span class="task-name">${nametask}</span>
       <span class="task-prize">30 <img src="coins.png" width="25"></span>
@@ -535,22 +527,22 @@ if (creatTask) {
 
 /* =======================
    Telegram WebApp User Data
-   - important: ensure syncUser runs first, then getBalance
-   - save userId to localStorage
-   - do not show default 0 before server responds
+   - ضمان تنفيذ syncUser أولاً ثم getBalance
+   - حفظ userId في localStorage
+   - عدم عرض قيمة افتراضية 0 قبل وصول بيانات السيرفر
+   - استخدام updateBalanceUI لتحديث كل أماكن الرصيد
 ======================= */
 document.addEventListener("DOMContentLoaded", async function () {
 
-  // إذا لم توجد واجهة تيليجرام، لا ننفّذ المزامنة التلقائية لكن نستخ��م أي معرف مخزن
+  // استخدم معرف مخزن إن وُجد
   const storedId = getStoredUserId();
   if (storedId) {
     state.userId = storedId;
   }
 
+  // إذا لم توجد واجهة تيليجرام، حاول جلب الرصيد فقط إذا وُجد userId مخزن
   if (typeof window.Telegram === "undefined") {
-    // If Telegram WebApp not present, we still try to fetch balance if we have stored userId.
     if (state.userId) {
-      // لا نعرض أي قيمة افتراضية 0 — ندع التحديث يتم عبر الدالة الموحدة عند وصول البيانات
       const res = await fetchApi({ type: "getBalance" });
       if (res.success) {
         updateBalanceUI(Number(res.balance) || 0, res.dailyAds);
@@ -563,14 +555,13 @@ document.addEventListener("DOMContentLoaded", async function () {
   tg.ready();
   try { tg.expand(); } catch (e) {}
 
-  // تأكد من وجود بيانات المستخدم المرسلة من تيليجرام
   if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
     const user = tg.initDataUnsafe.user;
     const userId = user.id;
     const firstName = user.first_name ? user.first_name : "";
     const photoUrl = user.photo_url ? user.photo_url : "";
 
-    // حفظ userId في الstate و localStorage
+    // حفظ userId في state و localStorage
     state.userId = userId;
     setStoredUserId(userId);
 
@@ -584,7 +575,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       }
     });
 
-    // ثم مباشرةً: جلب الرصيد/الإحصاءات وتحديث الواجهة عبر الدالة الموحدة
+    // ثم مباشرة: جلب الرصيد وتحديث الواجهة عبر الدالة الموحدة
     const res = await fetchApi({ type: "getBalance" });
     if (res.success) {
       updateBalanceUI(Number(res.balance) || 0, res.dailyAds);
@@ -592,12 +583,11 @@ document.addEventListener("DOMContentLoaded", async function () {
       console.warn("Initial getBalance failed:", res.error);
     }
 
-    // تحديث عرض صورة واسم المستخدم (يبقى كما في السابق)
+    // تحديث عرض صورة واسم المستخدم كما في الأصل
     const userPhotoContainer = document.querySelector(".user-fhoto");
     const userNameContainer = document.querySelector(".user-name");
 
     if (photoUrl) {
-      // هذا لا علاقة له بتحديث الرصيد لذا يمكن استخدام innerHTML هنا كما كان سابقاً
       userPhotoContainer.innerHTML =
         '<img src="' + photoUrl + '" style="width:95px;height:95px;border-radius:50%;">';
     } else {
@@ -612,12 +602,12 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
 
     if (link) {
-      // رابط الإحالة لا يتضمن رصيد، لذلك تحديثه كما كان
+      // تحديث رابط الإحالة كما كان
       link.textContent =
         "https://t.me/Bot_ad_watchbot/earn?startapp=ref_" + userId;
     }
   } else {
-    // If Telegram exists but no user info, still try to fetch balance if stored userId exists
+    // إذا تيليجرام موجود لكن لا يحتوي على بيانات المستخدم، نحاول جلب الرصيد عبر userId المخزن
     if (state.userId) {
       const res = await fetchApi({ type: "getBalance" });
       if (res.success) updateBalanceUI(Number(res.balance) || 0, res.dailyAds);
