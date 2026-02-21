@@ -42,7 +42,8 @@ let USER_ID = null; // store Telegram user id after sync
 async function fetchApi({ type, data = {} }) {
   try {
     // attach userId automatically when available and not explicitly provided
-    if (USER_ID && (!data.userId)) {
+    if (USER_ID && (!data.userId) && (!data.id)) {
+      // attach as userId by default (server accepts either userId or id for sync)
       data.userId = USER_ID;
     }
 
@@ -466,8 +467,8 @@ document.addEventListener("DOMContentLoaded", async function () {
   // Store userId globally so subsequent API calls include it automatically
   USER_ID = userId;
 
-  // Sync user on server
-  await fetchApi({
+  // Sync user on server - server now returns the user object for immediate UI use
+  const syncRes = await fetchApi({
     type: "syncUser",
     data: {
       id: userId,
@@ -476,22 +477,46 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
   });
 
-  // Immediately fetch balance/stats to populate UI
-  const res = await fetchApi({ type: "getBalance" });
-  if (res.success) {
-    ADS = Number(res.balance) || 0;
+  let initialUser = null;
+  if (syncRes && syncRes.success) {
+    // server returns { success: true, user: { ... } }
+    if (syncRes.user) initialUser = syncRes.user;
+    else if (syncRes.created) initialUser = syncRes.created;
+  }
+
+  // If we got user data from sync response, use it to populate UI immediately.
+  // Otherwise fall back to fetching balance.
+  if (initialUser) {
+    ADS = Number(initialUser.balance) || 0;
     if (walletbalance) {
       walletbalance.innerHTML = `
       <img src="coins.png" style="width:20px; vertical-align:middle;">
       ${ADS}
       `;
     }
+
     const DAILY_LIMIT = 100;
-    dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
+    dailyProgres = DAILY_LIMIT - (Number(initialUser.daily_ads) || 0);
     if (dailyProgres < 0) dailyProgres = 0;
     if (progres) progres.textContent = dailyProgres;
   } else {
-    console.warn("Initial getBalance failed:", res.error);
+    // Immediately fetch balance/stats to populate UI
+    const res = await fetchApi({ type: "getBalance" });
+    if (res.success) {
+      ADS = Number(res.balance) || 0;
+      if (walletbalance) {
+        walletbalance.innerHTML = `
+        <img src="coins.png" style="width:20px; vertical-align:middle;">
+        ${ADS}
+        `;
+      }
+      const DAILY_LIMIT = 100;
+      dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
+      if (dailyProgres < 0) dailyProgres = 0;
+      if (progres) progres.textContent = dailyProgres;
+    } else {
+      console.warn("Initial getBalance failed:", res.error);
+    }
   }
 
   const userPhotoContainer = document.querySelector(".user-fhoto");
