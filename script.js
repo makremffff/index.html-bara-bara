@@ -34,16 +34,24 @@ let soundads  = document.getElementById("soundads");
 
 /* =======================
    API CENTRAL HANDLER
+   (keeps same client-side fetch wrapper)
 ======================= */
 const API_ENDPOINT = "/api";
 
-let USER_ID = null; // store Telegram user id after sync
+let USER_ID = null; // store Telegram user id after sync (set during DOMContentLoaded)
+let adInProgress = false; // prevent concurrent reward flows
 
 async function fetchApi({ type, data = {} }) {
   try {
-    // attach userId automatically when available and not explicitly provided
+    // Attach USER_ID automatically when available and not explicitly provided
     if (USER_ID && (!data.userId) && !data.id) {
       data.userId = USER_ID;
+    }
+
+    // Never send amount from client for rewards
+    if (type === "rewardUser" && data.hasOwnProperty("amount")) {
+      // explicitly remove any client-supplied amount to avoid tampering
+      delete data.amount;
     }
 
     const response = await fetch(API_ENDPOINT, {
@@ -138,6 +146,12 @@ if (btnWallet) {
   btnWallet.addEventListener("click", async function () {
     showPage(walletPage);
 
+    // Do not call getBalance unless USER_ID present
+    if (!USER_ID) {
+      console.warn("getBalance skipped: user not synced");
+      return;
+    }
+
     const res = await fetchApi({ type: "getBalance" });
 
     if (res && res.success) {
@@ -150,7 +164,7 @@ if (btnWallet) {
         `;
       }
 
-      // update progress (daily remaining)
+      // update progress (daily remaining) using server authoritative value
       const DAILY_LIMIT = 100;
       const remaining = DAILY_LIMIT - (Number(res.dailyAds) || 0);
       dailyProgres = remaining >= 0 ? remaining : 0;
@@ -175,6 +189,12 @@ if (bntaddTask) {
 
 /* =======================
    أزرار الإعلانات + الرصيد
+   Reworked flow:
+   - create ad session on server (returns sessionId)
+   - show the ad once
+   - send rewardUser with sessionId only
+   - client never sends amount
+   - prevent multiple concurrent reward flows
 ======================= */
 const adsBtn     = document.getElementById("adsbtn");
 const adsBtnn    = document.getElementById("adsbtnn");
@@ -214,6 +234,7 @@ function showSingleAd() {
           resolve(false);
         });
     } else {
+      // fallback: simulate ad display
       setTimeout(function(){
         setTimeout(function(){
           adCooldown = false;
@@ -224,10 +245,34 @@ function showSingleAd() {
   });
 }
 
+async function createAdSessionOnServer() {
+  // ask server to create a server-side session and return sessionId
+  const res = await fetchApi({ type: "createAdSession" });
+  if (res && res.success && res.sessionId) return res.sessionId;
+  return null;
+}
+
 if (adsBtn) {
   adsBtn.addEventListener("click", async function () {
 
-    if (adCooldown) return;
+    // Prevent concurrent reward flows
+    if (adInProgress) return;
+    adInProgress = true;
+
+    // Check user sync
+    if (!USER_ID) {
+      alert("Please open the app in Telegram so we can identify you.");
+      adInProgress = false;
+      return;
+    }
+
+    // create server-side ad session (server will record session and prevent replay)
+    const sessionId = await createAdSessionOnServer();
+    if (!sessionId) {
+      console.warn("Failed to create ad session");
+      adInProgress = false;
+      return;
+    }
 
     adsBtn.style.display  = "none";
     adsBtnn.style.display = "block";
@@ -235,112 +280,78 @@ if (adsBtn) {
     let timeLeft = 50;
     adsBtnn.textContent = timeLeft + "s";
 
-    timer = setInterval(async function () {
+    timer = setInterval(function () {
       timeLeft--;
       adsBtnn.textContent = timeLeft + "s";
-
       if (timeLeft <= 0) {
-
-        // Reward user (attach userId automatically via fetchApi)
-        const res = await fetchApi({
-          type: "rewardUser",
-          data: { amount: 100 }
-        });
-
-        if (res && res.success) {
-          ADS = Number(res.balance) || ADS;
-          if (adsBalance) adsBalance.textContent = ADS;
-
-          // update daily progress with server value
-          const DAILY_LIMIT = 100;
-          dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
-          if (dailyProgres < 0) dailyProgres = 0;
-          if (progres) progres.textContent = dailyProgres;
-
-          // refresh referral counts in case this watch activated a referral
-          refreshReferralCounts();
-
-          // If server returned inviterNewBalance (this happens for the inviter), we can show a tiny notification
-          // Note: this client will only receive inviterNewBalance when the rewarded user triggered it (not the inviter's client).
-          if (res.referralActivated && res.inviterRewarded && res.inviterNewBalance !== null) {
-            console.log("Inviter rewarded new balance:", res.inviterNewBalance);
-          }
-        } else {
-          // handle errors (e.g., daily limit reached)
-          console.warn("rewardUser failed:", res && res.error);
-          if (res && res.error && res.error.toString().toLowerCase().includes("daily limit")) {
-            // reflect limit in UI
-            adsBtn.style.display = 'none';
-            adsBtnn.style.display = "block";
-            adsBtnn.textContent = progresLimit;
-            adsBtnn.style.background = 'red';
-            // start cooldown countdown for the remaining day limit
-            dailyLimit = setInterval(function(){
-              progresLimit--;
-              adsBtnn.textContent = progresLimit;
-
-              if (progresLimit <= 0) {
-                clearInterval(dailyLimit);
-
-                adsBtnn.style.display = 'none';
-                adsBtn.style.display = 'block';
-                adsBtnn.style.background = '';
-                progresLimit = 24 * 60 * 60;
-                dailyProgres = 100;
-                if (progres) progres.textContent = dailyProgres;
-              }
-
-            }, 1000);
-          }
-        }
-
-        // UI feedback for success (or even for failure it's fine to show)
-        if (res && res.success) {
-          try {
-            soundads.currentTime = 0;
-            soundads.play();
-          } catch (e) {}
-          // visual notification
-          if (adsNotfi) {
-            adsNotfi.style.display = "block";
-            adsNotfi.style.opacity = "0.8";
-
-            setTimeout(function () {
-              adsNotfi.style.opacity = "0.4";
-            }, 2500);
-
-            adsNotfi.style.transform = "translateY(-150%)";
-
-            setTimeout(function () {
-              adsNotfi.style.transform = "translateY(135px)";
-            }, 100);
-
-            setTimeout(function () {
-              adsNotfi.style.transform = "translateY(-150%)";
-              adsNotfi.style.opacity = "0";
-            }, 3000);
-
-            setTimeout(function () {
-              adsNotfi.style.display = "none";
-              adsNotfi.style.transform = "";
-              adsNotfi.style.opacity = "";
-            }, 3500);
-          }
-        }
-
         clearInterval(timer);
-        adsBtnn.style.display = "none";
-        adsBtn.style.display  = "block";
+        // Will be resolved after ad and reward flow below
+      }
+    }, 1000);
 
-        // if dailyProgres depleted, set long cooldown
-        if (dailyProgres <= 0) {
+    // Show the ad once (client-visible). Wait for it to complete.
+    const adShown = await showSingleAd();
+
+    // If the ad was shown successfully, call reward endpoint with sessionId
+    if (adShown) {
+      const res = await fetchApi({
+        type: "rewardUser",
+        data: { sessionId } // server will ignore any amount and use its own constants
+      });
+
+      if (res && res.success) {
+        ADS = Number(res.balance) || ADS;
+        if (adsBalance) adsBalance.textContent = ADS;
+
+        // update daily progress from server value
+        const DAILY_LIMIT = 100;
+        dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
+        if (dailyProgres < 0) dailyProgres = 0;
+        if (progres) progres.textContent = dailyProgres;
+
+        // refresh referral counts in case this watch activated a referral
+        refreshReferralCounts();
+
+        try {
+          soundads.currentTime = 0;
+          soundads.play();
+        } catch (e) {}
+        // visual notification
+        if (adsNotfi) {
+          adsNotfi.style.display = "block";
+          adsNotfi.style.opacity = "0.8";
+
+          setTimeout(function () {
+            adsNotfi.style.opacity = "0.4";
+          }, 2500);
+
+          adsNotfi.style.transform = "translateY(-150%)";
+
+          setTimeout(function () {
+            adsNotfi.style.transform = "translateY(135px)";
+          }, 100);
+
+          setTimeout(function () {
+            adsNotfi.style.transform = "translateY(-150%)";
+            adsNotfi.style.opacity = "0";
+          }, 3000);
+
+          setTimeout(function () {
+            adsNotfi.style.display = "none";
+            adsNotfi.style.transform = "";
+            adsNotfi.style.opacity = "";
+          }, 3500);
+        }
+      } else {
+        console.warn("rewardUser failed:", res && res.error);
+        if (res && res.error && typeof res.error === "string" && res.error.toLowerCase().includes("daily limit")) {
+          // reflect limit in UI
           adsBtn.style.display = 'none';
           adsBtnn.style.display = "block";
           adsBtnn.textContent = progresLimit;
           adsBtnn.style.background = 'red';
-
+          // start cooldown countdown for the remaining day limit
           dailyLimit = setInterval(function(){
-
             progresLimit--;
             adsBtnn.textContent = progresLimit;
 
@@ -356,17 +367,46 @@ if (adsBtn) {
             }
 
           }, 1000);
+        } else {
+          // generic error handling
+          alert("Failed to credit reward: " + ((res && res.error) || "unknown"));
         }
       }
+    } else {
+      console.warn("Ad display failed or was cancelled");
+    }
 
-    }, 1000);
+    clearInterval(timer);
+    adsBtnn.style.display = "none";
+    adsBtn.style.display  = "block";
 
-    // Show the ad(s) — showSingleAd handles cooldowns itself
-    await showSingleAd();
-    await showSingleAd();
-    await showSingleAd();
-    await showSingleAd();
+    // if dailyProgres depleted, set long cooldown (handled by server too)
+    if (dailyProgres <= 0) {
+      adsBtn.style.display = 'none';
+      adsBtnn.style.display = "block";
+      adsBtnn.textContent = progresLimit;
+      adsBtnn.style.background = 'red';
 
+      dailyLimit = setInterval(function(){
+
+        progresLimit--;
+        adsBtnn.textContent = progresLimit;
+
+        if (progresLimit <= 0) {
+          clearInterval(dailyLimit);
+
+          adsBtnn.style.display = 'none';
+          adsBtn.style.display = 'block';
+          adsBtnn.style.background = '';
+          progresLimit = 24 * 60 * 60;
+          dailyProgres = 100;
+          if (progres) progres.textContent = dailyProgres;
+        }
+
+      }, 1000);
+    }
+
+    adInProgress = false;
   });
 }
 
@@ -426,6 +466,7 @@ if (copyrefal) {
 
 /* =======================
    إضافة مهمة جديدة
+   Now protected: server will verify role=admin. client still sends createTask but server checks.
 ======================= */
 let creatTask = document.getElementById("creatTask");
 
@@ -516,32 +557,18 @@ function updateReferralCountsUI(counts) {
    Refresh referral counts from backend
    Calls API type "getReferrals" which returns { success, active, pending }
    fetchApi will attach USER_ID automatically if available.
-   Enhanced: when active count increases, fetch getBalance to reflect inviter reward.
 ======================= */
-let _lastReferralActiveCount = null;
-
 async function refreshReferralCounts() {
   try {
+    // do nothing if not identified
+    if (!USER_ID) {
+      updateReferralCountsUI({ active: 0, pending: 0 });
+      return;
+    }
+
     const res = await fetchApi({ type: "getReferrals" });
     if (res && res.success) {
       updateReferralCountsUI({ active: res.active || 0, pending: res.pending || 0 });
-
-      // If active count increased since last check, refresh balance immediately
-      const currentActive = Number(res.active || 0);
-      if (_lastReferralActiveCount === null) {
-        _lastReferralActiveCount = currentActive;
-      } else if (currentActive > _lastReferralActiveCount) {
-        // Active referrals increased -> the inviter (if this client is inviter) may have been rewarded
-        try {
-          const balanceRes = await fetchApi({ type: "getBalance" });
-          updateBalanceUI(balanceRes);
-        } catch (e) {
-          console.warn("Failed to refresh balance after referral activation:", e);
-        }
-        _lastReferralActiveCount = currentActive;
-      } else {
-        _lastReferralActiveCount = currentActive;
-      }
     } else {
       // If no user or not authorized, show 0s
       updateReferralCountsUI({ active: 0, pending: 0 });
@@ -554,7 +581,6 @@ async function refreshReferralCounts() {
 /* =======================
    Referral polling: start/stop while on invite page
    Poll interval set to 30s (adjustable)
-   We keep immediate refresh when starting.
 ======================= */
 let referralPoll = null;
 const REFERRAL_POLL_INTERVAL = 30000; // 30s
@@ -684,12 +710,16 @@ document.addEventListener("DOMContentLoaded", async function () {
       // After sync, clear stored referrer (optional)
       try { localStorage.removeItem('referrerId'); } catch (e) {}
 
-      // Immediately fetch balance/stats to populate UI
-      const res = await fetchApi({ type: "getBalance" });
-      if (res && res.success) {
-        updateBalanceUI(res);
-      } else {
-        console.warn("Initial getBalance failed:", res && res.error);
+      // Immediately fetch balance/stats to populate UI (only if USER_ID present)
+      try {
+        const res = await fetchApi({ type: "getBalance" });
+        if (res && res.success) {
+          updateBalanceUI(res);
+        } else {
+          console.warn("Initial getBalance failed:", res && res.error);
+        }
+      } catch (e) {
+        console.warn("Initial getBalance failed:", e);
       }
 
       // Also fetch referral counts so invite page reflects pending/active
@@ -756,9 +786,11 @@ document.addEventListener("DOMContentLoaded", async function () {
 /* =======================
    Ensure balance is also fetched on full load (fallback)
    This makes sure balance is displayed even if DOMContentLoaded already fired earlier
+   But only if USER_ID exists
 ======================= */
 window.addEventListener('load', async function() {
   try {
+    if (!USER_ID) return;
     const res = await fetchApi({ type: "getBalance" });
     updateBalanceUI(res);
     refreshReferralCounts();
