@@ -56,34 +56,41 @@ export default async function handler(req, res) {
     // Sync User
     // ===============================
     if (type === "syncUser") {
-      const { id, name = null, photo = null } = data || {};
+      // accept either data.id or data.userId (frontend may attach userId automatically)
+      const idFromPayload = (data && (data.id || data.userId)) || null;
+      const { name = null, photo = null } = data || {};
 
-      if (!id) {
+      if (!idFromPayload) {
         return res.status(400).json({ success: false, error: "Missing user id" });
       }
 
-      // Check if user exists
-      const existing = await supabaseRequest(`users?id=eq.${id}&select=id`);
+      // Check if user exists (select full record)
+      const existing = await supabaseRequest(`users?id=eq.${idFromPayload}&select=*`);
 
       if (!existing || existing.length === 0) {
-        // Create new user with initial values
+        // Create new user with initial values (return created record)
         const created = await supabaseRequest("users", {
           method: "POST",
           body: JSON.stringify({
-            id,
+            id: idFromPayload,
             name,
             photo,
             balance: 0,
             ads_watched: 0,
             daily_ads: 0,
-            last_ad_date: new Date().toISOString().split("T")[0]
+            // set to null so we can treat "no previous date" uniformly
+            last_ad_date: null
           })
         });
 
-        return res.status(200).json({ success: true, created: Array.isArray(created) ? created[0] : created });
+        const user = Array.isArray(created) ? created[0] : created;
+
+        return res.status(200).json({ success: true, user });
       }
 
-      return res.status(200).json({ success: true });
+      // existing user -> return the user record so client can update UI immediately
+      const user = existing[0];
+      return res.status(200).json({ success: true, user });
     }
 
     // ===============================
@@ -171,12 +178,13 @@ export default async function handler(req, res) {
         }
       );
 
-      // return updated state
+      // return updated state (also include the updated record if available)
       return res.status(200).json({
         success: true,
         balance: newBalance,
         adsWatched: newAdsWatched,
-        dailyAds: newDailyAds
+        dailyAds: newDailyAds,
+        updated: Array.isArray(updated) ? updated[0] : updated
       });
     }
 
