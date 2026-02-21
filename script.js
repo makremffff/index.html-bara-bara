@@ -46,7 +46,7 @@ async function fetchApi({ type, data = {} }) {
     });
 
     if (!response.ok) {
-      throw new Error("Network response was not ok");
+      throw new Error(`API Error: ${response.statusText}`);
     }
 
     const result = await response.json();
@@ -57,6 +57,18 @@ async function fetchApi({ type, data = {} }) {
     return { success: false, error: error.message };
   }
 }
+
+/* =======================
+   Global Variables
+======================= */
+let ADS   = 0;
+let USERID = null;
+let timer = null;
+let dailyLimit = null;
+let dailyProgres = 100;
+let progresLimit = 24 * 60 * 60;
+let adCooldown = false;
+let adCooldownTime = 6000;
 
 /* =======================
    AdsGram SDK Initialization
@@ -71,7 +83,6 @@ if (window.Adsgram && typeof window.Adsgram.init === "function") {
    دالة إخفاء كل الصفحات
 ======================= */
 function showPage(btnpage) {
-
   mainPage.style.display    = "none";
   taskPage.style.display    = "none";
   walletPage.style.display  = "none";
@@ -97,29 +108,61 @@ function showPage(btnpage) {
 }
 
 /* =======================
+   تحديث الرصيد من قاعدة البيانات
+======================= */
+async function updateUserBalance() {
+  if (!USERID) return;
+
+  const res = await fetchApi({ 
+    type: "getBalance",
+    data: { userId: USERID }
+  });
+
+  if (res.success) {
+    ADS = res.balance;
+    dailyProgres = 100 - res.dailyAds;
+
+    if (userbalancce) {
+      userbalancce.innerHTML = `
+        <img src="coins.png" style="width:20px; vertical-align:middle;">
+        ${ADS}
+      `;
+    }
+
+    let progres = document.getElementById("progres");
+    if (progres) {
+      progres.textContent = dailyProgres;
+    }
+
+    // إذا وصل الحد اليومي
+    if (res.dailyAds >= 100) {
+      const adsBtn = document.getElementById("adsbtn");
+      const adsBtnn = document.getElementById("adsbtnn");
+      if (adsBtn) adsBtn.style.display = 'none';
+      if (adsBtnn) {
+        adsBtnn.style.display = "block";
+        adsBtnn.textContent = progresLimit;
+        adsBtnn.style.background = 'red';
+      }
+    }
+  }
+}
+
+/* =======================
    ربط الأزرار بالصفحات
 ======================= */
 btnMain.addEventListener("click", function () {
   showPage(mainPage);
 });
 
-btnTask.addEventListener("click", function () {
+btnTask.addEventListener("click", async function () {
   showPage(taskPage);
+  await loadTasks();
 });
 
 btnWallet.addEventListener("click", async function () {
   showPage(walletPage);
-
-  const res = await fetchApi({ type: "getBalance" });
-
-  if (res.success) {
-    ADS = res.balance;
-
-    walletbalance.innerHTML = `
-    <img src="coins.png" style="width:20px; vertical-align:middle;">
-    ${ADS}
-    `;
-  }
+  await updateUserBalance();
 });
 
 btnshare.addEventListener("click",function(){
@@ -138,15 +181,6 @@ const adsBtnn    = document.getElementById("adsbtnn");
 const adsBalance = document.getElementById("adsbalance");
 const adsNotfi   = document.getElementById("adsnotifi");
 let progres = document.getElementById("progres");
-
-let ADS   = 0;
-let timer = null;
-let dailyLimit = null;
-let dailyProgres = 100;
-let progresLimit = 24 * 60 * 60;
-
-let adCooldown = false;
-let adCooldownTime = 6000;
 
 function showSingleAd() {
   return new Promise((resolve) => {
@@ -196,75 +230,81 @@ adsBtn.addEventListener("click", async function () {
     adsBtnn.textContent = timeLeft + "s";
 
     if (timeLeft <= 0) {
+      clearInterval(timer);
 
+      // إرسال طلب المكافأة مع معرف المستخدم
       const res = await fetchApi({
         type: "rewardUser",
-        data: { amount: 100 }
+        data: { userId: USERID, amount: 100 }
       });
 
       if (res.success) {
         ADS = res.balance;
+        adsBalance.textContent = ADS;
+
+        soundads.currentTime = 0;
+        soundads.play();
+        
+        dailyProgres = 100 - res.dailyAds;
+        progres.textContent = dailyProgres;
+
+        // إظهار الإشعار
+        adsNotfi.style.display = "block";
+        adsNotfi.style.opacity = "0.8";
+
+        setTimeout(function () {
+          adsNotfi.style.opacity = "0.4";
+        }, 2500);
+
+        adsNotfi.style.transform = "translateY(-150%)";
+
+        setTimeout(function () {
+          adsNotfi.style.transform = "translateY(135px)";
+        }, 100);
+
+        setTimeout(function () {
+          adsNotfi.style.transform = "translateY(-150%)";
+          adsNotfi.style.opacity = "0";
+        }, 3000);
+
+        setTimeout(function () {
+          adsNotfi.style.display = "none";
+          adsNotfi.style.transform = "";
+          adsNotfi.style.opacity = "";
+        }, 3500);
+
+        // التحقق من الحد اليومي
+        if (res.dailyAds >= 100) {
+          adsBtn.style.display = 'none';
+          adsBtnn.style.display = "block";
+          adsBtnn.textContent = progresLimit;
+          adsBtnn.style.background = 'red';
+
+          dailyLimit = setInterval(function(){
+            progresLimit--;
+            adsBtnn.textContent = progresLimit;
+
+            if (progresLimit <= 0) {
+              clearInterval(dailyLimit);
+
+              adsBtnn.style.display = 'none';
+              adsBtn.style.display = 'block';
+              adsBtnn.style.background = '';
+              progresLimit = 24 * 60 * 60;
+              dailyProgres = 100;
+              progres.textContent = dailyProgres;
+
+              updateUserBalance();
+            }
+          }, 1000);
+        }
+      } else {
+        console.error("Reward Error:", res.error);
+        alert(res.error || "خطأ في الحصول على المكافأة");
       }
 
-      adsBalance.textContent = ADS;
-
-      soundads.currentTime = 0;
-      soundads.play();
-      dailyProgres--;
-      progres.textContent = dailyProgres;
-
-      clearInterval(timer);
       adsBtnn.style.display = "none";
       adsBtn.style.display  = "block";
-
-      adsNotfi.style.display = "block";
-      adsNotfi.style.opacity = "0.8";
-
-      setTimeout(function () {
-        adsNotfi.style.opacity = "0.4";
-      }, 2500);
-
-      adsNotfi.style.transform = "translateY(-150%)";
-
-      setTimeout(function () {
-        adsNotfi.style.transform = "translateY(135px)";
-      }, 100);
-
-      setTimeout(function () {
-        adsNotfi.style.transform = "translateY(-150%)";
-        adsNotfi.style.opacity = "0";
-      }, 3000);
-
-      setTimeout(function () {
-        adsNotfi.style.display = "none";
-        adsNotfi.style.transform = "";
-        adsNotfi.style.opacity = "";
-      }, 3500);
-
-      if (dailyProgres <= 0) {
-        adsBtn.style.display = 'none';
-        adsBtnn.style.display = "block";
-        adsBtnn.textContent = progresLimit;
-        adsBtnn.style.background = 'red';
-
-        dailyLimit = setInterval(function(){
-
-          progresLimit--;
-          adsBtnn.textContent = progresLimit;
-
-          if (progresLimit <= 0) {
-            clearInterval(dailyLimit);
-
-            adsBtnn.style.display = 'none';
-            adsBtn.style.display = 'block';
-            adsBtnn.style.background = '';
-            progresLimit = 24 * 60 * 60;
-            dailyProgres = 100;
-            progres.textContent = dailyProgres;
-          }
-
-        }, 1000);
-      }
     }
 
   }, 1000);
@@ -275,6 +315,37 @@ adsBtn.addEventListener("click", async function () {
   await showSingleAd();
 
 });
+
+/* =======================
+   تحميل المهام
+======================= */
+async function loadTasks() {
+  const res = await fetchApi({ type: "getTasks" });
+
+  if (res.success) {
+    let taskcontainer = document.querySelector(".task-container");
+    if (!taskcontainer) return;
+
+    taskcontainer.innerHTML = '';
+
+    if (res.tasks && res.tasks.length > 0) {
+      res.tasks.forEach(task => {
+        let taskcard = document.createElement("div");
+        taskcard.className = "task-card";
+
+        taskcard.innerHTML = `
+          <span class="task-name">${task.name}</span>
+          <span class="task-prize">${task.reward} <img src="coins.png" width="25"></span>
+          <a class="task-link" href="${task.link}" target="_blank">start</a>
+        `;
+
+        taskcontainer.appendChild(taskcard);
+      });
+    } else {
+      taskcontainer.innerHTML = '<p>لا توجد مهام حالياً</p>';
+    }
+  }
+}
 
 /* =======================
    شاشة التحميل عند الدخول
@@ -333,6 +404,11 @@ creatTask.addEventListener("click", async function(){
   let nametask = document.getElementById("taskNameInput").value;
   let linktask = document.getElementById("taskLinkInput").value;
 
+  if (!nametask || !linktask) {
+    alert("يرجى ملء جميع الحقول");
+    return;
+  }
+
   const res = await fetchApi({
     type: "createTask",
     data: { name: nametask, link: linktask }
@@ -344,15 +420,18 @@ creatTask.addEventListener("click", async function(){
     taskcard.className = "task-card";
 
     taskcard.innerHTML = `
-    <span class="task-name">${nametask}</span>
-    <span class="task-prize">30 <img src="coins.png" width="25"></span>
-    <a class="task-link" href="${linktask}">start</a>
+      <span class="task-name">${nametask}</span>
+      <span class="task-prize">30 <img src="coins.png" width="25"></span>
+      <a class="task-link" href="${linktask}" target="_blank">start</a>
     `;
 
     taskcontainer.appendChild(taskcard);
 
     document.getElementById("taskNameInput").value = '';
     document.getElementById("taskLinkInput").value = '';
+    alert("تمت إضافة المهمة بنجاح!");
+  } else {
+    alert("خطأ في إضافة المهمة: " + res.error);
   }
 });
 
@@ -370,14 +449,15 @@ document.addEventListener("DOMContentLoaded", async function () {
   if (!tg.initDataUnsafe || !tg.initDataUnsafe.user) return;
 
   const user = tg.initDataUnsafe.user;
-  const userId = user.id;
+  USERID = user.id;
   const firstName = user.first_name ? user.first_name : "";
   const photoUrl = user.photo_url ? user.photo_url : "";
 
+  // مزامنة المستخدم
   await fetchApi({
     type: "syncUser",
     data: {
-      id: userId,
+      id: USERID,
       name: firstName,
       photo: photoUrl
     }
@@ -400,7 +480,9 @@ document.addEventListener("DOMContentLoaded", async function () {
     userNameContainer.textContent = firstName;
   }
 
-  link.textContent =
-    "https://t.me/Bot_ad_watchbot/earn?startapp=ref_" + userId;
+  link.textContent = "https://t.me/Bot_ad_watchbot/earn?startapp=ref_" + USERID;
+
+  // تحميل الرصيد والإحصائيات
+  await updateUserBalance();
 
 });
