@@ -256,7 +256,7 @@ if (adsBtn) {
           adsBtnn.style.display = 'none';
           adsBtn.style.display = 'block';
           adsBtnn.style.background = '';
-        }, Math.min(wait * 1000, 5000));
+        }, Math.min(wait * 1000, 500));
       }
       return;
     }
