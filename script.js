@@ -1,10 +1,10 @@
 /* =======================
    أزرار التنقّل
 ======================= */
-let btnMain    = document.querySelector("button");
-let btnTask    = document.getElementById("btn2");
-let btnWallet  = document.getElementById("btn3");
-let btnshare   = document.getElementById("sharebtn");
+let btnMain   = document.querySelector("button");
+let btnTask   = document.getElementById("btn2");
+let btnWallet = document.getElementById("btn3");
+let btnshare  = document.getElementById("sharebtn");
 let bntaddTask = document.getElementById("addtask");
 
 /* =======================
@@ -22,12 +22,9 @@ let addTaskpage = document.getElementById("addTask");
 let loadpage = document.getElementById("loading");
 let pagename = document.getElementById("page-load");
 
-let userbalancce    = document.querySelector('.user-balance'); // عنصر عرض رصيد في الصفحة الرئيسية (اسم كما في ملفك الأصلي)
-let walletbalance   = document.getElementById("adsbalancce");  // عنصر عرض رصيد المحفظة
-let adsBalance      = document.getElementById("adsbalance");   // عنصر آخر لعرض الرصيد إن وُجد
-let adsNotfi        = document.getElementById("adsnotifi");
-let progres         = document.getElementById("progres");
-let barbtn          = document.querySelector(".bar");
+let userbalancce = document.querySelector('.user-balance');
+let walletbalance = document.getElementById("adsbalancce");
+let barbtn = document.querySelector(".bar");
 
 /* =======================
    الأصوات
@@ -36,45 +33,17 @@ let soundbtn  = document.getElementById("soundbtn");
 let soundads  = document.getElementById("soundads");
 
 /* =======================
-   حالة واحدة مشتركة (state)
-   - userId, balance, dailyAds
-   - لا تستخدم متغيرات مكررة مثل ADS
-======================= */
-const state = {
-  userId: null,
-  balance: null,   // null = لم يتم جلبه بعد
-  dailyAds: null
-};
-
-/* =======================
-   localStorage helpers لحفظ userId
-======================= */
-function getStoredUserId() {
-  try {
-    return localStorage.getItem("tg_user_id");
-  } catch (e) {
-    return null;
-  }
-}
-function setStoredUserId(id) {
-  try {
-    if (id != null) localStorage.setItem("tg_user_id", String(id));
-  } catch (e) {}
-}
-
-/* =======================
    API CENTRAL HANDLER
-   - يرسل userId تلقائياً إذا وُجد في state أو localStorage
 ======================= */
 const API_ENDPOINT = "/api";
 
+let USER_ID = null; // store Telegram user id after sync
+
 async function fetchApi({ type, data = {} }) {
   try {
-    const stored = getStoredUserId();
-    if (stored && !data.userId) {
-      data.userId = stored;
-    } else if (state.userId && !data.userId) {
-      data.userId = state.userId;
+    // attach userId automatically when available and not explicitly provided
+    if (USER_ID && (!data.userId)) {
+      data.userId = USER_ID;
     }
 
     const response = await fetch(API_ENDPOINT, {
@@ -86,6 +55,7 @@ async function fetchApi({ type, data = {} }) {
     const result = await response.json();
 
     if (!response.ok) {
+      // Normalize error shape
       return { success: false, error: result.error || result || "Network response was not ok" };
     }
 
@@ -101,6 +71,7 @@ async function fetchApi({ type, data = {} }) {
    AdsGram SDK Initialization
 ======================= */
 let AdsGramController = null;
+
 if (window.Adsgram && typeof window.Adsgram.init === "function") {
   AdsGramController = window.Adsgram.init({ blockId: "int-20679" });
 }
@@ -120,10 +91,10 @@ function showPage(btnpage) {
 
   loadpage.style.display = "block";
   pagename.textContent = "Loading";
-  if (barbtn) barbtn.style.display = 'none';
+  barbtn.style.display = 'none';
 
   setTimeout(function(){
-    if (barbtn) barbtn.style.display = 'block';
+    barbtn.style.display = 'block';
   }, 2000);
 
   if (soundbtn) {
@@ -136,64 +107,6 @@ function showPage(btnpage) {
   setTimeout(function () {
     loadpage.style.display = "none";
   }, 2000);
-}
-
-/* =======================
-   تحديث نص الرصيد بطريقة آمنة (بدون innerHTML)
-   - نحاول تحديث عنصر داخلي مخصص إن وُجد [data-balance-value] أو .balance-number
-   - إن لم يوجد، نحدّث عقدة نصية داخل العنصر إن وُجدت لإبقاء الصور/العناصر الأخرى كما هي
-   - كخيار أخير نحدث textContent (قد يستبدل المحتوى)
-   - لا نضيف عناصر HTML جديدة ولا نغيّر بنية DOM
-======================= */
-function updateBalanceInElement(el, value) {
-  if (!el) return;
-
-  // 1) عنصر داخلي مخصص للقيمة
-  const inner = el.querySelector && (el.querySelector('[data-balance-value]') || el.querySelector('.balance-number'));
-  if (inner) {
-    inner.textContent = String(value);
-    return;
-  }
-
-  // 2) البحث عن عقدة نصية داخل العنصر (نحافظ على العناصر الأخرى مثل الصور)
-  const textNodes = Array.from(el.childNodes).filter(n => n.nodeType === Node.TEXT_NODE);
-  if (textNodes.length > 0) {
-    // اختر عقدة نصية تحتوي أرقام إن وُجدت، وإلا اختر الأخيرة
-    let target = textNodes.find(n => /\d/.test(n.nodeValue));
-    if (!target) target = textNodes[textNodes.length - 1];
-    target.nodeValue = ' ' + String(value);
-    return;
-  }
-
-  // 3) كخيار أخير: نعيد ضبط النص (هذا قد يستبدل المحتوى، لكنه حل احتياطي)
-  el.textContent = String(value);
-}
-
-/* =======================
-   الدالة الموحدة لتحديث الواجهة: updateBalanceUI(balance, dailyAds)
-   - تحفظ الحالة وتحدّث كل عناصر الرصيد
-   - لا تستخدم innerHTML لتحديث الرصيد
-======================= */
-function updateBalanceUI(balance, dailyAds) {
-  // normalize values
-  const b = (typeof balance === "number") ? balance : (balance != null ? Number(balance) : null);
-  const d = (typeof dailyAds === "number") ? dailyAds : (dailyAds != null ? Number(dailyAds) : null);
-
-  if (b != null && !Number.isNaN(b)) state.balance = b;
-  if (d != null && !Number.isNaN(d)) state.dailyAds = d;
-
-  // تحديث عناصر الواجهة المرتبطة بالرصيد
-  updateBalanceInElement(userbalancce, state.balance != null ? state.balance : "");
-  updateBalanceInElement(walletbalance, state.balance != null ? state.balance : "");
-  updateBalanceInElement(adsBalance, state.balance != null ? state.balance : "");
-
-  // تحديث تقدم الإعلانات اليومية إن وُجد
-  if (progres) {
-    const DAILY_LIMIT = 100;
-    let remaining = (state.dailyAds != null) ? (DAILY_LIMIT - Number(state.dailyAds)) : DAILY_LIMIT;
-    if (remaining < 0) remaining = 0;
-    progres.textContent = String(remaining);
-  }
 }
 
 /* =======================
@@ -215,11 +128,23 @@ if (btnWallet) {
   btnWallet.addEventListener("click", async function () {
     showPage(walletPage);
 
-    // جلب الرصيد بعد الانتقال للصفحة وتحديث الواجهة عبر الدالة الموحدة
     const res = await fetchApi({ type: "getBalance" });
 
     if (res.success) {
-      updateBalanceUI(Number(res.balance) || 0, res.dailyAds);
+      ADS = Number(res.balance) || 0;
+
+      if (walletbalance) {
+        walletbalance.innerHTML = `
+        <img src="coins.png" style="width:20px; vertical-align:middle;">
+        ${ADS}
+        `;
+      }
+
+      // update progress (daily remaining)
+      const DAILY_LIMIT = 100;
+      const remaining = DAILY_LIMIT - (Number(res.dailyAds) || 0);
+      dailyProgres = remaining >= 0 ? remaining : 0;
+      if (progres) progres.textContent = dailyProgres;
     } else {
       console.warn("getBalance failed:", res.error);
     }
@@ -240,14 +165,17 @@ if (bntaddTask) {
 
 /* =======================
    أزرار الإعلانات + الرصيد
-   - نحافظ على باقي المنطق (مؤقت، حد يومي، أصوات، إشعارات)
-   - عند مكافأة المستخدم نحدث الواجهة باستخدام updateBalanceUI فقط
 ======================= */
-const adsBtn = document.getElementById("adsbtn");
-const adsBtnn = document.getElementById("adsbtnn");
+const adsBtn     = document.getElementById("adsbtn");
+const adsBtnn    = document.getElementById("adsbtnn");
+const adsBalance = document.getElementById("adsbalance");
+const adsNotfi   = document.getElementById("adsnotifi");
+let progres = document.getElementById("progres");
 
+let ADS   = 0;
 let timer = null;
 let dailyLimit = null;
+let dailyProgres = 100;
 let progresLimit = 24 * 60 * 60;
 
 let adCooldown = false;
@@ -292,66 +220,68 @@ if (adsBtn) {
     if (adCooldown) return;
 
     adsBtn.style.display  = "none";
-    if (adsBtnn) adsBtnn.style.display = "block";
+    adsBtnn.style.display = "block";
 
     let timeLeft = 50;
-    if (adsBtnn) adsBtnn.textContent = timeLeft + "s";
+    adsBtnn.textContent = timeLeft + "s";
 
     timer = setInterval(async function () {
       timeLeft--;
-      if (adsBtnn) adsBtnn.textContent = timeLeft + "s";
+      adsBtnn.textContent = timeLeft + "s";
 
       if (timeLeft <= 0) {
 
-        // Reward user (userId attached automatically via fetchApi)
+        // Reward user (attach userId automatically via fetchApi)
         const res = await fetchApi({
           type: "rewardUser",
           data: { amount: 100 }
         });
 
         if (res.success) {
-          // استخدم الدالة الموحدة لتحديث الرصيد/التقدّم
-          updateBalanceUI(Number(res.balance) || state.balance || 0, res.dailyAds);
+          ADS = Number(res.balance) || ADS;
+          if (adsBalance) adsBalance.textContent = ADS;
+
+          // update daily progress with server value
+          const DAILY_LIMIT = 100;
+          dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
+          if (dailyProgres < 0) dailyProgres = 0;
+          if (progres) progres.textContent = dailyProgres;
         } else {
+          // handle errors (e.g., daily limit reached)
           console.warn("rewardUser failed:", res.error);
           if (res.error && res.error.toString().toLowerCase().includes("daily limit")) {
-            // reflect limit in UI (محافظة على المنطق الأصلي)
-            if (adsBtn) adsBtn.style.display = 'none';
-            if (adsBtnn) {
-              adsBtnn.style.display = 'block';
-              adsBtnn.textContent = String(progresLimit);
-              adsBtnn.style.background = 'red';
-            }
-
+            // reflect limit in UI
+            adsBtn.style.display = 'none';
+            adsBtnn.style.display = "block";
+            adsBtnn.textContent = progresLimit;
+            adsBtnn.style.background = 'red';
+            // start cooldown countdown for the remaining day limit
             dailyLimit = setInterval(function(){
               progresLimit--;
-              if (adsBtnn) adsBtnn.textContent = String(progresLimit);
+              adsBtnn.textContent = progresLimit;
 
               if (progresLimit <= 0) {
                 clearInterval(dailyLimit);
 
-                if (adsBtnn) {
-                  adsBtnn.style.display = 'none';
-                  adsBtnn.style.background = '';
-                }
-                if (adsBtn) adsBtn.style.display = 'block';
-
+                adsBtnn.style.display = 'none';
+                adsBtn.style.display = 'block';
+                adsBtnn.style.background = '';
                 progresLimit = 24 * 60 * 60;
-                if (progres) progres.textContent = String(100);
+                dailyProgres = 100;
+                if (progres) progres.textContent = dailyProgres;
               }
 
             }, 1000);
           }
         }
 
-        // صوت وإشعار كما في الكود الأصلي
+        // UI feedback for success (or even for failure it's fine to show)
         if (res.success) {
           try {
-            if (soundads) {
-              soundads.currentTime = 0;
-              soundads.play();
-            }
+            soundads.currentTime = 0;
+            soundads.play();
           } catch (e) {}
+          // visual notification
           if (adsNotfi) {
             adsNotfi.style.display = "block";
             adsNotfi.style.opacity = "0.8";
@@ -380,46 +310,39 @@ if (adsBtn) {
         }
 
         clearInterval(timer);
-        if (adsBtnn) adsBtnn.style.display = "none";
-        if (adsBtn) adsBtn.style.display  = "block";
+        adsBtnn.style.display = "none";
+        adsBtn.style.display  = "block";
 
-        // إذا استنفدت الحصة اليومية حسب state.dailyAds
-        if (state.dailyAds != null) {
-          const DAILY_LIMIT = 100;
-          let remaining = DAILY_LIMIT - (Number(state.dailyAds) || 0);
-          if (remaining <= 0) {
-            if (adsBtn) adsBtn.style.display = 'none';
-            if (adsBtnn) {
-              adsBtnn.style.display = 'block';
-              adsBtnn.textContent = String(progresLimit);
-              adsBtnn.style.background = 'red';
+        // if dailyProgres depleted, set long cooldown
+        if (dailyProgres <= 0) {
+          adsBtn.style.display = 'none';
+          adsBtnn.style.display = "block";
+          adsBtnn.textContent = progresLimit;
+          adsBtnn.style.background = 'red';
+
+          dailyLimit = setInterval(function(){
+
+            progresLimit--;
+            adsBtnn.textContent = progresLimit;
+
+            if (progresLimit <= 0) {
+              clearInterval(dailyLimit);
+
+              adsBtnn.style.display = 'none';
+              adsBtn.style.display = 'block';
+              adsBtnn.style.background = '';
+              progresLimit = 24 * 60 * 60;
+              dailyProgres = 100;
+              if (progres) progres.textContent = dailyProgres;
             }
 
-            dailyLimit = setInterval(function(){
-              progresLimit--;
-              if (adsBtnn) adsBtnn.textContent = String(progresLimit);
-
-              if (progresLimit <= 0) {
-                clearInterval(dailyLimit);
-
-                if (adsBtnn) {
-                  adsBtnn.style.display = 'none';
-                  adsBtnn.style.background = '';
-                }
-                if (adsBtn) adsBtn.style.display = 'block';
-
-                progresLimit = 24 * 60 * 60;
-                if (progres) progres.textContent = String(100);
-              }
-
-            }, 1000);
-          }
+          }, 1000);
         }
       }
 
     }, 1000);
 
-    // عرض الإعلان / الإعلانات
+    // Show the ad(s) — showSingleAd handles cooldowns itself
     await showSingleAd();
     await showSingleAd();
     await showSingleAd();
@@ -484,7 +407,6 @@ if (copyrefal) {
 
 /* =======================
    إضافة مهمة جديدة
-   - يبقى كما في الأصل (يستخدم innerHTML لإنشاء كرت المهمة كما كان)
 ======================= */
 let creatTask = document.getElementById("creatTask");
 
@@ -526,91 +448,115 @@ if (creatTask) {
 }
 
 /* =======================
+   HELPER: تحديث واجهة الرصيد (يظهر للمستخدم أول مرّة و يتحدّث تلقائياً)
+======================= */
+function updateBalanceUI(res) {
+  if (!res) return;
+
+  if (res.success) {
+    // Update global ADS and wallet UI
+    ADS = Number(res.balance) || ADS;
+
+    if (walletbalance) {
+      walletbalance.innerHTML = `
+      <img src="coins.png" style="width:20px; vertical-align:middle;">
+      ${ADS}
+      `;
+    }
+
+    if (adsBalance) {
+      // Keep adsBalance as text content (original place)
+      adsBalance.textContent = ADS;
+    }
+
+    // update daily progress with server value
+    const DAILY_LIMIT = 100;
+    dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
+    if (dailyProgres < 0) dailyProgres = 0;
+    if (progres) progres.textContent = dailyProgres;
+  } else {
+    console.warn("updateBalanceUI: getBalance failed:", res.error);
+  }
+}
+
+/* =======================
    Telegram WebApp User Data
-   - ضمان تنفيذ syncUser أولاً ثم getBalance
-   - حفظ userId في localStorage
-   - عدم عرض قيمة افتراضية 0 قبل وصول بيانات السيرفر
-   - استخدام updateBalanceUI لتحديث كل أماكن الرصيد
+   NOTE: don't block normal init if Telegram is not present.
+   We still fetch balance for regular visitors so balance appears on first visit.
 ======================= */
 document.addEventListener("DOMContentLoaded", async function () {
 
-  // استخدم معرف مخزن إن وُجد
-  const storedId = getStoredUserId();
-  if (storedId) {
-    state.userId = storedId;
-  }
+  // If Telegram exists, do Telegram-specific initialization
+  if (typeof window.Telegram !== "undefined") {
+    const tg = window.Telegram.WebApp;
+    try { tg.ready(); } catch (e) {}
+    try { tg.expand(); } catch (e) {}
 
-  // إذا لم توجد واجهة تيليجرام، حاول جلب الرصيد فقط إذا وُجد userId مخزن
-  if (typeof window.Telegram === "undefined") {
-    if (state.userId) {
-      const res = await fetchApi({ type: "getBalance" });
-      if (res.success) {
-        updateBalanceUI(Number(res.balance) || 0, res.dailyAds);
+    if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+      const user = tg.initDataUnsafe.user;
+      const userId = user.id;
+      const firstName = user.first_name ? user.first_name : "";
+      const photoUrl = user.photo_url ? user.photo_url : "";
+
+      // Store userId globally so subsequent API calls include it automatically
+      USER_ID = userId;
+
+      // Sync user on server (fire-and-forget)
+      await fetchApi({
+        type: "syncUser",
+        data: {
+          id: userId,
+          name: firstName,
+          photo: photoUrl
+        }
+      });
+
+      const userPhotoContainer = document.querySelector(".user-fhoto");
+      const userNameContainer = document.querySelector(".user-name");
+
+      if (photoUrl) {
+        if (userPhotoContainer) {
+          userPhotoContainer.innerHTML =
+            '<img src="' + photoUrl + '" style="width:95px;height:95px;border-radius:50%;">';
+        }
+      } else {
+        if (userPhotoContainer) {
+          userPhotoContainer.innerHTML =
+            '<div style="width:80px;height:80px;border-radius:50%;background:#444;color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;">' +
+            (firstName ? firstName.charAt(0) : "") +
+            "</div>";
+        }
+      }
+
+      if (userNameContainer) {
+        userNameContainer.textContent = firstName;
+      }
+
+      if (link) {
+        link.textContent =
+          "https://t.me/Bot_ad_watchbot/earn?startapp=ref_" + userId;
       }
     }
-    return;
   }
 
-  const tg = window.Telegram.WebApp;
-  tg.ready();
-  try { tg.expand(); } catch (e) {}
-
-  if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-    const user = tg.initDataUnsafe.user;
-    const userId = user.id;
-    const firstName = user.first_name ? user.first_name : "";
-    const photoUrl = user.photo_url ? user.photo_url : "";
-
-    // حفظ userId في state و localStorage
-    state.userId = userId;
-    setStoredUserId(userId);
-
-    // أولاً: مزامنة المستخدم على السيرفر
-    await fetchApi({
-      type: "syncUser",
-      data: {
-        id: userId,
-        name: firstName,
-        photo: photoUrl
-      }
-    });
-
-    // ثم مباشرة: جلب الرصيد وتحديث الواجهة عبر الدالة الموحدة
+  // Always attempt to fetch balance on DOMContentLoaded so the user sees balance immediately
+  try {
     const res = await fetchApi({ type: "getBalance" });
-    if (res.success) {
-      updateBalanceUI(Number(res.balance) || 0, res.dailyAds);
-    } else {
-      console.warn("Initial getBalance failed:", res.error);
-    }
+    updateBalanceUI(res);
+  } catch (e) {
+    console.warn("Initial balance fetch failed:", e);
+  }
+});
 
-    // تحديث عرض صورة واسم المستخدم كما في الأصل
-    const userPhotoContainer = document.querySelector(".user-fhoto");
-    const userNameContainer = document.querySelector(".user-name");
-
-    if (photoUrl) {
-      userPhotoContainer.innerHTML =
-        '<img src="' + photoUrl + '" style="width:95px;height:95px;border-radius:50%;">';
-    } else {
-      userPhotoContainer.innerHTML =
-        '<div style="width:80px;height:80px;border-radius:50%;background:#444;color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;">' +
-        (firstName ? firstName.charAt(0) : "") +
-        "</div>";
-    }
-
-    if (userNameContainer) {
-      userNameContainer.textContent = firstName;
-    }
-
-    if (link) {
-      // تحديث رابط الإحالة كما كان
-      link.textContent =
-        "https://t.me/Bot_ad_watchbot/earn?startapp=ref_" + userId;
-    }
-  } else {
-    // إذا تيليجرام موجود لكن لا يحتوي على بيانات المستخدم، نحاول جلب الرصيد عبر userId المخزن
-    if (state.userId) {
-      const res = await fetchApi({ type: "getBalance" });
-      if (res.success) updateBalanceUI(Number(res.balance) || 0, res.dailyAds);
-    }
+/* =======================
+   Ensure balance is also fetched on full load (fallback)
+   This makes sure balance is displayed even if DOMContentLoaded already fired earlier
+======================= */
+window.addEventListener('load', async function() {
+  try {
+    const res = await fetchApi({ type: "getBalance" });
+    updateBalanceUI(res);
+  } catch (e) {
+    console.warn("Load balance fetch failed:", e);
   }
 });
