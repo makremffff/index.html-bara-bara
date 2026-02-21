@@ -4,10 +4,19 @@
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  // If these env vars are missing, throw early so developer notices
+  console.error("Missing SUPABASE environment variables.");
+}
+
 // ===============================
 // Helper: Supabase REST Request
 // ===============================
 async function supabaseRequest(path, options = {}) {
+  if (!SUPABASE_URL) {
+    throw new Error("Supabase URL not configured");
+  }
+
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...options,
     headers: {
@@ -21,7 +30,7 @@ async function supabaseRequest(path, options = {}) {
 
   if (!res.ok) {
     const errorText = await res.text();
-    throw new Error(errorText);
+    throw new Error(errorText || `Request failed with status ${res.status}`);
   }
 
   return res.status === 204 ? null : res.json();
@@ -35,24 +44,30 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, error: "Method not allowed" });
   }
 
-  const { type, data } = req.body;
+  const body = req.body || {};
+  const { type, data } = body;
+
+  if (!type) {
+    return res.status(400).json({ success: false, error: "Missing action type" });
+  }
 
   try {
-
     // ===============================
     // Sync User
     // ===============================
     if (type === "syncUser") {
-      const { id, name, photo } = data;
+      const { id, name = null, photo = null } = data || {};
 
-      const existing = await supabaseRequest(
-        `users?id=eq.${id}&select=id`
-      );
+      if (!id) {
+        return res.status(400).json({ success: false, error: "Missing user id" });
+      }
+
+      // Check if user exists
+      const existing = await supabaseRequest(`users?id=eq.${id}&select=id`);
 
       if (!existing || existing.length === 0) {
-        const today = new Date().toISOString().split("T")[0];
-        
-        await supabaseRequest("users", {
+        // Create new user with initial values
+        const created = await supabaseRequest("users", {
           method: "POST",
           body: JSON.stringify({
             id,
@@ -61,9 +76,11 @@ export default async function handler(req, res) {
             balance: 0,
             ads_watched: 0,
             daily_ads: 0,
-            last_ad_date: today
+            last_ad_date: new Date().toISOString().split("T")[0]
           })
         });
+
+        return res.status(200).json({ success: true, created: Array.isArray(created) ? created[0] : created });
       }
 
       return res.status(200).json({ success: true });
@@ -73,7 +90,11 @@ export default async function handler(req, res) {
     // Get Balance + Stats
     // ===============================
     if (type === "getBalance") {
-      const { userId } = data;
+      const { userId } = data || {};
+
+      if (!userId) {
+        return res.status(400).json({ success: false, error: "Missing userId" });
+      }
 
       const result = await supabaseRequest(
         `users?id=eq.${userId}&select=balance,ads_watched,daily_ads,last_ad_date`
@@ -83,19 +104,11 @@ export default async function handler(req, res) {
         return res.status(404).json({ success: false, error: "User not found" });
       }
 
-      const today = new Date().toISOString().split("T")[0];
-      let dailyAds = result[0].daily_ads;
-
-      // إعادة تعيين الأعلانات اليومية إذا تغير اليوم
-      if (result[0].last_ad_date !== today) {
-        dailyAds = 0;
-      }
-
       return res.status(200).json({
         success: true,
         balance: result[0].balance,
         adsWatched: result[0].ads_watched,
-        dailyAds: dailyAds,
+        dailyAds: result[0].daily_ads,
         lastAdDate: result[0].last_ad_date
       });
     }
@@ -104,10 +117,14 @@ export default async function handler(req, res) {
     // Reward User (Save Balance + Ads)
     // ===============================
     if (type === "rewardUser") {
-      const { userId, amount } = data;
+      const { userId, amount } = data || {};
 
       if (!userId) {
-        return res.status(400).json({ success: false, error: "User ID is required" });
+        return res.status(400).json({ success: false, error: "Missing userId" });
+      }
+
+      if (typeof amount === "undefined") {
+        return res.status(400).json({ success: false, error: "Missing amount" });
       }
 
       const result = await supabaseRequest(
@@ -121,7 +138,7 @@ export default async function handler(req, res) {
       let user = result[0];
       const today = new Date().toISOString().split("T")[0];
 
-      let dailyAds = user.daily_ads;
+      let dailyAds = user.daily_ads || 0;
       if (user.last_ad_date !== today) {
         dailyAds = 0;
       }
@@ -132,16 +149,16 @@ export default async function handler(req, res) {
         return res.status(400).json({
           success: false,
           error: "Daily limit reached",
-          dailyAds: dailyAds,
-          limit: DAILY_LIMIT
+          dailyAds
         });
       }
 
-      const newBalance = user.balance + amount;
-      const newAdsWatched = user.ads_watched + 1;
+      const parsedAmount = Number(amount) || 0;
+      const newBalance = (Number(user.balance) || 0) + parsedAmount;
+      const newAdsWatched = (Number(user.ads_watched) || 0) + 1;
       const newDailyAds = dailyAds + 1;
 
-      const updateResult = await supabaseRequest(
+      const updated = await supabaseRequest(
         `users?id=eq.${userId}`,
         {
           method: "PATCH",
@@ -154,12 +171,12 @@ export default async function handler(req, res) {
         }
       );
 
+      // return updated state
       return res.status(200).json({
         success: true,
         balance: newBalance,
         adsWatched: newAdsWatched,
-        dailyAds: newDailyAds,
-        lastAdDate: today
+        dailyAds: newDailyAds
       });
     }
 
@@ -167,10 +184,10 @@ export default async function handler(req, res) {
     // Create Task
     // ===============================
     if (type === "createTask") {
-      const { name, link } = data;
+      const { name, link } = data || {};
 
       if (!name || !link) {
-        return res.status(400).json({ success: false, error: "Name and link are required" });
+        return res.status(400).json({ success: false, error: "Missing name or link" });
       }
 
       const created = await supabaseRequest("tasks", {
@@ -178,14 +195,13 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           name,
           link,
-          reward: 30,
-          created_at: new Date().toISOString()
+          reward: 30
         })
       });
 
       return res.status(200).json({
         success: true,
-        task: created[0] || created
+        task: Array.isArray(created) ? created[0] : created
       });
     }
 
@@ -194,12 +210,12 @@ export default async function handler(req, res) {
     // ===============================
     if (type === "getTasks") {
       const tasks = await supabaseRequest(
-        `tasks?select=*&order=created_at.desc`
+        `tasks?select=*`
       );
 
       return res.status(200).json({
         success: true,
-        tasks: tasks || []
+        tasks
       });
     }
 
@@ -212,10 +228,10 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error("API Error:", error);
+    console.error("API error:", error);
     return res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message || String(error)
     });
   }
 }
