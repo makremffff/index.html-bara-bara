@@ -175,6 +175,10 @@ if (bntaddTask) {
 
 /* =======================
    أزرار الإعلانات + الرصيد
+   تحسين: منع النقرات الآلية عن طريق:
+   - التحقق من event.isTrusted (يمنع dispatch programmatic)
+   - إضافة حماية client-side cooldown
+   - الاعتماد على تحقق server-side للفاصل الزمني الفعلي
 ======================= */
 const adsBtn     = document.getElementById("adsbtn");
 const adsBtnn    = document.getElementById("adsbtnn");
@@ -187,6 +191,10 @@ let timer = null;
 let dailyLimit = null;
 let dailyProgres = 100;
 let progresLimit = 24 * 60 * 60;
+
+// client-side cooldown in seconds (should be slightly less than server MIN to give responsive UX)
+const MIN_CLIENT_AD_INTERVAL = 45;
+let lastAdTimestamp = 0;
 
 let adCooldown = false;
 let adCooldownTime = 6000;
@@ -225,7 +233,33 @@ function showSingleAd() {
 }
 
 if (adsBtn) {
-  adsBtn.addEventListener("click", async function () {
+  adsBtn.addEventListener("click", async function (evt) {
+
+    // 1) Reject synthetic/programmatic clicks
+    if (evt && typeof evt.isTrusted !== "undefined" && !evt.isTrusted) {
+      // ignore programmatic clicks to mitigate automation
+      console.warn("Ignored non-user initiated click");
+      return;
+    }
+
+    // 2) Enforce client-side minimum interval
+    const nowTs = Date.now();
+    if (nowTs - lastAdTimestamp < MIN_CLIENT_AD_INTERVAL * 1000) {
+      const wait = Math.ceil((MIN_CLIENT_AD_INTERVAL * 1000 - (nowTs - lastAdTimestamp)) / 1000);
+      // Provide user feedback
+      if (adsBtnn) {
+        adsBtnn.style.display = "block";
+        adsBtn.style.display = "none";
+        adsBtnn.textContent = `${wait}s`;
+        adsBtnn.style.background = 'orange';
+        setTimeout(function(){
+          adsBtnn.style.display = 'none';
+          adsBtn.style.display = 'block';
+          adsBtnn.style.background = '';
+        }, Math.min(wait * 1000, 5000));
+      }
+      return;
+    }
 
     if (adCooldown) return;
 
@@ -259,10 +293,15 @@ if (adsBtn) {
 
           // refresh referral counts in case this watch activated a referral
           refreshReferralCounts();
+
+          // update client-side lastAdTimestamp to now (server returned lastAdTime but use local now)
+          lastAdTimestamp = Date.now();
         } else {
-          // handle errors (e.g., daily limit reached)
+          // handle errors (e.g., daily limit reached or server-side cooldown)
           console.warn("rewardUser failed:", res && res.error);
-          if (res && res.error && res.error.toString().toLowerCase().includes("daily limit")) {
+          const errText = (res && res.error) ? String(res.error).toLowerCase() : "";
+
+          if (errText.includes("daily limit")) {
             // reflect limit in UI
             adsBtn.style.display = 'none';
             adsBtnn.style.display = "block";
@@ -285,6 +324,32 @@ if (adsBtn) {
               }
 
             }, 1000);
+          } else if (errText.includes("cooldown") || errText.includes("please wait")) {
+            // server-side ad cooldown enforced -> parse seconds
+            const match = String(res.error).match(/wait\s+([0-9]+)/i);
+            let waitSec = match ? Number(match[1]) : MIN_CLIENT_AD_INTERVAL;
+            // reflect server cooldown in UI
+            adsBtn.style.display = 'none';
+            adsBtnn.style.display = 'block';
+            adsBtnn.textContent = `${waitSec}s`;
+            adsBtnn.style.background = 'orange';
+
+            let remaining = waitSec;
+            if (dailyLimit) clearInterval(dailyLimit);
+            dailyLimit = setInterval(function(){
+              remaining--;
+              adsBtnn.textContent = `${remaining}s`;
+              if (remaining <= 0) {
+                clearInterval(dailyLimit);
+                adsBtnn.style.display = 'none';
+                adsBtn.style.display = 'block';
+                adsBtnn.style.background = '';
+                if (progres) progres.textContent = dailyProgres;
+              }
+            }, 1000);
+          } else {
+            // generic failure feedback
+            alert("Failed to claim ad reward: " + ((res && res.error) || "unknown error"));
           }
         }
 
@@ -487,6 +552,16 @@ function updateBalanceUI(res) {
     dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
     if (dailyProgres < 0) dailyProgres = 0;
     if (progres) progres.textContent = dailyProgres;
+
+    // If server provides lastAdTime, align client cooldown to it (defensive)
+    if (res.lastAdTime) {
+      try {
+        const last = new Date(res.lastAdTime).getTime();
+        if (!isNaN(last)) {
+          lastAdTimestamp = last;
+        }
+      } catch (e) {}
+    }
   } else {
     console.warn("updateBalanceUI: getBalance failed:", res && res.error);
   }
