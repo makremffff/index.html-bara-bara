@@ -37,6 +37,27 @@ async function supabaseRequest(path, options = {}) {
 }
 
 // ===============================
+// Helper: format Supabase eq filter safely for numeric or string ids
+// If value looks numeric (only digits) return "field=eq.123"
+// Otherwise return "field=eq.'value'" with single quotes escaped
+// ===============================
+function formatEqFilter(field, value) {
+  if (typeof value === "number") {
+    return `${field}=eq.${value}`;
+  }
+  if (typeof value !== "string") {
+    return `${field}=eq.${String(value)}`;
+  }
+  const trimmed = value.trim();
+  if (/^[0-9]+$/.test(trimmed)) {
+    return `${field}=eq.${trimmed}`;
+  }
+  // escape single quotes by doubling them (SQL style)
+  const escaped = trimmed.replace(/'/g, "''");
+  return `${field}=eq.'${escaped}'`;
+}
+
+// ===============================
 // API Handler
 // ===============================
 export default async function handler(req, res) {
@@ -145,8 +166,10 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing amount" });
       }
 
+      // Fetch referred user using safe filter (to support numeric or string ids)
+      const userFilter = formatEqFilter("id", userId);
       const result = await supabaseRequest(
-        `users?id=eq.${userId}&select=*`
+        `users?${userFilter}&select=*`
       );
 
       if (!result || result.length === 0) {
@@ -177,8 +200,8 @@ export default async function handler(req, res) {
       const newDailyAds = dailyAds + 1;
 
       // Update the user's balance and ad counters
-      const updatedUser = await supabaseRequest(
-        `users?id=eq.${userId}`,
+      await supabaseRequest(
+        `users?${userFilter}`,
         {
           method: "PATCH",
           body: JSON.stringify({
@@ -190,6 +213,12 @@ export default async function handler(req, res) {
         }
       );
 
+      // Re-fetch the referred user to get the latest state (important to read referral_active after update)
+      const refreshed = await supabaseRequest(`users?${userFilter}&select=*`);
+      if (refreshed && refreshed.length > 0) {
+        user = refreshed[0];
+      }
+
       // Check referral activation: if the user was referred and not already activated, and has reached 10 watched ads
       let referralActivated = false;
       let inviterRewarded = false;
@@ -200,30 +229,34 @@ export default async function handler(req, res) {
         if (newAdsWatched >= 10) {
           // Reward inviter with 100 coins
           try {
-            // Fetch inviter current balance
-            const inviterRes = await supabaseRequest(`users?id=eq.${inviterId}&select=balance`);
+            // Fetch inviter current balance using safe filter
+            const inviterFilter = formatEqFilter("id", inviterId);
+            const inviterRes = await supabaseRequest(`users?${inviterFilter}&select=balance`);
+
             if (inviterRes && inviterRes.length > 0) {
               const inviter = inviterRes[0];
               const inviterBalance = Number(inviter.balance) || 0;
               const inviterNewBalance = inviterBalance + 100;
 
               // Update inviter balance
-              await supabaseRequest(`users?id=eq.${inviterId}`, {
+              await supabaseRequest(`users?${inviterFilter}`, {
                 method: "PATCH",
                 body: JSON.stringify({ balance: inviterNewBalance })
               });
 
               // Mark referral as activated on the referred user
-              await supabaseRequest(`users?id=eq.${userId}`, {
+              await supabaseRequest(`users?${userFilter}`, {
                 method: "PATCH",
                 body: JSON.stringify({ referral_active: true })
               });
 
               referralActivated = true;
               inviterRewarded = true;
+            } else {
+              // inviter not found - log
+              console.error("Inviter not found while attempting to reward:", inviterId);
             }
           } catch (e) {
-            // If inviter update failed, log but continue
             console.error("Failed to reward inviter:", e);
           }
         }
@@ -277,38 +310,6 @@ export default async function handler(req, res) {
       return res.status(200).json({
         success: true,
         tasks
-      });
-    }
-
-    // ===============================
-    // Get Referrals counts for inviter (active / pending)
-    // ===============================
-    if (type === "getReferrals") {
-      const { userId } = data || {};
-
-      if (!userId) {
-        return res.status(400).json({ success: false, error: "Missing userId" });
-      }
-
-      const referrals = await supabaseRequest(`users?referrer_id=eq.${userId}&select=referral_active`);
-
-      if (!referrals) {
-        return res.status(200).json({ success: true, active: 0, pending: 0 });
-      }
-
-      let active = 0;
-      let total = 0;
-      referrals.forEach(r => {
-        total++;
-        if (r.referral_active) active++;
-      });
-
-      const pending = total - active;
-
-      return res.status(200).json({
-        success: true,
-        active,
-        pending
       });
     }
 
