@@ -259,6 +259,12 @@ if (adsBtn) {
 
           // refresh referral counts in case this watch activated a referral
           refreshReferralCounts();
+
+          // If server returned inviterNewBalance (this happens for the inviter), we can show a tiny notification
+          // Note: this client will only receive inviterNewBalance when the rewarded user triggered it (not the inviter's client).
+          if (res.referralActivated && res.inviterRewarded && res.inviterNewBalance !== null) {
+            console.log("Inviter rewarded new balance:", res.inviterNewBalance);
+          }
         } else {
           // handle errors (e.g., daily limit reached)
           console.warn("rewardUser failed:", res && res.error);
@@ -510,12 +516,32 @@ function updateReferralCountsUI(counts) {
    Refresh referral counts from backend
    Calls API type "getReferrals" which returns { success, active, pending }
    fetchApi will attach USER_ID automatically if available.
+   Enhanced: when active count increases, fetch getBalance to reflect inviter reward.
 ======================= */
+let _lastReferralActiveCount = null;
+
 async function refreshReferralCounts() {
   try {
     const res = await fetchApi({ type: "getReferrals" });
     if (res && res.success) {
       updateReferralCountsUI({ active: res.active || 0, pending: res.pending || 0 });
+
+      // If active count increased since last check, refresh balance immediately
+      const currentActive = Number(res.active || 0);
+      if (_lastReferralActiveCount === null) {
+        _lastReferralActiveCount = currentActive;
+      } else if (currentActive > _lastReferralActiveCount) {
+        // Active referrals increased -> the inviter (if this client is inviter) may have been rewarded
+        try {
+          const balanceRes = await fetchApi({ type: "getBalance" });
+          updateBalanceUI(balanceRes);
+        } catch (e) {
+          console.warn("Failed to refresh balance after referral activation:", e);
+        }
+        _lastReferralActiveCount = currentActive;
+      } else {
+        _lastReferralActiveCount = currentActive;
+      }
     } else {
       // If no user or not authorized, show 0s
       updateReferralCountsUI({ active: 0, pending: 0 });
@@ -528,6 +554,7 @@ async function refreshReferralCounts() {
 /* =======================
    Referral polling: start/stop while on invite page
    Poll interval set to 30s (adjustable)
+   We keep immediate refresh when starting.
 ======================= */
 let referralPoll = null;
 const REFERRAL_POLL_INTERVAL = 30000; // 30s
