@@ -4,6 +4,9 @@
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+// Minimum seconds required between rewarded ads (server-side enforcement)
+const MIN_AD_INTERVAL_SECONDS = 50;
+
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   // If these env vars are missing, throw early so developer notices
   console.error("Missing SUPABASE environment variables.");
@@ -79,6 +82,8 @@ export default async function handler(req, res) {
             ads_watched: 0,
             daily_ads: 0,
             last_ad_date: today,
+            // last_ad_time stores ISO timestamp of the last rewarded ad (for server-side anti-abuse)
+            last_ad_time: null,
             referrer_id: referrerId || null,
             referral_active: false
           })
@@ -113,7 +118,7 @@ export default async function handler(req, res) {
       }
 
       const result = await supabaseRequest(
-        `users?id=eq.${userId}&select=balance,ads_watched,daily_ads,last_ad_date,referrer_id,referral_active`
+        `users?id=eq.${userId}&select=balance,ads_watched,daily_ads,last_ad_date,last_ad_time,referrer_id,referral_active`
       );
 
       if (!result || result.length === 0) {
@@ -126,6 +131,7 @@ export default async function handler(req, res) {
         adsWatched: result[0].ads_watched,
         dailyAds: result[0].daily_ads,
         lastAdDate: result[0].last_ad_date,
+        lastAdTime: result[0].last_ad_time || null,
         referrerId: result[0].referrer_id || null,
         referralActive: !!result[0].referral_active
       });
@@ -133,6 +139,7 @@ export default async function handler(req, res) {
 
     // ===============================
     // Reward User (Save Balance + Ads) and handle referral activation
+    // Server-side enforces a minimum interval between rewarded ads to mitigate automation.
     // ===============================
     if (type === "rewardUser") {
       const { userId, amount } = data || {};
@@ -154,7 +161,26 @@ export default async function handler(req, res) {
       }
 
       let user = result[0];
-      const today = new Date().toISOString().split("T")[0];
+      const now = new Date();
+      const today = now.toISOString().split("T")[0];
+
+      // Server-side anti-abuse: ensure minimum time elapsed since last rewarded ad
+      if (user.last_ad_time) {
+        try {
+          const lastAdTime = new Date(user.last_ad_time);
+          const diffSeconds = Math.floor((now.getTime() - lastAdTime.getTime()) / 1000);
+          if (diffSeconds < MIN_AD_INTERVAL_SECONDS) {
+            const wait = MIN_AD_INTERVAL_SECONDS - diffSeconds;
+            return res.status(429).json({
+              success: false,
+              error: `Ad cooldown: please wait ${wait} seconds before claiming another reward`
+            });
+          }
+        } catch (e) {
+          // if parsing fails, continue — we'll overwrite last_ad_time below
+          console.error("Failed to parse last_ad_time:", e);
+        }
+      }
 
       let dailyAds = user.daily_ads || 0;
       if (user.last_ad_date !== today) {
@@ -176,7 +202,7 @@ export default async function handler(req, res) {
       const newAdsWatched = (Number(user.ads_watched) || 0) + 1;
       const newDailyAds = dailyAds + 1;
 
-      // Update the user's balance and ad counters
+      // Update the user's balance and ad counters and last_ad_time
       const updatedUser = await supabaseRequest(
         `users?id=eq.${userId}`,
         {
@@ -185,7 +211,8 @@ export default async function handler(req, res) {
             balance: newBalance,
             ads_watched: newAdsWatched,
             daily_ads: newDailyAds,
-            last_ad_date: today
+            last_ad_date: today,
+            last_ad_time: now.toISOString()
           })
         }
       );
@@ -237,7 +264,8 @@ export default async function handler(req, res) {
         dailyAds: newDailyAds,
         referralActivated,
         inviterRewarded,
-        inviterId: referralActivated ? inviterId : null
+        inviterId: referralActivated ? inviterId : null,
+        lastAdTime: now.toISOString()
       });
     }
 
