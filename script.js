@@ -246,6 +246,9 @@ if (adsBtn) {
           dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
           if (dailyProgres < 0) dailyProgres = 0;
           if (progres) progres.textContent = dailyProgres;
+
+          // refresh referral counts in case this watch activated a referral
+          refreshReferralCounts();
         } else {
           // handle errors (e.g., daily limit reached)
           console.warn("rewardUser failed:", res.error);
@@ -480,41 +483,115 @@ function updateBalanceUI(res) {
 }
 
 /* =======================
+   Update referral counts UI (pending & active)
+   selectors match index.html structure:
+   .refal .active.count span and .refal .pending.count span
+======================= */
+function updateReferralCountsUI(counts) {
+  if (!counts) return;
+  const activeEl = document.querySelector('.refal .active.count span');
+  const pendingEl = document.querySelector('.refal .pending.count span');
+
+  if (activeEl) activeEl.textContent = String(counts.active || 0);
+  if (pendingEl) pendingEl.textContent = String(counts.pending || 0);
+}
+
+/* =======================
+   Refresh referral counts from backend
+   Calls API type "getReferrals" which returns { success, active, pending }
+   fetchApi will attach USER_ID automatically if available.
+======================= */
+async function refreshReferralCounts() {
+  try {
+    const res = await fetchApi({ type: "getReferrals" });
+    if (res && res.success) {
+      updateReferralCountsUI({ active: res.active || 0, pending: res.pending || 0 });
+    } else {
+      // If no user or not authorized, show 0s
+      updateReferralCountsUI({ active: 0, pending: 0 });
+    }
+  } catch (e) {
+    console.warn("refreshReferralCounts failed:", e);
+  }
+}
+
+/* =======================
+   Utility: استخراج قيمة start param بطريقة مرنة
+   يمكن قراءة start_param من Telegram initDataUnsafe أو من URL (startapp, start)
+   نتعامل مع حالات وجود حروف عربية ملصقة بعد الرقم مثل:
+   https://...startapp=ref_7741750541رابط
+   فنقوم باستخراج الرقم بعد ref_ فقط.
+======================= */
+function extractReferrerFromStartParam(raw) {
+  if (!raw || typeof raw !== "string") return null;
+
+  // Decode in case it's URI encoded
+  try {
+    raw = decodeURIComponent(raw);
+  } catch (e) {}
+
+  // Trim whitespace
+  raw = raw.trim();
+
+  // Look for patterns like "ref_7741750541" possibly followed by other chars
+  const m = raw.match(/ref_([0-9]+)/i);
+  if (m && m[1]) return m[1];
+
+  // Also allow alphanumeric ids after ref_ (if your ids are not pure numeric)
+  const m2 = raw.match(/ref_([A-Za-z0-9-_]+)/i);
+  if (m2 && m2[1]) return m2[1];
+
+  return null;
+}
+
+/* =======================
    Telegram WebApp User Data + referral (start params)
-   NOTE: read start params to detect referrer (ref_<id>)
-   and send referrerId during syncUser. referral remains pending
-   until referred watches 10 ads; backend will handle activation and reward.
+   عند الدخول نقرا start params ونخزن referrerId لإرساله أثناء syncUser
+   كما نجلب عدد الدعوات ونحدّث واجهة invite
 ======================= */
 document.addEventListener("DOMContentLoaded", async function () {
 
-  // Try to read start parameters from Telegram initDataUnsafe or URL params
+  // 1) Read start param from Telegram initDataUnsafe if present
   let startParam = null;
   try {
     if (typeof window.Telegram !== "undefined" && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe) {
       const init = window.Telegram.WebApp.initDataUnsafe;
-      startParam = init.start_param || init.startpayload || init.start_param || null;
+      // Telegram may provide start_param, start_payload, or start
+      startParam = init.start_param || init.startpayload || init.start_payload || init.start || null;
     }
   } catch (e) {}
 
-  // fallback: read URL search params (e.g., startapp=ref_12345)
+  // 2) Fallback: read from URL query (startapp or start)
   if (!startParam) {
     try {
       const urlParams = new URLSearchParams(window.location.search);
-      startParam = urlParams.get('startapp') || urlParams.get('start') || null;
+      startParam = urlParams.get('startapp') || urlParams.get('start') || urlParams.get('start_param') || null;
     } catch (e) {}
   }
 
-  // extract referrer id if startParam like "ref_12345"
-  let referrerId = null;
-  if (startParam && typeof startParam === 'string') {
-    const m = startParam.match(/^ref_(.+)$/i);
-    if (m) referrerId = m[1];
+  // 3) Extract referrer id robustly (handles cases like "...ref_7741750541رابط")
+  let referrerId = extractReferrerFromStartParam(startParam);
+
+  // 4) If still not found, also try to find "ref_<id>" anywhere in the full URL
+  if (!referrerId) {
+    try {
+      const fullUrl = decodeURIComponent(window.location.href || "");
+      const m = fullUrl.match(/ref_([0-9A-Za-z-_]+)/i);
+      if (m && m[1]) referrerId = m[1];
+    } catch (e) {}
   }
 
-  // If Telegram exists, initialize WebApp and get user info
+  // 5) Store referrerId locally so it can be attached later if user logs in after navigation
+  if (referrerId) {
+    try {
+      localStorage.setItem('referrerId', String(referrerId));
+    } catch (e) {}
+  }
+
+  // If Telegram WebApp present -> initialize and sync user (include referrer if available)
   if (typeof window.Telegram !== "undefined") {
     const tg = window.Telegram.WebApp;
-    tg.ready();
+    try { tg.ready(); } catch (e) {}
     try { tg.expand(); } catch (e) {}
 
     if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
@@ -523,27 +600,40 @@ document.addEventListener("DOMContentLoaded", async function () {
       const firstName = user.first_name ? user.first_name : "";
       const photoUrl = user.photo_url ? user.photo_url : "";
 
-      // Store userId globally so subsequent API calls include it automatically
       USER_ID = userId;
 
-      // Sync user on server and pass referrerId if present
+      // If we didn't get referrerId earlier from startParam, try localStorage (in case it was saved previously)
+      if (!referrerId) {
+        try {
+          const stored = localStorage.getItem('referrerId');
+          if (stored) referrerId = stored;
+        } catch (e) {}
+      }
+
+      // Send syncUser including referrerId (may be null)
       await fetchApi({
         type: "syncUser",
         data: {
           id: userId,
           name: firstName,
           photo: photoUrl,
-          referrerId: referrerId // may be null
+          referrerId: referrerId || null
         }
       });
 
+      // After sync, clear stored referrer (optional)
+      try { localStorage.removeItem('referrerId'); } catch (e) {}
+
       // Immediately fetch balance/stats to populate UI
       const res = await fetchApi({ type: "getBalance" });
-      if (res.success) {
+      if (res && res.success) {
         updateBalanceUI(res);
       } else {
-        console.warn("Initial getBalance failed:", res.error);
+        console.warn("Initial getBalance failed:", res && res.error);
       }
+
+      // Also fetch referral counts so invite page reflects pending/active
+      await refreshReferralCounts();
 
       const userPhotoContainer = document.querySelector(".user-fhoto");
       const userNameContainer = document.querySelector(".user-name");
@@ -566,29 +656,35 @@ document.addEventListener("DOMContentLoaded", async function () {
         userNameContainer.textContent = firstName;
       }
 
-      if (link) {
-        link.textContent =
-          "https://t.me/Bot_ad_watchbot/earn?startapp=ref_" + userId;
+      // Update personal referral link shown to the user
+      if (link && userId) {
+        try {
+          link.textContent =
+            "https://t.me/Bot_ad_watchbot/earn?startapp=ref_" + userId;
+        } catch (e) {}
       }
     }
   } else {
     // Not a Telegram WebApp visitor.
-    // We still attempt to fetch balance if USER_ID is somehow set (e.g., from previous session).
-    // If no USER_ID, just store referrerId in localStorage to attach later when user registers.
+    // Keep referrerId in localStorage so it can be used when the user registers/logs in later.
     if (referrerId) {
       try {
-        localStorage.setItem('referrerId', referrerId);
+        localStorage.setItem('referrerId', String(referrerId));
       } catch (e) {}
     }
 
-    // Try to fetch balance for non-Telegram user if USER_ID exists
+    // Try to fetch balance for non-Telegram user if USER_ID exists (edge cases)
     if (USER_ID) {
       try {
         const res = await fetchApi({ type: "getBalance" });
         updateBalanceUI(res);
+        await refreshReferralCounts();
       } catch (e) {
         console.warn("Initial balance fetch failed:", e);
       }
+    } else {
+      // If user not logged in yet, still try to update invite UI from local data (0s)
+      updateReferralCountsUI({ active: 0, pending: 0 });
     }
   }
 
@@ -602,6 +698,7 @@ window.addEventListener('load', async function() {
   try {
     const res = await fetchApi({ type: "getBalance" });
     updateBalanceUI(res);
+    await refreshReferralCounts();
   } catch (e) {
     console.warn("Load balance fetch failed:", e);
   }
