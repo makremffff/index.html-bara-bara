@@ -39,6 +39,10 @@ const API_ENDPOINT = "/api";
 
 let USER_ID = null; // store Telegram user id after sync
 
+// Client-side global API call throttling: minimum 5 seconds between any fetchApi calls
+const MIN_API_INTERVAL_MS = 5000;
+let lastApiCallTimestamp = 0;
+
 async function fetchApi({ type, data = {} }) {
   try {
     // attach userId automatically when available and not explicitly provided
@@ -46,11 +50,22 @@ async function fetchApi({ type, data = {} }) {
       data.userId = USER_ID;
     }
 
+    // Enforce client-side minimum interval between API calls (throttle)
+    const now = Date.now();
+    const sinceLast = now - (lastApiCallTimestamp || 0);
+    if (sinceLast < MIN_API_INTERVAL_MS) {
+      const wait = MIN_API_INTERVAL_MS - sinceLast;
+      await new Promise((r) => setTimeout(r, wait));
+    }
+
     const response = await fetch(API_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type, data })
     });
+
+    // Update lastApiCallTimestamp after actual network call completed
+    lastApiCallTimestamp = Date.now();
 
     const result = await response.json();
 
@@ -63,6 +78,7 @@ async function fetchApi({ type, data = {} }) {
 
   } catch (error) {
     console.error("API Error:", error);
+    lastApiCallTimestamp = Date.now();
     return { success: false, error: error.message || String(error) };
   }
 }
@@ -193,7 +209,7 @@ let dailyProgres = 100;
 let progresLimit = 24 * 60 * 60;
 
 // client-side cooldown in seconds (should be slightly less than server MIN to give responsive UX)
-const MIN_CLIENT_AD_INTERVAL = 5;
+const MIN_CLIENT_AD_INTERVAL = 5; // changed to 5 seconds per request
 let lastAdTimestamp = 0;
 
 let adCooldown = false;
@@ -232,6 +248,63 @@ function showSingleAd() {
   });
 }
 
+/* =======================
+   Helper: play notification sound with robust fallback (element, created Audio, WebAudio)
+   Ensures notification sound plays reliably when user finishes ad and receives reward.
+======================= */
+async function playNotificationSound() {
+  try {
+    // Prefer existing soundads element if present
+    if (soundads && typeof soundads.play === "function") {
+      try {
+        soundads.currentTime = 0;
+      } catch (e) {}
+      const playResult = soundads.play();
+      if (playResult && typeof playResult.then === "function") {
+        await playResult;
+      }
+      return;
+    }
+
+    // Try to find element by id again (defensive)
+    const el = document.getElementById("soundads");
+    if (el && el.src) {
+      const a = new Audio(el.src);
+      a.volume = typeof el.volume !== 'undefined' ? el.volume : 1;
+      try {
+        await a.play();
+        return;
+      } catch (e) {
+        // continue to webaudio fallback
+      }
+    }
+
+    // Fallback: small beep using WebAudio API
+    if (typeof window !== "undefined" && (window.AudioContext || window.webkitAudioContext)) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioCtx();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = 880;
+      g.gain.value = 0.08;
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.start();
+      setTimeout(function(){
+        try { o.stop(); } catch (e) {}
+        try { ctx.close(); } catch (e) {}
+      }, 150);
+      return;
+    }
+  } catch (e) {
+    console.warn("playNotificationSound failed:", e);
+  }
+}
+
+/* =======================
+   Reward button handler
+======================= */
 if (adsBtn) {
   adsBtn.addEventListener("click", async function (evt) {
 
@@ -256,7 +329,7 @@ if (adsBtn) {
           adsBtnn.style.display = 'none';
           adsBtn.style.display = 'block';
           adsBtnn.style.background = '';
-        }, Math.min(wait * 1000, 500));
+        }, Math.min(wait * 1000, 5000));
       }
       return;
     }
@@ -356,9 +429,11 @@ if (adsBtn) {
         // UI feedback for success (or even for failure it's fine to show)
         if (res && res.success) {
           try {
-            soundads.currentTime = 0;
-            soundads.play();
-          } catch (e) {}
+            // Use robust notification sound player with fallback
+            await playNotificationSound();
+          } catch (e) {
+            console.warn("Notification sound play failed:", e);
+          }
           // visual notification
           if (adsNotfi) {
             adsNotfi.style.display = "block";
@@ -394,7 +469,7 @@ if (adsBtn) {
         // if dailyProgres depleted, set long cooldown
         if (dailyProgres <= 0) {
           adsBtn.style.display = 'none';
-          adsBtnn.style.display = "block";
+          adsBtnn.style.display = 'block';
           adsBtnn.textContent = progresLimit;
           adsBtnn.style.background = 'red';
 
