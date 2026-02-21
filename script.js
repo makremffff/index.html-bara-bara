@@ -42,7 +42,7 @@ let USER_ID = null; // store Telegram user id after sync
 async function fetchApi({ type, data = {} }) {
   try {
     // attach userId automatically when available and not explicitly provided
-    if (USER_ID && (!data.userId)) {
+    if (USER_ID && (!data.userId) && !data.id) {
       data.userId = USER_ID;
     }
 
@@ -480,16 +480,41 @@ function updateBalanceUI(res) {
 }
 
 /* =======================
-   Telegram WebApp User Data
-   NOTE: don't block normal init if Telegram is not present.
-   We still fetch balance for regular visitors so balance appears on first visit.
+   Telegram WebApp User Data + referral (start params)
+   NOTE: read start params to detect referrer (ref_<id>)
+   and send referrerId during syncUser. referral remains pending
+   until referred watches 10 ads; backend will handle activation and reward.
 ======================= */
 document.addEventListener("DOMContentLoaded", async function () {
 
-  // If Telegram exists, do Telegram-specific initialization
+  // Try to read start parameters from Telegram initDataUnsafe or URL params
+  let startParam = null;
+  try {
+    if (typeof window.Telegram !== "undefined" && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe) {
+      const init = window.Telegram.WebApp.initDataUnsafe;
+      startParam = init.start_param || init.startpayload || init.start_param || null;
+    }
+  } catch (e) {}
+
+  // fallback: read URL search params (e.g., startapp=ref_12345)
+  if (!startParam) {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      startParam = urlParams.get('startapp') || urlParams.get('start') || null;
+    } catch (e) {}
+  }
+
+  // extract referrer id if startParam like "ref_12345"
+  let referrerId = null;
+  if (startParam && typeof startParam === 'string') {
+    const m = startParam.match(/^ref_(.+)$/i);
+    if (m) referrerId = m[1];
+  }
+
+  // If Telegram exists, initialize WebApp and get user info
   if (typeof window.Telegram !== "undefined") {
     const tg = window.Telegram.WebApp;
-    try { tg.ready(); } catch (e) {}
+    tg.ready();
     try { tg.expand(); } catch (e) {}
 
     if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
@@ -501,15 +526,24 @@ document.addEventListener("DOMContentLoaded", async function () {
       // Store userId globally so subsequent API calls include it automatically
       USER_ID = userId;
 
-      // Sync user on server (fire-and-forget)
+      // Sync user on server and pass referrerId if present
       await fetchApi({
         type: "syncUser",
         data: {
           id: userId,
           name: firstName,
-          photo: photoUrl
+          photo: photoUrl,
+          referrerId: referrerId // may be null
         }
       });
+
+      // Immediately fetch balance/stats to populate UI
+      const res = await fetchApi({ type: "getBalance" });
+      if (res.success) {
+        updateBalanceUI(res);
+      } else {
+        console.warn("Initial getBalance failed:", res.error);
+      }
 
       const userPhotoContainer = document.querySelector(".user-fhoto");
       const userNameContainer = document.querySelector(".user-name");
@@ -537,15 +571,27 @@ document.addEventListener("DOMContentLoaded", async function () {
           "https://t.me/Bot_ad_watchbot/earn?startapp=ref_" + userId;
       }
     }
+  } else {
+    // Not a Telegram WebApp visitor.
+    // We still attempt to fetch balance if USER_ID is somehow set (e.g., from previous session).
+    // If no USER_ID, just store referrerId in localStorage to attach later when user registers.
+    if (referrerId) {
+      try {
+        localStorage.setItem('referrerId', referrerId);
+      } catch (e) {}
+    }
+
+    // Try to fetch balance for non-Telegram user if USER_ID exists
+    if (USER_ID) {
+      try {
+        const res = await fetchApi({ type: "getBalance" });
+        updateBalanceUI(res);
+      } catch (e) {
+        console.warn("Initial balance fetch failed:", e);
+      }
+    }
   }
 
-  // Always attempt to fetch balance on DOMContentLoaded so the user sees balance immediately
-  try {
-    const res = await fetchApi({ type: "getBalance" });
-    updateBalanceUI(res);
-  } catch (e) {
-    console.warn("Initial balance fetch failed:", e);
-  }
 });
 
 /* =======================
