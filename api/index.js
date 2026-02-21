@@ -133,16 +133,6 @@ export default async function handler(req, res) {
 
     // ===============================
     // Reward User (Save Balance + Ads) and handle referral activation
-    //    - Referral activation MUST be performed atomically (single transaction)
-    //    - We call a Postgres RPC function `activate_referral` which must exist
-    //      and perform the following in a single DB transaction:
-    //        * verify referred user's referrer_id matches inviter_id
-    //        * verify referral_active is false
-    //        * verify referred user's ads_watched >= threshold (10)
-    //        * update inviter's balance (e.g., +100)
-    //        * set referred user's referral_active = true
-    //      The RPC prevents duplicate rewards and ensures both updates succeed or fail together.
-    //    - If RPC is not available or fails, we will NOT attempt a non-atomic fallback reward (fail-safe).
     // ===============================
     if (type === "rewardUser") {
       const { userId, amount } = data || {};
@@ -204,74 +194,38 @@ export default async function handler(req, res) {
       let referralActivated = false;
       let inviterRewarded = false;
       let inviterId = user.referrer_id || null;
-      let inviterNewBalance = null;
 
       if (inviterId && !user.referral_active) {
-        // Verify inviter actually exists in the database before attempting activation
-        try {
-          const inviterCheck = await supabaseRequest(`users?id=eq.${inviterId}&select=id,balance`);
-          if (!inviterCheck || inviterCheck.length === 0) {
-            // Inviter not found; do not attempt activation
-            inviterId = null;
-          }
-        } catch (e) {
-          // If the existence check fails for any reason, null out inviterId to avoid unsafe operations
-          console.error("Inviter existence check failed:", e);
-          inviterId = null;
-        }
-      } else {
-        // No inviter or already active — skip activation
-        inviterId = null;
-      }
+        // Determine total ads watched after increment (we used newAdsWatched)
+        if (newAdsWatched >= 1) {
+          // Reward inviter with 100 coins
+          try {
+            // Fetch inviter current balance
+            const inviterRes = await supabaseRequest(`users?id=eq.${inviterId}&select=balance`);
+            if (inviterRes && inviterRes.length > 0) {
+              const inviter = inviterRes[0];
+              const inviterBalance = Number(inviter.balance) || 0;
+              const inviterNewBalance = inviterBalance + 100;
 
-      // Only attempt RPC-based atomic activation if inviterId is valid and threshold reached
-      if (inviterId && newAdsWatched >= 10) {
-        try {
-          // Call a Postgres RPC function that must be defined in the Supabase database:
-          // Example signature expected:
-          //   activate_referral(inviter_id uuid/text, referred_id uuid/text, reward integer)
-          // The function should run in a single transaction, return a record describing the outcome,
-          // and ensure the inviter is rewarded only once.
-          const rpcPayload = {
-            inviter_id: inviterId,
-            referred_id: userId,
-            reward: 100
-          };
+              // Update inviter balance
+              await supabaseRequest(`users?id=eq.${inviterId}`, {
+                method: "PATCH",
+                body: JSON.stringify({ balance: inviterNewBalance })
+              });
 
-          const rpcResult = await supabaseRequest(`rpc/activate_referral`, {
-            method: "POST",
-            body: JSON.stringify(rpcPayload)
-          });
+              // Mark referral as activated on the referred user
+              await supabaseRequest(`users?id=eq.${userId}`, {
+                method: "PATCH",
+                body: JSON.stringify({ referral_active: true })
+              });
 
-          // Interpret rpcResult robustly: it may be an array or object depending on function
-          let rpcResp = null;
-          if (Array.isArray(rpcResult) && rpcResult.length > 0) rpcResp = rpcResult[0];
-          else rpcResp = rpcResult;
-
-          // Expect the RPC to explicitly indicate whether it performed the reward/activation.
-          // For example: { activated: true, inviter_new_balance: 123 }
-          if (rpcResp && (rpcResp.activated === true || rpcResp.rewarded === true || rpcResp.inviter_new_balance)) {
-            referralActivated = !!(rpcResp.activated || rpcResp.rewarded);
-            inviterRewarded = !!(rpcResp.rewarded || rpcResp.activated);
-            inviterNewBalance = rpcResp.inviter_new_balance || null;
-          } else {
-            // If RPC didn't return explicit success, but returned something, try to infer:
-            // If rpcResp has any keys, consider success as long as referral_active was set server-side.
-            // This is conservative — we'll check referred user's referral_active to confirm.
-            try {
-              const referredRefetch = await supabaseRequest(`users?id=eq.${userId}&select=referral_active`);
-              if (referredRefetch && referredRefetch.length > 0 && referredRefetch[0].referral_active) {
-                referralActivated = true;
-                inviterRewarded = true;
-              }
-            } catch (e) {
-              // ignore
+              referralActivated = true;
+              inviterRewarded = true;
             }
+          } catch (e) {
+            // If inviter update failed, log but continue
+            console.error("Failed to reward inviter:", e);
           }
-        } catch (e) {
-          // If RPC call failed, we must NOT perform a non-atomic fallback that could double-reward.
-          // Log and continue without rewarding the inviter. This is the safe option.
-          console.error("Atomic referral activation RPC failed:", e);
         }
       }
 
@@ -283,8 +237,7 @@ export default async function handler(req, res) {
         dailyAds: newDailyAds,
         referralActivated,
         inviterRewarded,
-        inviterId: referralActivated ? inviterId : null,
-        inviterNewBalance: inviterNewBalance
+        inviterId: referralActivated ? inviterId : null
       });
     }
 
