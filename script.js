@@ -78,6 +78,7 @@ if (window.Adsgram && typeof window.Adsgram.init === "function") {
 
 /* =======================
    دالة إخفاء كل الصفحات
+   الآن تتعامل مع بدء/ايقاف استدعاء عداد الدعوات عندما تدخل صفحة invite
 ======================= */
 function showPage(btnpage) {
 
@@ -107,6 +108,15 @@ function showPage(btnpage) {
   setTimeout(function () {
     loadpage.style.display = "none";
   }, 2000);
+
+  // Start/stop referral polling depending on the shown page
+  if (btnpage === sharePage) {
+    startReferralPolling();
+    // ensure immediate refresh when opening invite page
+    refreshReferralCounts();
+  } else {
+    stopReferralPolling();
+  }
 }
 
 /* =======================
@@ -130,7 +140,7 @@ if (btnWallet) {
 
     const res = await fetchApi({ type: "getBalance" });
 
-    if (res.success) {
+    if (res && res.success) {
       ADS = Number(res.balance) || 0;
 
       if (walletbalance) {
@@ -146,7 +156,7 @@ if (btnWallet) {
       dailyProgres = remaining >= 0 ? remaining : 0;
       if (progres) progres.textContent = dailyProgres;
     } else {
-      console.warn("getBalance failed:", res.error);
+      console.warn("getBalance failed:", res && res.error);
     }
   });
 }
@@ -237,7 +247,7 @@ if (adsBtn) {
           data: { amount: 100 }
         });
 
-        if (res.success) {
+        if (res && res.success) {
           ADS = Number(res.balance) || ADS;
           if (adsBalance) adsBalance.textContent = ADS;
 
@@ -251,8 +261,8 @@ if (adsBtn) {
           refreshReferralCounts();
         } else {
           // handle errors (e.g., daily limit reached)
-          console.warn("rewardUser failed:", res.error);
-          if (res.error && res.error.toString().toLowerCase().includes("daily limit")) {
+          console.warn("rewardUser failed:", res && res.error);
+          if (res && res.error && res.error.toString().toLowerCase().includes("daily limit")) {
             // reflect limit in UI
             adsBtn.style.display = 'none';
             adsBtnn.style.display = "block";
@@ -279,7 +289,7 @@ if (adsBtn) {
         }
 
         // UI feedback for success (or even for failure it's fine to show)
-        if (res.success) {
+        if (res && res.success) {
           try {
             soundads.currentTime = 0;
             soundads.play();
@@ -428,7 +438,7 @@ if (creatTask) {
       data: { name: nametask, link: linktask }
     });
 
-    if (res.success) {
+    if (res && res.success) {
       let taskcontainer = document.querySelector(".task-container");
       let taskcard = document.createElement("div");
       taskcard.className = "task-card";
@@ -444,8 +454,8 @@ if (creatTask) {
       document.getElementById("taskNameInput").value = '';
       document.getElementById("taskLinkInput").value = '';
     } else {
-      console.warn("createTask failed:", res.error);
-      alert("Failed to create task: " + (res.error || "unknown"));
+      console.warn("createTask failed:", res && res.error);
+      alert("Failed to create task: " + ((res && res.error) || "unknown"));
     }
   });
 }
@@ -478,7 +488,7 @@ function updateBalanceUI(res) {
     if (dailyProgres < 0) dailyProgres = 0;
     if (progres) progres.textContent = dailyProgres;
   } else {
-    console.warn("updateBalanceUI: getBalance failed:", res.error);
+    console.warn("updateBalanceUI: getBalance failed:", res && res.error);
   }
 }
 
@@ -512,6 +522,29 @@ async function refreshReferralCounts() {
     }
   } catch (e) {
     console.warn("refreshReferralCounts failed:", e);
+  }
+}
+
+/* =======================
+   Referral polling: start/stop while on invite page
+   Poll interval set to 30s (adjustable)
+======================= */
+let referralPoll = null;
+const REFERRAL_POLL_INTERVAL = 30000; // 30s
+
+function startReferralPolling() {
+  // clear any existing
+  if (referralPoll) clearInterval(referralPoll);
+  // immediate refresh
+  refreshReferralCounts();
+  // set interval
+  referralPoll = setInterval(refreshReferralCounts, REFERRAL_POLL_INTERVAL);
+}
+
+function stopReferralPolling() {
+  if (referralPoll) {
+    clearInterval(referralPoll);
+    referralPoll = null;
   }
 }
 
@@ -633,7 +666,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       }
 
       // Also fetch referral counts so invite page reflects pending/active
-      await refreshReferralCounts();
+      refreshReferralCounts();
 
       const userPhotoContainer = document.querySelector(".user-fhoto");
       const userNameContainer = document.querySelector(".user-name");
@@ -663,6 +696,9 @@ document.addEventListener("DOMContentLoaded", async function () {
             "https://t.me/Bot_ad_watchbot/earn?startapp=ref_" + userId;
         } catch (e) {}
       }
+    } else {
+      // If Telegram present but no user data, still refresh referrals if USER_ID exists
+      if (USER_ID) refreshReferralCounts();
     }
   } else {
     // Not a Telegram WebApp visitor.
@@ -678,12 +714,12 @@ document.addEventListener("DOMContentLoaded", async function () {
       try {
         const res = await fetchApi({ type: "getBalance" });
         updateBalanceUI(res);
-        await refreshReferralCounts();
+        refreshReferralCounts();
       } catch (e) {
         console.warn("Initial balance fetch failed:", e);
       }
     } else {
-      // If user not logged in yet, still try to update invite UI from local data (0s)
+      // If user not logged in yet, still set invite UI to 0s
       updateReferralCountsUI({ active: 0, pending: 0 });
     }
   }
@@ -698,7 +734,7 @@ window.addEventListener('load', async function() {
   try {
     const res = await fetchApi({ type: "getBalance" });
     updateBalanceUI(res);
-    await refreshReferralCounts();
+    refreshReferralCounts();
   } catch (e) {
     console.warn("Load balance fetch failed:", e);
   }
