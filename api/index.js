@@ -53,44 +53,53 @@ export default async function handler(req, res) {
 
   try {
     // ===============================
-    // Sync User
+    // Sync User (accept optional referrerId)
     // ===============================
     if (type === "syncUser") {
-      // accept either data.id or data.userId (frontend may attach userId automatically)
-      const idFromPayload = (data && (data.id || data.userId)) || null;
-      const { name = null, photo = null } = data || {};
+      const { id, name = null, photo = null, referrerId = null } = data || {};
 
-      if (!idFromPayload) {
+      if (!id) {
         return res.status(400).json({ success: false, error: "Missing user id" });
       }
 
-      // Check if user exists (select full record)
-      const existing = await supabaseRequest(`users?id=eq.${idFromPayload}&select=*`);
+      const today = new Date().toISOString().split("T")[0];
+
+      // Check if user exists
+      const existing = await supabaseRequest(`users?id=eq.${id}&select=*`);
 
       if (!existing || existing.length === 0) {
-        // Create new user with initial values (return created record)
+        // Create new user with initial values. Save referrer if provided.
         const created = await supabaseRequest("users", {
           method: "POST",
           body: JSON.stringify({
-            id: idFromPayload,
+            id,
             name,
             photo,
             balance: 0,
             ads_watched: 0,
             daily_ads: 0,
-            // set to null so we can treat "no previous date" uniformly
-            last_ad_date: null
+            last_ad_date: today,
+            referrer_id: referrerId || null,
+            referral_active: false
           })
         });
 
-        const user = Array.isArray(created) ? created[0] : created;
-
-        return res.status(200).json({ success: true, user });
+        return res.status(200).json({ success: true, created: Array.isArray(created) ? created[0] : created });
       }
 
-      // existing user -> return the user record so client can update UI immediately
+      // If user exists, but a referrerId is provided and the user doesn't already have a referrer, set it (prevent self-referral)
       const user = existing[0];
-      return res.status(200).json({ success: true, user });
+      if (referrerId && !user.referrer_id && String(user.id) !== String(referrerId)) {
+        await supabaseRequest(`users?id=eq.${id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            referrer_id: referrerId,
+            referral_active: false
+          })
+        });
+      }
+
+      return res.status(200).json({ success: true });
     }
 
     // ===============================
@@ -104,7 +113,7 @@ export default async function handler(req, res) {
       }
 
       const result = await supabaseRequest(
-        `users?id=eq.${userId}&select=balance,ads_watched,daily_ads,last_ad_date`
+        `users?id=eq.${userId}&select=balance,ads_watched,daily_ads,last_ad_date,referrer_id,referral_active`
       );
 
       if (!result || result.length === 0) {
@@ -116,12 +125,14 @@ export default async function handler(req, res) {
         balance: result[0].balance,
         adsWatched: result[0].ads_watched,
         dailyAds: result[0].daily_ads,
-        lastAdDate: result[0].last_ad_date
+        lastAdDate: result[0].last_ad_date,
+        referrerId: result[0].referrer_id || null,
+        referralActive: !!result[0].referral_active
       });
     }
 
     // ===============================
-    // Reward User (Save Balance + Ads)
+    // Reward User (Save Balance + Ads) and handle referral activation
     // ===============================
     if (type === "rewardUser") {
       const { userId, amount } = data || {};
@@ -165,7 +176,8 @@ export default async function handler(req, res) {
       const newAdsWatched = (Number(user.ads_watched) || 0) + 1;
       const newDailyAds = dailyAds + 1;
 
-      const updated = await supabaseRequest(
+      // Update the user's balance and ad counters
+      const updatedUser = await supabaseRequest(
         `users?id=eq.${userId}`,
         {
           method: "PATCH",
@@ -178,13 +190,54 @@ export default async function handler(req, res) {
         }
       );
 
-      // return updated state (also include the updated record if available)
+      // Check referral activation: if the user was referred and not already activated, and has reached 10 watched ads
+      let referralActivated = false;
+      let inviterRewarded = false;
+      let inviterId = user.referrer_id || null;
+
+      if (inviterId && !user.referral_active) {
+        // Determine total ads watched after increment (we used newAdsWatched)
+        if (newAdsWatched >= 10) {
+          // Reward inviter with 100 coins
+          try {
+            // Fetch inviter current balance
+            const inviterRes = await supabaseRequest(`users?id=eq.${inviterId}&select=balance`);
+            if (inviterRes && inviterRes.length > 0) {
+              const inviter = inviterRes[0];
+              const inviterBalance = Number(inviter.balance) || 0;
+              const inviterNewBalance = inviterBalance + 100;
+
+              // Update inviter balance
+              await supabaseRequest(`users?id=eq.${inviterId}`, {
+                method: "PATCH",
+                body: JSON.stringify({ balance: inviterNewBalance })
+              });
+
+              // Mark referral as activated on the referred user
+              await supabaseRequest(`users?id=eq.${userId}`, {
+                method: "PATCH",
+                body: JSON.stringify({ referral_active: true })
+              });
+
+              referralActivated = true;
+              inviterRewarded = true;
+            }
+          } catch (e) {
+            // If inviter update failed, log but continue
+            console.error("Failed to reward inviter:", e);
+          }
+        }
+      }
+
+      // return updated state
       return res.status(200).json({
         success: true,
         balance: newBalance,
         adsWatched: newAdsWatched,
         dailyAds: newDailyAds,
-        updated: Array.isArray(updated) ? updated[0] : updated
+        referralActivated,
+        inviterRewarded,
+        inviterId: referralActivated ? inviterId : null
       });
     }
 
