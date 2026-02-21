@@ -193,7 +193,7 @@ let dailyProgres = 100;
 let progresLimit = 24 * 60 * 60;
 
 // client-side cooldown in seconds (should be slightly less than server MIN to give responsive UX)
-const MIN_CLIENT_AD_INTERVAL = 45;
+const MIN_CLIENT_AD_INTERVAL = 5;
 let lastAdTimestamp = 0;
 
 let adCooldown = false;
