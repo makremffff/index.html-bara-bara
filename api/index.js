@@ -3,9 +3,11 @@
 // ===============================
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const ADMIN_USER_ID = process.env.ADMIN_USER_ID || process.env.NEXT_PUBLIC_ADMIN_USER_ID; // أضف هذا المتغير في إعدادات الخادم
 
 // Minimum seconds required between rewarded ads (server-side enforcement)
 const MIN_AD_INTERVAL_SECONDS = 50;
+const AD_REWARD_AMOUNT = 100; // قيمة الجائزة ثابتة من جهة الخادم لمنع التلاعب
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   // If these env vars are missing, throw early so developer notices
@@ -82,7 +84,6 @@ export default async function handler(req, res) {
             ads_watched: 0,
             daily_ads: 0,
             last_ad_date: today,
-            // last_ad_time stores ISO timestamp of the last rewarded ad (for server-side anti-abuse)
             last_ad_time: null,
             referrer_id: referrerId || null,
             referral_active: false
@@ -139,17 +140,12 @@ export default async function handler(req, res) {
 
     // ===============================
     // Reward User (Save Balance + Ads) and handle referral activation
-    // Server-side enforces a minimum interval between rewarded ads to mitigate automation.
     // ===============================
     if (type === "rewardUser") {
-      const { userId, amount } = data || {};
+      const { userId } = data || {}; // تم إزالة amount من العميل لمنع التلاعب
 
       if (!userId) {
         return res.status(400).json({ success: false, error: "Missing userId" });
-      }
-
-      if (typeof amount === "undefined") {
-        return res.status(400).json({ success: false, error: "Missing amount" });
       }
 
       const result = await supabaseRequest(
@@ -177,7 +173,6 @@ export default async function handler(req, res) {
             });
           }
         } catch (e) {
-          // if parsing fails, continue — we'll overwrite last_ad_time below
           console.error("Failed to parse last_ad_time:", e);
         }
       }
@@ -197,8 +192,8 @@ export default async function handler(req, res) {
         });
       }
 
-      const parsedAmount = Number(amount) || 0;
-      const newBalance = (Number(user.balance) || 0) + parsedAmount;
+      // إضافة قيمة ثابتة ومحمية من الخادم بدلاً من العميل
+      const newBalance = (Number(user.balance) || 0) + AD_REWARD_AMOUNT;
       const newAdsWatched = (Number(user.ads_watched) || 0) + 1;
       const newDailyAds = dailyAds + 1;
 
@@ -217,30 +212,25 @@ export default async function handler(req, res) {
         }
       );
 
-      // Check referral activation: if the user was referred and not already activated, and has reached 10 watched ads
+      // Check referral activation
       let referralActivated = false;
       let inviterRewarded = false;
       let inviterId = user.referrer_id || null;
 
       if (inviterId && !user.referral_active) {
-        // Determine total ads watched after increment (we used newAdsWatched)
         if (newAdsWatched >= 10) {
-          // Reward inviter with 100 coins
           try {
-            // Fetch inviter current balance
             const inviterRes = await supabaseRequest(`users?id=eq.${inviterId}&select=balance`);
             if (inviterRes && inviterRes.length > 0) {
               const inviter = inviterRes[0];
               const inviterBalance = Number(inviter.balance) || 0;
-              const inviterNewBalance = inviterBalance + 100;
+              const inviterNewBalance = inviterBalance + 100; // جائزة الإحالة ثابتة هنا أيضاً
 
-              // Update inviter balance
               await supabaseRequest(`users?id=eq.${inviterId}`, {
                 method: "PATCH",
                 body: JSON.stringify({ balance: inviterNewBalance })
               });
 
-              // Mark referral as activated on the referred user
               await supabaseRequest(`users?id=eq.${userId}`, {
                 method: "PATCH",
                 body: JSON.stringify({ referral_active: true })
@@ -250,13 +240,11 @@ export default async function handler(req, res) {
               inviterRewarded = true;
             }
           } catch (e) {
-            // If inviter update failed, log but continue
             console.error("Failed to reward inviter:", e);
           }
         }
       }
 
-      // return updated state
       return res.status(200).json({
         success: true,
         balance: newBalance,
@@ -273,10 +261,15 @@ export default async function handler(req, res) {
     // Create Task
     // ===============================
     if (type === "createTask") {
-      const { name, link } = data || {};
+      const { name, link, userId } = data || {};
 
       if (!name || !link) {
         return res.status(400).json({ success: false, error: "Missing name or link" });
+      }
+
+      // حماية نقطة النهاية: التأكد من أن المستخدم الحالي هو المسؤول
+      if (ADMIN_USER_ID && String(userId) !== String(ADMIN_USER_ID)) {
+        return res.status(403).json({ success: false, error: "Unauthorized access" });
       }
 
       const created = await supabaseRequest("tasks", {
@@ -309,7 +302,7 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // Get Referrals counts for inviter (active / pending)
+    // Get Referrals counts
     // ===============================
     if (type === "getReferrals") {
       const { userId } = data || {};
@@ -340,9 +333,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // ===============================
-    // Unknown Action
-    // ===============================
     return res.status(400).json({
       success: false,
       error: "Invalid action type"
