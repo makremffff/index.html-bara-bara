@@ -37,20 +37,17 @@ let soundads  = document.getElementById("soundads");
 ======================= */
 const API_ENDPOINT = "/api";
 
-let USER_ID = null; // store Telegram user id after sync
+let USER_ID = null; 
 
-// Client-side global API call throttling: minimum 5 seconds between any fetchApi calls
 const MIN_API_INTERVAL_MS = 5000;
 let lastApiCallTimestamp = 0;
 
 async function fetchApi({ type, data = {} }) {
   try {
-    // attach userId automatically when available and not explicitly provided
     if (USER_ID && (!data.userId) && !data.id) {
       data.userId = USER_ID;
     }
 
-    // Enforce client-side minimum interval between API calls (throttle)
     const now = Date.now();
     const sinceLast = now - (lastApiCallTimestamp || 0);
     if (sinceLast < MIN_API_INTERVAL_MS) {
@@ -64,13 +61,11 @@ async function fetchApi({ type, data = {} }) {
       body: JSON.stringify({ type, data })
     });
 
-    // Update lastApiCallTimestamp after actual network call completed
     lastApiCallTimestamp = Date.now();
 
     const result = await response.json();
 
     if (!response.ok) {
-      // Normalize error shape
       return { success: false, error: result.error || result || "Network response was not ok" };
     }
 
@@ -94,7 +89,6 @@ if (window.Adsgram && typeof window.Adsgram.init === "function") {
 
 /* =======================
    دالة إخفاء كل الصفحات
-   الآن تتعامل مع بدء/ايقاف استدعاء عداد الدعوات عندما تدخل صفحة invite
 ======================= */
 function showPage(btnpage) {
 
@@ -125,10 +119,8 @@ function showPage(btnpage) {
     loadpage.style.display = "none";
   }, 2000);
 
-  // Start/stop referral polling depending on the shown page
   if (btnpage === sharePage) {
     startReferralPolling();
-    // ensure immediate refresh when opening invite page
     refreshReferralCounts();
   } else {
     stopReferralPolling();
@@ -166,7 +158,6 @@ if (btnWallet) {
         `;
       }
 
-      // update progress (daily remaining)
       const DAILY_LIMIT = 100;
       const remaining = DAILY_LIMIT - (Number(res.dailyAds) || 0);
       dailyProgres = remaining >= 0 ? remaining : 0;
@@ -191,10 +182,6 @@ if (bntaddTask) {
 
 /* =======================
    أزرار الإعلانات + الرصيد
-   تحسين: منع النقرات الآلية عن طريق:
-   - التحقق من event.isTrusted (يمنع dispatch programmatic)
-   - إضافة حماية client-side cooldown
-   - الاعتماد على تحقق server-side للفاصل الزمني الفعلي
 ======================= */
 const adsBtn     = document.getElementById("adsbtn");
 const adsBtnn    = document.getElementById("adsbtnn");
@@ -208,8 +195,7 @@ let dailyLimit = null;
 let dailyProgres = 100;
 let progresLimit = 24 * 60 * 60;
 
-// client-side cooldown in seconds (should be slightly less than server MIN to give responsive UX)
-const MIN_CLIENT_AD_INTERVAL = 5; // changed to 5 seconds per request
+const MIN_CLIENT_AD_INTERVAL = 5; 
 let lastAdTimestamp = 0;
 
 let adCooldown = false;
@@ -248,13 +234,8 @@ function showSingleAd() {
   });
 }
 
-/* =======================
-   Helper: play notification sound with robust fallback (element, created Audio, WebAudio)
-   Ensures notification sound plays reliably when user finishes ad and receives reward.
-======================= */
 async function playNotificationSound() {
   try {
-    // Prefer existing soundads element if present
     if (soundads && typeof soundads.play === "function") {
       try {
         soundads.currentTime = 0;
@@ -266,7 +247,6 @@ async function playNotificationSound() {
       return;
     }
 
-    // Try to find element by id again (defensive)
     const el = document.getElementById("soundads");
     if (el && el.src) {
       const a = new Audio(el.src);
@@ -275,11 +255,9 @@ async function playNotificationSound() {
         await a.play();
         return;
       } catch (e) {
-        // continue to webaudio fallback
       }
     }
 
-    // Fallback: small beep using WebAudio API
     if (typeof window !== "undefined" && (window.AudioContext || window.webkitAudioContext)) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       const ctx = new AudioCtx();
@@ -302,24 +280,17 @@ async function playNotificationSound() {
   }
 }
 
-/* =======================
-   Reward button handler
-======================= */
 if (adsBtn) {
   adsBtn.addEventListener("click", async function (evt) {
 
-    // 1) Reject synthetic/programmatic clicks
     if (evt && typeof evt.isTrusted !== "undefined" && !evt.isTrusted) {
-      // ignore programmatic clicks to mitigate automation
       console.warn("Ignored non-user initiated click");
       return;
     }
 
-    // 2) Enforce client-side minimum interval
     const nowTs = Date.now();
     if (nowTs - lastAdTimestamp < MIN_CLIENT_AD_INTERVAL * 1000) {
       const wait = Math.ceil((MIN_CLIENT_AD_INTERVAL * 1000 - (nowTs - lastAdTimestamp)) / 1000);
-      // Provide user feedback
       if (adsBtnn) {
         adsBtnn.style.display = "block";
         adsBtn.style.display = "none";
@@ -348,39 +319,32 @@ if (adsBtn) {
 
       if (timeLeft <= 0) {
 
-        // Reward user (attach userId automatically via fetchApi)
+        // تم إزالة amount من هنا، الخادم يتولى تحديد القيمة لمنع التلاعب
         const res = await fetchApi({
           type: "rewardUser",
-          data: { amount: 100 }
+          data: {} 
         });
 
         if (res && res.success) {
           ADS = Number(res.balance) || ADS;
           if (adsBalance) adsBalance.textContent = ADS;
 
-          // update daily progress with server value
           const DAILY_LIMIT = 100;
           dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
           if (dailyProgres < 0) dailyProgres = 0;
           if (progres) progres.textContent = dailyProgres;
 
-          // refresh referral counts in case this watch activated a referral
           refreshReferralCounts();
-
-          // update client-side lastAdTimestamp to now (server returned lastAdTime but use local now)
           lastAdTimestamp = Date.now();
         } else {
-          // handle errors (e.g., daily limit reached or server-side cooldown)
           console.warn("rewardUser failed:", res && res.error);
           const errText = (res && res.error) ? String(res.error).toLowerCase() : "";
 
           if (errText.includes("daily limit")) {
-            // reflect limit in UI
             adsBtn.style.display = 'none';
             adsBtnn.style.display = "block";
             adsBtnn.textContent = progresLimit;
             adsBtnn.style.background = 'red';
-            // start cooldown countdown for the remaining day limit
             dailyLimit = setInterval(function(){
               progresLimit--;
               adsBtnn.textContent = progresLimit;
@@ -398,10 +362,8 @@ if (adsBtn) {
 
             }, 1000);
           } else if (errText.includes("cooldown") || errText.includes("please wait")) {
-            // server-side ad cooldown enforced -> parse seconds
             const match = String(res.error).match(/wait\s+([0-9]+)/i);
             let waitSec = match ? Number(match[1]) : MIN_CLIENT_AD_INTERVAL;
-            // reflect server cooldown in UI
             adsBtn.style.display = 'none';
             adsBtnn.style.display = 'block';
             adsBtnn.textContent = `${waitSec}s`;
@@ -421,20 +383,16 @@ if (adsBtn) {
               }
             }, 1000);
           } else {
-            // generic failure feedback
             alert("Failed to claim ad reward: " + ((res && res.error) || "unknown error"));
           }
         }
 
-        // UI feedback for success (or even for failure it's fine to show)
         if (res && res.success) {
           try {
-            // Use robust notification sound player with fallback
             await playNotificationSound();
           } catch (e) {
             console.warn("Notification sound play failed:", e);
           }
-          // visual notification
           if (adsNotfi) {
             adsNotfi.style.display = "block";
             adsNotfi.style.opacity = "0.8";
@@ -466,7 +424,6 @@ if (adsBtn) {
         adsBtnn.style.display = "none";
         adsBtn.style.display  = "block";
 
-        // if dailyProgres depleted, set long cooldown
         if (dailyProgres <= 0) {
           adsBtn.style.display = 'none';
           adsBtnn.style.display = 'block';
@@ -495,7 +452,6 @@ if (adsBtn) {
 
     }, 1000);
 
-    // Show the ad(s) — showSingleAd handles cooldowns itself
     await showSingleAd();
     await showSingleAd();
     await showSingleAd();
@@ -575,7 +531,7 @@ if (creatTask) {
 
     const res = await fetchApi({
       type: "createTask",
-      data: { name: nametask, link: linktask }
+      data: { name: nametask, link: linktask, userId: USER_ID } // يتم تمرير المعرف للتحقق من الصلاحيات
     });
 
     if (res && res.success) {
@@ -601,13 +557,12 @@ if (creatTask) {
 }
 
 /* =======================
-   HELPER: تحديث واجهة الرصيد (يظهر للمستخدم أول مرّة و يتحدّث تلقائياً)
+   HELPER: تحديث واجهة الرصيد
 ======================= */
 function updateBalanceUI(res) {
   if (!res) return;
 
   if (res.success) {
-    // Update global ADS and wallet UI
     ADS = Number(res.balance) || ADS;
 
     if (walletbalance) {
@@ -618,17 +573,14 @@ function updateBalanceUI(res) {
     }
 
     if (adsBalance) {
-      // Keep adsBalance as text content (original place)
       adsBalance.textContent = ADS;
     }
 
-    // update daily progress with server value
     const DAILY_LIMIT = 100;
     dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
     if (dailyProgres < 0) dailyProgres = 0;
     if (progres) progres.textContent = dailyProgres;
 
-    // If server provides lastAdTime, align client cooldown to it (defensive)
     if (res.lastAdTime) {
       try {
         const last = new Date(res.lastAdTime).getTime();
@@ -642,250 +594,9 @@ function updateBalanceUI(res) {
   }
 }
 
-/* =======================
-   Update referral counts UI (pending & active)
-   selectors match index.html structure:
-   .refal .active.count span and .refal .pending.count span
-======================= */
 function updateReferralCountsUI(counts) {
   if (!counts) return;
   const activeEl = document.querySelector('.refal .active.count span');
   const pendingEl = document.querySelector('.refal .pending.count span');
 
-  if (activeEl) activeEl.textContent = String(counts.active || 0);
-  if (pendingEl) pendingEl.textContent = String(counts.pending || 0);
-}
-
-/* =======================
-   Refresh referral counts from backend
-   Calls API type "getReferrals" which returns { success, active, pending }
-   fetchApi will attach USER_ID automatically if available.
-======================= */
-async function refreshReferralCounts() {
-  try {
-    const res = await fetchApi({ type: "getReferrals" });
-    if (res && res.success) {
-      updateReferralCountsUI({ active: res.active || 0, pending: res.pending || 0 });
-    } else {
-      // If no user or not authorized, show 0s
-      updateReferralCountsUI({ active: 0, pending: 0 });
-    }
-  } catch (e) {
-    console.warn("refreshReferralCounts failed:", e);
-  }
-}
-
-/* =======================
-   Referral polling: start/stop while on invite page
-   Poll interval set to 30s (adjustable)
-======================= */
-let referralPoll = null;
-const REFERRAL_POLL_INTERVAL = 30000; // 30s
-
-function startReferralPolling() {
-  // clear any existing
-  if (referralPoll) clearInterval(referralPoll);
-  // immediate refresh
-  refreshReferralCounts();
-  // set interval
-  referralPoll = setInterval(refreshReferralCounts, REFERRAL_POLL_INTERVAL);
-}
-
-function stopReferralPolling() {
-  if (referralPoll) {
-    clearInterval(referralPoll);
-    referralPoll = null;
-  }
-}
-
-/* =======================
-   Utility: استخراج قيمة start param بطريقة مرنة
-   يمكن قراءة start_param من Telegram initDataUnsafe أو من URL (startapp, start)
-   نتعامل مع حالات وجود حروف عربية ملصقة بعد الرقم مثل:
-   https://...startapp=ref_7741750541رابط
-   فنقوم باستخراج الرقم بعد ref_ فقط.
-======================= */
-function extractReferrerFromStartParam(raw) {
-  if (!raw || typeof raw !== "string") return null;
-
-  // Decode in case it's URI encoded
-  try {
-    raw = decodeURIComponent(raw);
-  } catch (e) {}
-
-  // Trim whitespace
-  raw = raw.trim();
-
-  // Look for patterns like "ref_7741750541" possibly followed by other chars
-  const m = raw.match(/ref_([0-9]+)/i);
-  if (m && m[1]) return m[1];
-
-  // Also allow alphanumeric ids after ref_ (if your ids are not pure numeric)
-  const m2 = raw.match(/ref_([A-Za-z0-9-_]+)/i);
-  if (m2 && m2[1]) return m2[1];
-
-  return null;
-}
-
-/* =======================
-   Telegram WebApp User Data + referral (start params)
-   عند الدخول نقرا start params ونخزن referrerId لإرساله أثناء syncUser
-   كما نجلب عدد الدعوات ونحدّث واجهة invite
-======================= */
-document.addEventListener("DOMContentLoaded", async function () {
-
-  // 1) Read start param from Telegram initDataUnsafe if present
-  let startParam = null;
-  try {
-    if (typeof window.Telegram !== "undefined" && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe) {
-      const init = window.Telegram.WebApp.initDataUnsafe;
-      // Telegram may provide start_param, start_payload, or start
-      startParam = init.start_param || init.startpayload || init.start_payload || init.start || null;
-    }
-  } catch (e) {}
-
-  // 2) Fallback: read from URL query (startapp or start)
-  if (!startParam) {
-    try {
-      const urlParams = new URLSearchParams(window.location.search);
-      startParam = urlParams.get('startapp') || urlParams.get('start') || urlParams.get('start_param') || null;
-    } catch (e) {}
-  }
-
-  // 3) Extract referrer id robustly (handles cases like "...ref_7741750541رابط")
-  let referrerId = extractReferrerFromStartParam(startParam);
-
-  // 4) If still not found, also try to find "ref_<id>" anywhere in the full URL
-  if (!referrerId) {
-    try {
-      const fullUrl = decodeURIComponent(window.location.href || "");
-      const m = fullUrl.match(/ref_([0-9A-Za-z-_]+)/i);
-      if (m && m[1]) referrerId = m[1];
-    } catch (e) {}
-  }
-
-  // 5) Store referrerId locally so it can be attached later if user logs in after navigation
-  if (referrerId) {
-    try {
-      localStorage.setItem('referrerId', String(referrerId));
-    } catch (e) {}
-  }
-
-  // If Telegram WebApp present -> initialize and sync user (include referrer if available)
-  if (typeof window.Telegram !== "undefined") {
-    const tg = window.Telegram.WebApp;
-    try { tg.ready(); } catch (e) {}
-    try { tg.expand(); } catch (e) {}
-
-    if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-      const user = tg.initDataUnsafe.user;
-      const userId = user.id;
-      const firstName = user.first_name ? user.first_name : "";
-      const photoUrl = user.photo_url ? user.photo_url : "";
-
-      USER_ID = userId;
-
-      // If we didn't get referrerId earlier from startParam, try localStorage (in case it was saved previously)
-      if (!referrerId) {
-        try {
-          const stored = localStorage.getItem('referrerId');
-          if (stored) referrerId = stored;
-        } catch (e) {}
-      }
-
-      // Send syncUser including referrerId (may be null)
-      await fetchApi({
-        type: "syncUser",
-        data: {
-          id: userId,
-          name: firstName,
-          photo: photoUrl,
-          referrerId: referrerId || null
-        }
-      });
-
-      // After sync, clear stored referrer (optional)
-      try { localStorage.removeItem('referrerId'); } catch (e) {}
-
-      // Immediately fetch balance/stats to populate UI
-      const res = await fetchApi({ type: "getBalance" });
-      if (res && res.success) {
-        updateBalanceUI(res);
-      } else {
-        console.warn("Initial getBalance failed:", res && res.error);
-      }
-
-      // Also fetch referral counts so invite page reflects pending/active
-      refreshReferralCounts();
-
-      const userPhotoContainer = document.querySelector(".user-fhoto");
-      const userNameContainer = document.querySelector(".user-name");
-
-      if (photoUrl) {
-        if (userPhotoContainer) {
-          userPhotoContainer.innerHTML =
-            '<img src="' + photoUrl + '" style="width:95px;height:95px;border-radius:50%;">';
-        }
-      } else {
-        if (userPhotoContainer) {
-          userPhotoContainer.innerHTML =
-            '<div style="width:80px;height:80px;border-radius:50%;background:#444;color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;">' +
-            (firstName ? firstName.charAt(0) : "") +
-            "</div>";
-        }
-      }
-
-      if (userNameContainer) {
-        userNameContainer.textContent = firstName;
-      }
-
-      // Update personal referral link shown to the user
-      if (link && userId) {
-        try {
-          link.textContent =
-            "https://t.me/Bot_ad_watchbot/earn?startapp=ref_" + userId;
-        } catch (e) {}
-      }
-    } else {
-      // If Telegram present but no user data, still refresh referrals if USER_ID exists
-      if (USER_ID) refreshReferralCounts();
-    }
-  } else {
-    // Not a Telegram WebApp visitor.
-    // Keep referrerId in localStorage so it can be used when the user registers/logs in later.
-    if (referrerId) {
-      try {
-        localStorage.setItem('referrerId', String(referrerId));
-      } catch (e) {}
-    }
-
-    // Try to fetch balance for non-Telegram user if USER_ID exists (edge cases)
-    if (USER_ID) {
-      try {
-        const res = await fetchApi({ type: "getBalance" });
-        updateBalanceUI(res);
-        refreshReferralCounts();
-      } catch (e) {
-        console.warn("Initial balance fetch failed:", e);
-      }
-    } else {
-      // If user not logged in yet, still set invite UI to 0s
-      updateReferralCountsUI({ active: 0, pending: 0 });
-    }
-  }
-
-});
-
-/* =======================
-   Ensure balance is also fetched on full load (fallback)
-   This makes sure balance is displayed even if DOMContentLoaded already fired earlier
-======================= */
-window.addEventListener('load', async function() {
-  try {
-    const res = await fetchApi({ type: "getBalance" });
-    updateBalanceUI(res);
-    refreshReferralCounts();
-  } catch (e) {
-    console.warn("Load balance fetch failed:", e);
-  }
-});
+  if (activeEl) activeEl.textContent = String(counts.active ||
