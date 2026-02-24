@@ -7,6 +7,9 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 // Minimum seconds required between rewarded ads (server-side enforcement)
 const MIN_AD_INTERVAL_SECONDS = 50;
 
+// Minimum seconds required between box opens (server-side enforcement)
+const BOX_COOLDOWN_SECONDS = 5 * 60; // 5 minutes
+
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   // If these env vars are missing, throw early so developer notices
   console.error("Missing SUPABASE environment variables.");
@@ -84,6 +87,8 @@ export default async function handler(req, res) {
             last_ad_date: today,
             // last_ad_time stores ISO timestamp of the last rewarded ad (for server-side anti-abuse)
             last_ad_time: null,
+            // last_box_time stores ISO timestamp of the last opened box (to enforce box cooldown server-side)
+            last_box_time: null,
             referrer_id: referrerId || null,
             referral_active: false
           })
@@ -118,7 +123,7 @@ export default async function handler(req, res) {
       }
 
       const result = await supabaseRequest(
-        `users?id=eq.${userId}&select=balance,ads_watched,daily_ads,last_ad_date,last_ad_time,referrer_id,referral_active`
+        `users?id=eq.${userId}&select=balance,ads_watched,daily_ads,last_ad_date,last_ad_time,referrer_id,referral_active,last_box_time`
       );
 
       if (!result || result.length === 0) {
@@ -133,7 +138,8 @@ export default async function handler(req, res) {
         lastAdDate: result[0].last_ad_date,
         lastAdTime: result[0].last_ad_time || null,
         referrerId: result[0].referrer_id || null,
-        referralActive: !!result[0].referral_active
+        referralActive: !!result[0].referral_active,
+        lastBoxTime: result[0].last_box_time || null
       });
     }
 
@@ -266,6 +272,65 @@ export default async function handler(req, res) {
         inviterRewarded,
         inviterId: referralActivated ? inviterId : null,
         lastAdTime: now.toISOString()
+      });
+    }
+
+    // ===============================
+    // Open Box (watch 2 ads client-side -> server grants box reward, does NOT change ad progress)
+    // Server enforces box cooldown via last_box_time (BOX_COOLDOWN_SECONDS)
+    // ===============================
+    if (type === "openBox") {
+      const { userId } = data || {};
+
+      if (!userId) {
+        return res.status(400).json({ success: false, error: "Missing userId" });
+      }
+
+      // Fetch user
+      const result = await supabaseRequest(`users?id=eq.${userId}&select=balance,last_box_time`);
+      if (!result || result.length === 0) {
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
+      const user = result[0];
+      const now = new Date();
+
+      // Server-side box cooldown enforcement
+      if (user.last_box_time) {
+        try {
+          const lastBox = new Date(user.last_box_time);
+          const diffSeconds = Math.floor((now.getTime() - lastBox.getTime()) / 1000);
+          if (diffSeconds < BOX_COOLDOWN_SECONDS) {
+            const wait = BOX_COOLDOWN_SECONDS - diffSeconds;
+            return res.status(429).json({
+              success: false,
+              error: `Box cooldown: please wait ${wait} seconds before opening another box`,
+              wait
+            });
+          }
+        } catch (e) {
+          console.error("Failed to parse last_box_time:", e);
+        }
+      }
+
+      // Generate reward server-side (100..200 inclusive)
+      const reward = Math.floor(Math.random() * 101) + 100;
+      const newBalance = (Number(user.balance) || 0) + reward;
+
+      // Update only balance and last_box_time (do NOT change ad counters)
+      await supabaseRequest(`users?id=eq.${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          balance: newBalance,
+          last_box_time: now.toISOString()
+        })
+      });
+
+      return res.status(200).json({
+        success: true,
+        reward,
+        balance: newBalance,
+        lastBoxTime: now.toISOString()
       });
     }
 
