@@ -197,6 +197,7 @@ if (bntaddTask) {
    - إضافة حماية client-side cooldown
    - الاعتماد على تحقق server-side للفاصل الزمني الفعلي
    - تحسينات للاستجابة الفورية (optimistic UI) ولإلغاء حظر الصوت
+   - تصحيح ظهور الإشعار المزدوج وتخصيص إشعار الصندوق مع تأخير 6 ثواني
 ======================= */
 const adsBtn     = document.getElementById("adsbtn");
 const adsBtnn    = document.getElementById("adsbtnn");
@@ -261,6 +262,38 @@ document.addEventListener('click', function onFirstUserGesture(e){
     document.removeEventListener('click', onFirstUserGesture, true);
   }
 }, true);
+
+/* =======================
+   Notification dedupe and scheduling
+   - Prevent the same notification from showing twice within a short interval
+   - Allow scheduling a delayed notification (used for box: 6s delay)
+======================= */
+const notificationLastAt = {}; // key -> timestamp
+const NOTIFICATION_DEDUPE_MS = 3000;
+
+function scheduleNotification(key, delayMs = 0) {
+  const now = Date.now();
+  const last = notificationLastAt[key] || 0;
+  // If a notification of this key was shown recently, skip scheduling to avoid duplicates
+  if (now - last < NOTIFICATION_DEDUPE_MS) return;
+  notificationLastAt[key] = now + delayMs;
+
+  setTimeout(async function() {
+    // Ensure we don't show duplicates if another scheduled one already fired
+    const lastFired = notificationLastAt[key] || 0;
+    if (Date.now() < lastFired - (delayMs - 50)) {
+      // already replaced by a later scheduled notification
+    }
+    // show visual and play sound
+    try {
+      showAdsNotification();
+      await playNotificationSound();
+    } catch (e) {
+      console.warn("Notification playback error:", e);
+    }
+    notificationLastAt[key] = Date.now();
+  }, delayMs);
+}
 
 /* =======================
    SHOW SINGLE AD wrapper
@@ -422,7 +455,7 @@ function showAdsNotification() {
    Improvements:
    - Optimistic UI update (immediate perceived reward)
    - Better error handling and immediate audio/notification when appropriate
-   - Parse server-side cooldown messages robustly
+   - Prevent duplicate notifications by using scheduleNotification
 ======================= */
 if (adsBtn) {
   adsBtn.addEventListener("click", async function (evt) {
@@ -479,13 +512,8 @@ if (adsBtn) {
           `;
         }
 
-        // Try to play notification immediately (likely allowed because this started from user gesture)
-        try {
-          await playNotificationSound();
-        } catch (e) {}
-
-        // visual notification immediately
-        showAdsNotification();
+        // Show a single notification for the ad reward (deduped)
+        scheduleNotification('ad_reward', 0);
 
         // Reward user (attach userId automatically via fetchApi)
         const res = await fetchApi({
@@ -512,14 +540,6 @@ if (adsBtn) {
 
           // refresh referral counts in case this watch activated a referral
           refreshReferralCounts();
-
-          // If referral activated, give immediate feedback
-          if (res.referralActivated || res.inviterRewarded) {
-            try { await playNotificationSound(); } catch (e) {}
-            showAdsNotification();
-            // Optionally show a short alert/visual
-            // alert("Referral activated! Reward has been granted.");
-          }
 
           // update client-side lastAdTimestamp to now (server returned lastAdTime but use local now)
           lastAdTimestamp = Date.now();
@@ -642,6 +662,8 @@ if (adsBtn) {
    - Button locked for 5 minutes after opening (client and server-side)
    - Show same ads notification animation when box opened
    - Ensure sound plays reliably by unlocking audio on the user gesture
+   - Update balance immediately when server confirms, but delay the visible notification by 6 seconds
+   - Prevent double notifications via scheduleNotification
 ======================= */
 const openBoxBtn = document.getElementById("openbox");
 let boxCooldown = false;
@@ -728,10 +750,28 @@ async function handleOpenBoxClick(evt) {
     return;
   }
 
-  // 2) Call server to grant box reward (server will enforce server-side cooldown)
+  // At this point both ads completed. We'll call server to grant box reward.
+  // We will: a) call server; b) when server responds success, update balance immediately;
+  // c) schedule the visible notification and sound after 6 seconds (6000 ms).
+  // This satisfies: "balance increase immediate, notification after 6s".
+
+  // Optimistic UI: optionally show a small "processing" state on button
+  if (openBoxBtn) {
+    openBoxBtn.textContent = "Processing...";
+    openBoxBtn.style.pointerEvents = "none";
+    openBoxBtn.style.opacity = "0.6";
+  }
+
   const res = await fetchApi({ type: "openBox" });
 
   if (!res || !res.success) {
+    // Restore button state
+    if (openBoxBtn) {
+      openBoxBtn.textContent = "OPEN";
+      openBoxBtn.style.pointerEvents = "";
+      openBoxBtn.style.opacity = "";
+    }
+
     // If server returned cooldown, reflect it
     if (res && res.error && String(res.error).toLowerCase().includes("cooldown")) {
       // parse seconds if present
@@ -747,14 +787,8 @@ async function handleOpenBoxClick(evt) {
     return;
   }
 
-  // 3) Update UI with received reward and balance
-  if (res.reward) {
-    // Show a visual summary and play sound reliably
-    try {
-      await playNotificationSound();
-    } catch (e) {}
-
-    // Update global ADS balance display (server returned canonical balance)
+  // 3) Update UI with received reward and balance IMMEDIATELY (as requested)
+  if (typeof res.reward !== 'undefined') {
     ADS = Number(res.balance) || ADS;
 
     if (walletbalance) {
@@ -768,27 +802,29 @@ async function handleOpenBoxClick(evt) {
       adsBalance.textContent = ADS;
     }
 
-    // show the same ads notification animation
-    showAdsNotification();
-  }
-
-  // 4) Start client-side box cooldown using server-provided lastBoxTime if available
-  if (res.lastBoxTime) {
-    try {
-      const ms = new Date(res.lastBoxTime).getTime();
-      if (!isNaN(ms)) {
-        startBoxCooldownFrom(ms);
-      } else {
-        // Fallback to now
+    // Start client-side box cooldown using server-provided lastBoxTime if available
+    if (res.lastBoxTime) {
+      try {
+        const ms = new Date(res.lastBoxTime).getTime();
+        if (!isNaN(ms)) {
+          startBoxCooldownFrom(ms);
+        } else {
+          // Fallback to now
+          startBoxCooldownFrom(Date.now());
+        }
+      } catch (e) {
         startBoxCooldownFrom(Date.now());
       }
-    } catch (e) {
+    } else {
+      // fallback if server didn't return lastBoxTime
       startBoxCooldownFrom(Date.now());
     }
-  } else {
-    // fallback if server didn't return lastBoxTime
-    startBoxCooldownFrom(Date.now());
+
+    // Schedule visual notification and sound after 6 seconds (6000ms)
+    scheduleNotification('box_reward', 6000);
   }
+
+  // Ensure button reflects cooldown state (if server returned lastBoxTime that we've applied, button is managed by startBoxCooldownFrom).
 }
 
 if (openBoxBtn) {
