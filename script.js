@@ -584,6 +584,7 @@ if (creatTask) {
       taskcard.className = "task-card";
 
       taskcard.innerHTML = `
+      <img class="taskimg" src="telegram.png" width="25">
       <span class="task-name">${nametask}</span>
       <span class="task-prize">30 <img src="coins.png" width="25"></span>
       <a class="task-link" href="${linktask}">start</a>
