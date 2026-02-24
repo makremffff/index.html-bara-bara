@@ -303,6 +303,37 @@ async function playNotificationSound() {
 }
 
 /* =======================
+   Unified ads notification animation (used for box open and ad reward)
+======================= */
+function showAdsNotification() {
+  if (!adsNotfi) return;
+
+  adsNotfi.style.display = "block";
+  adsNotfi.style.opacity = "0.8";
+
+  setTimeout(function () {
+    adsNotfi.style.opacity = "0.4";
+  }, 2500);
+
+  adsNotfi.style.transform = "translateY(-150%)";
+
+  setTimeout(function () {
+    adsNotfi.style.transform = "translateY(135px)";
+  }, 100);
+
+  setTimeout(function () {
+    adsNotfi.style.transform = "translateY(-150%)";
+    adsNotfi.style.opacity = "0";
+  }, 3000);
+
+  setTimeout(function () {
+    adsNotfi.style.display = "none";
+    adsNotfi.style.transform = "";
+    adsNotfi.style.opacity = "";
+  }, 3500);
+}
+
+/* =======================
    Reward button handler
 ======================= */
 if (adsBtn) {
@@ -435,31 +466,7 @@ if (adsBtn) {
             console.warn("Notification sound play failed:", e);
           }
           // visual notification
-          if (adsNotfi) {
-            adsNotfi.style.display = "block";
-            adsNotfi.style.opacity = "0.8";
-
-            setTimeout(function () {
-              adsNotfi.style.opacity = "0.4";
-            }, 2500);
-
-            adsNotfi.style.transform = "translateY(-150%)";
-
-            setTimeout(function () {
-              adsNotfi.style.transform = "translateY(135px)";
-            }, 100);
-
-            setTimeout(function () {
-              adsNotfi.style.transform = "translateY(-150%)";
-              adsNotfi.style.opacity = "0";
-            }, 3000);
-
-            setTimeout(function () {
-              adsNotfi.style.display = "none";
-              adsNotfi.style.transform = "";
-              adsNotfi.style.opacity = "";
-            }, 3500);
-          }
+          showAdsNotification();
         }
 
         clearInterval(timer);
@@ -502,6 +509,162 @@ if (adsBtn) {
     await showSingleAd();
 
   });
+}
+
+/* =======================
+   BOX (Open chest) FEATURE
+   - User must watch 2 ads (client-side)
+   - Server grants a random reward (100..200) without affecting ad progress
+   - Button locked for 5 minutes after opening (client and server-side)
+   - Show same ads notification animation when box opened
+======================= */
+const openBoxBtn = document.getElementById("openbox");
+let boxCooldown = false;
+let boxCooldownInterval = null;
+let lastBoxTimestamp = 0; // ms since epoch
+const BOX_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+
+function formatCountdown(ms) {
+  const totalSec = Math.ceil(ms / 1000);
+  const mm = Math.floor(totalSec / 60).toString().padStart(2, "0");
+  const ss = (totalSec % 60).toString().padStart(2, "0");
+  return `${mm}:${ss}`;
+}
+
+function startBoxCooldownFrom(nowMs) {
+  lastBoxTimestamp = nowMs;
+  const end = lastBoxTimestamp + BOX_COOLDOWN_MS;
+
+  if (!openBoxBtn) return;
+
+  boxCooldown = true;
+  openBoxBtn.style.pointerEvents = "none";
+  openBoxBtn.style.opacity = "0.6";
+
+  if (boxCooldownInterval) clearInterval(boxCooldownInterval);
+
+  function tick() {
+    const remaining = end - Date.now();
+    if (remaining <= 0) {
+      clearInterval(boxCooldownInterval);
+      boxCooldown = false;
+      openBoxBtn.style.pointerEvents = "";
+      openBoxBtn.style.opacity = "";
+      openBoxBtn.textContent = "OPEN";
+    } else {
+      openBoxBtn.textContent = formatCountdown(remaining);
+    }
+  }
+
+  // first immediate tick
+  tick();
+  boxCooldownInterval = setInterval(tick, 1000);
+}
+
+async function handleOpenBoxClick(evt) {
+  if (!openBoxBtn) return;
+
+  if (evt && typeof evt.isTrusted !== "undefined" && !evt.isTrusted) {
+    console.warn("Ignored non-user initiated click on box");
+    return;
+  }
+
+  if (!USER_ID) {
+    alert("Please login with Telegram to open the box.");
+    return;
+  }
+
+  if (boxCooldown) {
+    // already cooling — do nothing
+    return;
+  }
+
+  // Play quick click sound
+  try {
+    if (soundbtn) { soundbtn.currentTime = 0; soundbtn.play(); }
+  } catch (e) {}
+
+  // 1) Show two ads sequentially, require both to succeed
+  let ad1 = await showSingleAd();
+  if (!ad1) {
+    alert("Ad was not completed. Please try again.");
+    return;
+  }
+
+  // small pause to simulate UX
+  await new Promise(r => setTimeout(r, 400));
+
+  let ad2 = await showSingleAd();
+  if (!ad2) {
+    alert("Ad was not completed. Please try again.");
+    return;
+  }
+
+  // 2) Call server to grant box reward (server will enforce server-side cooldown)
+  const res = await fetchApi({ type: "openBox" });
+
+  if (!res || !res.success) {
+    // If server returned cooldown, reflect it
+    if (res && res.error && String(res.error).toLowerCase().includes("cooldown")) {
+      // parse seconds if present
+      const match = String(res.error).match(/wait\s+([0-9]+)/i);
+      const waitSec = match ? Number(match[1]) : 5 * 60;
+      const nowMs = Date.now();
+      startBoxCooldownFrom(nowMs - (BOX_COOLDOWN_MS - waitSec * 1000));
+      alert(res.error);
+      return;
+    }
+
+    alert("Failed to open box: " + ((res && res.error) || "unknown error"));
+    return;
+  }
+
+  // 3) Update UI with received reward and balance
+  if (res.reward) {
+    // Show a visual summary (optional)
+    try {
+      await playNotificationSound();
+    } catch (e) {}
+
+    // Update global ADS balance display only (box reward does not change ad progress)
+    ADS = Number(res.balance) || ADS;
+
+    if (walletbalance) {
+      walletbalance.innerHTML = `
+      <img src="coins.png" style="width:20px; vertical-align:middle;">
+      ${ADS}
+      `;
+    }
+
+    if (adsBalance) {
+      adsBalance.textContent = ADS;
+    }
+
+    // show the same ads notification animation
+    showAdsNotification();
+  }
+
+  // 4) Start client-side box cooldown using server-provided lastBoxTime if available
+  if (res.lastBoxTime) {
+    try {
+      const ms = new Date(res.lastBoxTime).getTime();
+      if (!isNaN(ms)) {
+        startBoxCooldownFrom(ms);
+      } else {
+        // Fallback to now
+        startBoxCooldownFrom(Date.now());
+      }
+    } catch (e) {
+      startBoxCooldownFrom(Date.now());
+    }
+  } else {
+    // fallback if server didn't return lastBoxTime
+    startBoxCooldownFrom(Date.now());
+  }
+}
+
+if (openBoxBtn) {
+  openBoxBtn.addEventListener("click", handleOpenBoxClick);
 }
 
 /* =======================
@@ -638,6 +801,28 @@ function updateBalanceUI(res) {
         }
       } catch (e) {}
     }
+
+    // If server provides lastBoxTime, align box cooldown
+    if (res.lastBoxTime) {
+      try {
+        const lastBoxMs = new Date(res.lastBoxTime).getTime();
+        if (!isNaN(lastBoxMs)) {
+          const diff = Date.now() - lastBoxMs;
+          if (diff < BOX_COOLDOWN_MS) {
+            startBoxCooldownFrom(lastBoxMs);
+          } else {
+            // ensure button shows OPEN
+            if (openBoxBtn) openBoxBtn.textContent = "OPEN";
+            boxCooldown = false;
+            if (openBoxBtn) {
+              openBoxBtn.style.pointerEvents = "";
+              openBoxBtn.style.opacity = "";
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
   } else {
     console.warn("updateBalanceUI: getBalance failed:", res && res.error);
   }
@@ -893,44 +1078,47 @@ window.addEventListener('load', async function() {
 
 let sendwithdraw = document.getElementById("request");
 
-sendwithdraw.addEventListener("click", function() {
-  
-  let coin = document.getElementById("coin").value;
-  
-  let now = new Date();
-  
-  // اليوم
-  let day = now.getDate();
-  
-  // أسماء الأشهر
-  let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  let monthName = months[now.getMonth()];
-  
-  // ساعة ودقيقة بصيغة 2 أرقام
-  let hours = String(now.getHours()).padStart(2, "0");
-  let minutes = String(now.getMinutes()).padStart(2, "0");
-  
-  let formattedDate = `${day} ${monthName} ${hours}:${minutes}`;
-  
-  let historyCard = document.createElement("div");
-  historyCard.className = 'history-card';
-  
-  let withdrawhistory = document.querySelector(".withdraw-history");
-  
-  historyCard.innerHTML = `
-    <span class="date">${formattedDate}</span>
-    <span class="amount">${coin}<img src="coins.png" width="17"></span>
-    <span class="statu">pending</span>
-  `;
-  
-  sendwithdraw.style.background = 'black';
-  withdrawhistory.appendChild(historyCard);
-  let withdrawnotifi = document.querySelector(".withdraw-notifi")
-  
-  withdrawnotifi.style.display = 'block'
-  setTimeout(function(){
-      withdrawnotifi.style.display = 'none'
+if (sendwithdraw) {
+  sendwithdraw.addEventListener("click", function() {
 
-  }, 2500)
-  
-});
+    let coin = document.getElementById("coin").value;
+
+    let now = new Date();
+
+    // اليوم
+    let day = now.getDate();
+
+    // أسماء الأشهر
+    let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    let monthName = months[now.getMonth()];
+
+    // ساعة ودقيقة بصيغة 2 أرقام
+    let hours = String(now.getHours()).padStart(2, "0");
+    let minutes = String(now.getMinutes()).padStart(2, "0");
+
+    let formattedDate = `${day} ${monthName} ${hours}:${minutes}`;
+
+    let historyCard = document.createElement("div");
+    historyCard.className = 'history-card';
+
+    let withdrawhistory = document.querySelector(".withdraw-history");
+
+    historyCard.innerHTML = `
+      <span class="date">${formattedDate}</span>
+      <span class="amount">${coin}<img src="coins.png" width="17"></span>
+      <span class="statu">pending</span>
+    `;
+
+    sendwithdraw.style.background = 'black';
+    if (withdrawhistory) withdrawhistory.appendChild(historyCard);
+    let withdrawnotifi = document.querySelector(".withdraw-notifi")
+
+    if (withdrawnotifi) {
+      withdrawnotifi.style.display = 'block'
+      setTimeout(function(){
+          withdrawnotifi.style.display = 'none'
+      }, 2500)
+    }
+
+  });
+}
