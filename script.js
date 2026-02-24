@@ -30,7 +30,8 @@ let barbtn = document.querySelector(".bar");
    الأصوات
 ======================= */
 let soundbtn  = document.getElementById("soundbtn");
-let soundads  = document.getElementById("soundads");
+let soundads  = document.getElementById("soundads"); // generic reward sound element (if present)
+let soundbox  = document.getElementById("soundbox"); // dedicated box sound element (optional)
 
 /* =======================
    API CENTRAL HANDLER
@@ -39,9 +40,8 @@ const API_ENDPOINT = "/api";
 
 let USER_ID = null; // store Telegram user id after sync
 
-// Client-side global API call throttling: minimum interval between any fetchApi calls
-// Reduced to improve responsiveness while still preventing accidental spamming
-const MIN_API_INTERVAL_MS = 800;
+// Client-side global API call throttling: minimum 5 seconds between any fetchApi calls
+const MIN_API_INTERVAL_MS = 5000;
 let lastApiCallTimestamp = 0;
 
 async function fetchApi({ type, data = {} }) {
@@ -196,8 +196,6 @@ if (bntaddTask) {
    - التحقق من event.isTrusted (يمنع dispatch programmatic)
    - إضافة حماية client-side cooldown
    - الاعتماد على تحقق server-side للفاصل الزمني الفعلي
-   - تحسينات للاستجابة الفورية (optimistic UI) ولإلغاء حظر الصوت
-   - تصحيح ظهور الإشعار المزدوج وتخصيص إشعار الصندوق مع تأخير 6 ثواني
 ======================= */
 const adsBtn     = document.getElementById("adsbtn");
 const adsBtnn    = document.getElementById("adsbtnn");
@@ -212,146 +210,96 @@ let dailyProgres = 100;
 let progresLimit = 24 * 60 * 60;
 
 // client-side cooldown in seconds (should be slightly less than server MIN to give responsive UX)
-const MIN_CLIENT_AD_INTERVAL = 5; // seconds
+const MIN_CLIENT_AD_INTERVAL = 5; // changed to 5 seconds per request
 let lastAdTimestamp = 0;
 
 let adCooldown = false;
 let adCooldownTime = 6000;
 
-// Audio unlock to ensure sound can play reliably after a real user gesture
-let audioUnlocked = false;
-let audioContext = null;
-function unlockAudioOnUserGesture() {
-  if (audioUnlocked) return;
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) {
-      audioUnlocked = true; // nothing to unlock
-      return;
-    }
-    audioContext = new AudioCtx();
-    // create a silent oscillator briefly to unlock audio playback
-    const o = audioContext.createOscillator();
-    const g = audioContext.createGain();
-    o.type = "sine";
-    o.frequency.value = 0;
-    g.gain.value = 0;
-    o.connect(g);
-    g.connect(audioContext.destination);
-    o.start();
-    setTimeout(function(){
-      try { o.stop(); } catch (e) {}
-      try { g.disconnect(); } catch (e) {}
-      // keep context resumed for future small beeps
-    }, 50);
-    // resume ensures unlocked in modern browsers
-    if (audioContext.state === 'suspended' && typeof audioContext.resume === 'function') {
-      audioContext.resume().catch(()=>{});
-    }
-    audioUnlocked = true;
-  } catch (e) {
-    // fail gracefully
-    audioUnlocked = true;
-  }
-}
-// Attach once to capture first real user interaction anywhere on the page
-document.addEventListener('click', function onFirstUserGesture(e){
-  // Only treat trusted events as unlocking
-  if (e && e.isTrusted) {
-    unlockAudioOnUserGesture();
-    document.removeEventListener('click', onFirstUserGesture, true);
-  }
-}, true);
+// Prevent duplicate visual/audio notifications within a short window
+let lastAdsNotifTime = 0;
+const ADS_NOTIF_DEBOUNCE_MS = 3000; // 3s debounce to prevent duplicate notifications
 
-/* =======================
-   Notification dedupe and scheduling
-   - Prevent the same notification from showing twice within a short interval
-   - Allow scheduling a delayed notification (used for box: 6s delay)
-======================= */
-const notificationLastAt = {}; // key -> timestamp
-const NOTIFICATION_DEDUPE_MS = 3000;
+// A running flag to avoid re-entrant notification animation execution
+let adsNotificationRunning = false;
 
-function scheduleNotification(key, delayMs = 0) {
+function showAdsNotification() {
+  if (!adsNotfi) return;
+
   const now = Date.now();
-  const last = notificationLastAt[key] || 0;
-  // If a notification of this key was shown recently, skip scheduling to avoid duplicates
-  if (now - last < NOTIFICATION_DEDUPE_MS) return;
-  notificationLastAt[key] = now + delayMs;
+  if (now - lastAdsNotifTime < ADS_NOTIF_DEBOUNCE_MS) {
+    // Debounce: another notification shown recently
+    return;
+  }
+  lastAdsNotifTime = now;
 
-  setTimeout(async function() {
-    // Ensure we don't show duplicates if another scheduled one already fired
-    const lastFired = notificationLastAt[key] || 0;
-    if (Date.now() < lastFired - (delayMs - 50)) {
-      // already replaced by a later scheduled notification
-    }
-    // show visual and play sound
-    try {
-      showAdsNotification();
-      await playNotificationSound();
-    } catch (e) {
-      console.warn("Notification playback error:", e);
-    }
-    notificationLastAt[key] = Date.now();
-  }, delayMs);
-}
+  if (adsNotificationRunning) {
+    // If an animation is in progress, skip to avoid duplicate overlapping visuals
+    return;
+  }
 
-/* =======================
-   SHOW SINGLE AD wrapper
-   Ensures audio unlocked before resolving, and improves handling
-======================= */
-function showSingleAd() {
-  return new Promise((resolve) => {
+  adsNotificationRunning = true;
 
-    if (adCooldown) {
-      resolve(false);
-      return;
-    }
+  // Prepare immediate visible state and short, snappy animation
+  adsNotfi.style.display = "block";
+  adsNotfi.style.opacity = "0.95";
+  adsNotfi.style.transform = "translateY(0)";
+  adsNotfi.style.transition = "transform 350ms ease-out, opacity 600ms ease-out";
 
-    adCooldown = true;
+  // Force reflow so transition applies reliably
+  void adsNotfi.offsetWidth;
 
-    if (AdsGramController && typeof AdsGramController.show === "function") {
-      AdsGramController.show()
-        .then(() => {
-          // ensure audio unlocked on success gesture
-          unlockAudioOnUserGesture();
-          setTimeout(function(){
-            adCooldown = false;
-            resolve(true);
-          }, adCooldownTime);
-        })
-        .catch(() => {
-          adCooldown = false;
-          resolve(false);
-        });
-    } else {
-      // simulate ad
-      setTimeout(function(){
-        unlockAudioOnUserGesture();
-        setTimeout(function(){
-          adCooldown = false;
-        }, adCooldownTime);
-        resolve(true);
-      }, 2000);
-    }
-  });
+  // animate in
+  adsNotfi.style.transform = "translateY(-10px)";
+
+  // Keep visible for a short time, then animate out
+  setTimeout(function () {
+    adsNotfi.style.opacity = "0.6";
+  }, 600);
+
+  setTimeout(function () {
+    adsNotfi.style.transform = "translateY(-120%)";
+    adsNotfi.style.opacity = "0";
+  }, 1400);
+
+  setTimeout(function () {
+    adsNotfi.style.display = "none";
+    // restore minimal style to avoid accumulating transitions
+    adsNotfi.style.transform = "";
+    adsNotfi.style.opacity = "";
+    adsNotfi.style.transition = "";
+    adsNotificationRunning = false;
+  }, 1800);
 }
 
 /* =======================
    Helper: play notification sound with robust fallback (element, created Audio, WebAudio)
    Ensures notification sound plays reliably when user finishes ad and receives reward.
-   Uses unlocked AudioContext when available.
+   Accepts a 'type' parameter: 'reward' (default) or 'box' to use different sounds.
 ======================= */
-async function playNotificationSound() {
+async function playNotificationSound(type = 'reward') {
   try {
-    // Ensure we tried to unlock audio if possible
-    try { unlockAudioOnUserGesture(); } catch (e) {}
+    // Choose priority element based on type
+    const preferredEl = (type === 'box') ? (soundbox || document.getElementById('soundbox')) : (soundads || document.getElementById('soundads'));
 
-    // Prefer existing soundads element if present
-    if (soundads && typeof soundads.play === "function") {
+    if (preferredEl && typeof preferredEl.play === "function") {
       try {
-        soundads.currentTime = 0;
+        preferredEl.currentTime = 0;
       } catch (e) {}
-      const playResult = soundads.play();
+      const playResult = preferredEl.play();
+      if (playResult && typeof playResult.then === "function") {
+        await playResult;
+      }
+      return;
+    }
+
+    // If preferred element not present, try the other (defensive)
+    const fallbackEl = (type === 'box') ? (soundads || document.getElementById('soundads')) : (soundbox || document.getElementById('soundbox'));
+    if (fallbackEl && typeof fallbackEl.play === "function") {
+      try {
+        fallbackEl.currentTime = 0;
+      } catch (e) {}
+      const playResult = fallbackEl.play();
       if (playResult && typeof playResult.then === "function") {
         await playResult;
       }
@@ -359,7 +307,7 @@ async function playNotificationSound() {
     }
 
     // Try to find element by id again (defensive)
-    const el = document.getElementById("soundads");
+    const el = document.getElementById(type === 'box' ? "soundbox" : "soundads");
     if (el && el.src) {
       const a = new Audio(el.src);
       a.volume = typeof el.volume !== 'undefined' ? el.volume : 1;
@@ -371,39 +319,14 @@ async function playNotificationSound() {
       }
     }
 
-    // If we have an unlocked audioContext, use a short beep
-    if (audioContext) {
-      try {
-        const ctx = audioContext;
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.type = "sine";
-        o.frequency.value = 880;
-        g.gain.value = 0.08;
-        o.connect(g);
-        g.connect(ctx.destination);
-        // start/stop quickly
-        if (typeof ctx.resume === 'function') {
-          await ctx.resume().catch(()=>{});
-        }
-        o.start();
-        setTimeout(function(){
-          try { o.stop(); } catch (e) {}
-        }, 120);
-        return;
-      } catch (e) {
-        // fallback continues
-      }
-    }
-
-    // Fallback: small beep using WebAudio API (create new context)
+    // Fallback: small beep using WebAudio API with type-specific frequency
     if (typeof window !== "undefined" && (window.AudioContext || window.webkitAudioContext)) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       const ctx = new AudioCtx();
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.type = "sine";
-      o.frequency.value = 880;
+      o.frequency.value = (type === 'box') ? 660 : 880; // box lower pitch
       g.gain.value = 0.08;
       o.connect(g);
       g.connect(ctx.destination);
@@ -421,41 +344,19 @@ async function playNotificationSound() {
 
 /* =======================
    Unified ads notification animation (used for box open and ad reward)
+   Now debounced and made snappier (prevents double-show)
 ======================= */
-function showAdsNotification() {
-  if (!adsNotfi) return;
-
-  adsNotfi.style.display = "block";
-  adsNotfi.style.opacity = "0.8";
-
-  setTimeout(function () {
-    adsNotfi.style.opacity = "0.4";
-  }, 2500);
-
-  adsNotfi.style.transform = "translateY(-150%)";
-
-  setTimeout(function () {
-    adsNotfi.style.transform = "translateY(135px)";
-  }, 100);
-
-  setTimeout(function () {
-    adsNotfi.style.transform = "translateY(-150%)";
-    adsNotfi.style.opacity = "0";
-  }, 3000);
-
-  setTimeout(function () {
-    adsNotfi.style.display = "none";
-    adsNotfi.style.transform = "";
-    adsNotfi.style.opacity = "";
-  }, 3500);
+function showAdsNotificationDebounced() {
+  // Non-blocking: show immediately if allowed
+  try {
+    showAdsNotification();
+  } catch (e) {
+    console.warn("showAdsNotificationDebounced failed:", e);
+  }
 }
 
 /* =======================
    Reward button handler
-   Improvements:
-   - Optimistic UI update (immediate perceived reward)
-   - Better error handling and immediate audio/notification when appropriate
-   - Prevent duplicate notifications by using scheduleNotification
 ======================= */
 if (adsBtn) {
   adsBtn.addEventListener("click", async function (evt) {
@@ -500,37 +401,15 @@ if (adsBtn) {
 
       if (timeLeft <= 0) {
 
-        // Optimistic UI: increment balance immediately for perceived responsiveness
-        const optimisticAmount = 100;
-        const prevADS = ADS;
-        ADS = Number(ADS) + optimisticAmount;
-        if (adsBalance) adsBalance.textContent = ADS;
-        if (walletbalance) {
-          walletbalance.innerHTML = `
-          <img src="coins.png" style="width:20px; vertical-align:middle;">
-          ${ADS}
-          `;
-        }
-
-        // Show a single notification for the ad reward (deduped)
-        scheduleNotification('ad_reward', 0);
-
         // Reward user (attach userId automatically via fetchApi)
         const res = await fetchApi({
           type: "rewardUser",
-          data: { amount: optimisticAmount }
+          data: { amount: 100 }
         });
 
         if (res && res.success) {
-          // Use server canonical balance if provided
           ADS = Number(res.balance) || ADS;
           if (adsBalance) adsBalance.textContent = ADS;
-          if (walletbalance) {
-            walletbalance.innerHTML = `
-            <img src="coins.png" style="width:20px; vertical-align:middle;">
-            ${ADS}
-            `;
-          }
 
           // update daily progress with server value
           const DAILY_LIMIT = 100;
@@ -543,20 +422,12 @@ if (adsBtn) {
 
           // update client-side lastAdTimestamp to now (server returned lastAdTime but use local now)
           lastAdTimestamp = Date.now();
-        } else {
-          // On failure, revert optimistic update if needed
-          if (!res || !res.success) {
-            // revert balance to prev value if server didn't accept
-            ADS = prevADS;
-            if (adsBalance) adsBalance.textContent = ADS;
-            if (walletbalance) {
-              walletbalance.innerHTML = `
-              <img src="coins.png" style="width:20px; vertical-align:middle;">
-              ${ADS}
-              `;
-            }
-          }
 
+          // Immediate notification & sound (non-blocking)
+          playNotificationSound('reward').catch(()=>{});
+          showAdsNotificationDebounced();
+
+        } else {
           // handle errors (e.g., daily limit reached or server-side cooldown)
           console.warn("rewardUser failed:", res && res.error);
           const errText = (res && res.error) ? String(res.error).toLowerCase() : "";
@@ -613,6 +484,8 @@ if (adsBtn) {
           }
         }
 
+        // UI feedback for success was already shown above immediately (sound + visual)
+        // ensure timers and UI reset
         clearInterval(timer);
         adsBtnn.style.display = "none";
         adsBtn.style.display  = "block";
@@ -647,6 +520,7 @@ if (adsBtn) {
     }, 1000);
 
     // Show the ad(s) — showSingleAd handles cooldowns itself
+    // Note: these are non-blocking relative to the UI timer above; they simply trigger ad views.
     await showSingleAd();
     await showSingleAd();
     await showSingleAd();
@@ -661,9 +535,7 @@ if (adsBtn) {
    - Server grants a random reward (100..200) without affecting ad progress
    - Button locked for 5 minutes after opening (client and server-side)
    - Show same ads notification animation when box opened
-   - Ensure sound plays reliably by unlocking audio on the user gesture
-   - Update balance immediately when server confirms, but delay the visible notification by 6 seconds
-   - Prevent double notifications via scheduleNotification
+   - Make notification immediate and play dedicated box sound
 ======================= */
 const openBoxBtn = document.getElementById("openbox");
 let boxCooldown = false;
@@ -726,9 +598,6 @@ async function handleOpenBoxClick(evt) {
     return;
   }
 
-  // Ensure audio unlocked for reliable sound feedback
-  try { unlockAudioOnUserGesture(); } catch (e) {}
-
   // Play quick click sound
   try {
     if (soundbtn) { soundbtn.currentTime = 0; soundbtn.play(); }
@@ -750,28 +619,10 @@ async function handleOpenBoxClick(evt) {
     return;
   }
 
-  // At this point both ads completed. We'll call server to grant box reward.
-  // We will: a) call server; b) when server responds success, update balance immediately;
-  // c) schedule the visible notification and sound after 6 seconds (6000 ms).
-  // This satisfies: "balance increase immediate, notification after 6s".
-
-  // Optimistic UI: optionally show a small "processing" state on button
-  if (openBoxBtn) {
-    openBoxBtn.textContent = "Processing...";
-    openBoxBtn.style.pointerEvents = "none";
-    openBoxBtn.style.opacity = "0.6";
-  }
-
+  // 2) Call server to grant box reward (server will enforce server-side cooldown)
   const res = await fetchApi({ type: "openBox" });
 
   if (!res || !res.success) {
-    // Restore button state
-    if (openBoxBtn) {
-      openBoxBtn.textContent = "OPEN";
-      openBoxBtn.style.pointerEvents = "";
-      openBoxBtn.style.opacity = "";
-    }
-
     // If server returned cooldown, reflect it
     if (res && res.error && String(res.error).toLowerCase().includes("cooldown")) {
       // parse seconds if present
@@ -787,8 +638,12 @@ async function handleOpenBoxClick(evt) {
     return;
   }
 
-  // 3) Update UI with received reward and balance IMMEDIATELY (as requested)
-  if (typeof res.reward !== 'undefined') {
+  // 3) Update UI with received reward and balance
+  if (res.reward) {
+    // Play box notification sound immediately (non-blocking)
+    playNotificationSound('box').catch(()=>{});
+
+    // Update global ADS balance display only (box reward does not change ad progress)
     ADS = Number(res.balance) || ADS;
 
     if (walletbalance) {
@@ -802,29 +657,27 @@ async function handleOpenBoxClick(evt) {
       adsBalance.textContent = ADS;
     }
 
-    // Start client-side box cooldown using server-provided lastBoxTime if available
-    if (res.lastBoxTime) {
-      try {
-        const ms = new Date(res.lastBoxTime).getTime();
-        if (!isNaN(ms)) {
-          startBoxCooldownFrom(ms);
-        } else {
-          // Fallback to now
-          startBoxCooldownFrom(Date.now());
-        }
-      } catch (e) {
-        startBoxCooldownFrom(Date.now());
-      }
-    } else {
-      // fallback if server didn't return lastBoxTime
-      startBoxCooldownFrom(Date.now());
-    }
-
-    // Schedule visual notification and sound after 6 seconds (6000ms)
-    scheduleNotification('box_reward', 6000);
+    // show the same ads notification animation (immediate, debounced)
+    showAdsNotificationDebounced();
   }
 
-  // Ensure button reflects cooldown state (if server returned lastBoxTime that we've applied, button is managed by startBoxCooldownFrom).
+  // 4) Start client-side box cooldown using server-provided lastBoxTime if available
+  if (res.lastBoxTime) {
+    try {
+      const ms = new Date(res.lastBoxTime).getTime();
+      if (!isNaN(ms)) {
+        startBoxCooldownFrom(ms);
+      } else {
+        // Fallback to now
+        startBoxCooldownFrom(Date.now());
+      }
+    } catch (e) {
+      startBoxCooldownFrom(Date.now());
+    }
+  } else {
+    // fallback if server didn't return lastBoxTime
+    startBoxCooldownFrom(Date.now());
+  }
 }
 
 if (openBoxBtn) {
@@ -834,11 +687,16 @@ if (openBoxBtn) {
 /* =======================
    شاشة التحميل عند الدخول
 ======================= */
-if (loadpage) loadpage.style.display = "block";
-if (pagename) pagename.style.display = "none";
+if (loadpage) {
+  loadpage.style.display = "block";
+}
+if (pagename) {
+  pagename.style.display = "none";
+}
 
 setTimeout(function () {
-  if (loadpage) { loadpage.style.display = "none"; loadpage.style.background = "black"; }
+  if (loadpage) loadpage.style.display = "none";
+  if (loadpage) loadpage.style.background = "black";
   if (pagename) pagename.style.display = "block";
 }, 8000);
 
@@ -929,7 +787,6 @@ if (creatTask) {
 
 /* =======================
    HELPER: تحديث واجهة الرصيد (يظهر للمستخدم أول مرّة و يتحدّث تلقائياً)
-   تحسّن التعامل مع بداية يوم جديد و ضبط التوقيت المحلي لآخر إعلان وصناديق
 ======================= */
 function updateBalanceUI(res) {
   if (!res) return;
@@ -950,22 +807,9 @@ function updateBalanceUI(res) {
       adsBalance.textContent = ADS;
     }
 
-    // Handle daily progress with server-provided fields
+    // update daily progress with server value
     const DAILY_LIMIT = 100;
-    // If server provides lastAdDate/lastAdTime, use them to compute current dailyAds
-    let serverDailyAds = typeof res.dailyAds !== 'undefined' ? Number(res.dailyAds) : null;
-    let lastAdDate = res.lastAdDate || null;
-
-    // If lastAdDate differs from today, reset daily count
-    try {
-      const today = new Date().toISOString().split("T")[0];
-      if (lastAdDate && lastAdDate !== today) {
-        serverDailyAds = 0;
-      }
-    } catch (e) {}
-
-    if (serverDailyAds === null) serverDailyAds = 0;
-    dailyProgres = DAILY_LIMIT - serverDailyAds;
+    dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
     if (dailyProgres < 0) dailyProgres = 0;
     if (progres) progres.textContent = dailyProgres;
 
@@ -1170,7 +1014,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       // After sync, clear stored referrer (optional)
       try { localStorage.removeItem('referrerId'); } catch (e) {}
 
-      // Immediately fetch balance/stats to populate UI (do not wait long)
+      // Immediately fetch balance/stats to populate UI
       const res = await fetchApi({ type: "getBalance" });
       if (res && res.success) {
         updateBalanceUI(res);
@@ -1242,7 +1086,6 @@ document.addEventListener("DOMContentLoaded", async function () {
 /* =======================
    Ensure balance is also fetched on full load (fallback)
    This makes sure balance is displayed even if DOMContentLoaded already fired earlier
-   and corrects day rollover/progress display.
 ======================= */
 window.addEventListener('load', async function() {
   try {
