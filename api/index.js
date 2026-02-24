@@ -179,7 +179,9 @@ export default async function handler(req, res) {
             const wait = MIN_AD_INTERVAL_SECONDS - diffSeconds;
             return res.status(429).json({
               success: false,
-              error: `Ad cooldown: please wait ${wait} seconds before claiming another reward`
+              error: `Ad cooldown: please wait ${wait} seconds before claiming another reward`,
+              code: "AD_COOLDOWN",
+              waitSeconds: wait
             });
           }
         } catch (e) {
@@ -199,7 +201,8 @@ export default async function handler(req, res) {
         return res.status(400).json({
           success: false,
           error: "Daily limit reached",
-          dailyAds
+          dailyAds,
+          code: "DAILY_LIMIT"
         });
       }
 
@@ -262,16 +265,17 @@ export default async function handler(req, res) {
         }
       }
 
-      // return updated state
+      // return updated state using the updatedUser representation
+      const returned = Array.isArray(updatedUser) && updatedUser.length > 0 ? updatedUser[0] : null;
       return res.status(200).json({
         success: true,
-        balance: newBalance,
-        adsWatched: newAdsWatched,
-        dailyAds: newDailyAds,
+        balance: returned ? returned.balance : newBalance,
+        adsWatched: returned ? returned.ads_watched : newAdsWatched,
+        dailyAds: returned ? returned.daily_ads : newDailyAds,
         referralActivated,
         inviterRewarded,
         inviterId: referralActivated ? inviterId : null,
-        lastAdTime: now.toISOString()
+        lastAdTime: returned ? returned.last_ad_time : now.toISOString()
       });
     }
 
@@ -305,7 +309,9 @@ export default async function handler(req, res) {
             return res.status(429).json({
               success: false,
               error: `Box cooldown: please wait ${wait} seconds before opening another box`,
-              wait
+              wait,
+              code: "BOX_COOLDOWN",
+              waitSeconds: wait
             });
           }
         } catch (e) {
@@ -318,7 +324,7 @@ export default async function handler(req, res) {
       const newBalance = (Number(user.balance) || 0) + reward;
 
       // Update only balance and last_box_time (do NOT change ad counters)
-      await supabaseRequest(`users?id=eq.${userId}`, {
+      const updated = await supabaseRequest(`users?id=eq.${userId}`, {
         method: "PATCH",
         body: JSON.stringify({
           balance: newBalance,
@@ -326,11 +332,14 @@ export default async function handler(req, res) {
         })
       });
 
+      // Use the returned representation (if any) to reply
+      const returned = Array.isArray(updated) && updated.length > 0 ? updated[0] : null;
+
       return res.status(200).json({
         success: true,
         reward,
-        balance: newBalance,
-        lastBoxTime: now.toISOString()
+        balance: returned ? returned.balance : newBalance,
+        lastBoxTime: returned ? returned.last_box_time : now.toISOString()
       });
     }
 
