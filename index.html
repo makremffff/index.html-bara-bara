@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>Snake Game</title>
+	<title>faucet Game</title>
 	<link rel="stylesheet" href="style.css">
 	<link rel="stylesheet" href="all.css">
-
- 
+<tag>
+ <!--Tab to edit-->
+</tag>
   <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -50,6 +51,7 @@
 
 <div class="user-fhoto">
  
+ 
 </div>
 <div class="user-name">
 
@@ -61,7 +63,7 @@
  
    <img src="coins.png" width="30" height="30">
   
-   <span id="adsbalance">0.00</span>
+   <span id="adsbalance">0</span>
    <span class="balance">Balance</span>
 
 </div>
@@ -69,10 +71,17 @@
 <div class="taskbalance-container">
 <div class="task-balance">
  <img src="assest/task-balance.png" width="30" >
- <span id="taskbalance">0.00</span>
+ <span id="taskbalance">0</span>
   <span class="balance">Task-balance</span>
 
 </div>
+
+<div class="box-reward">
+ <img id="boximg" src="assest/box.png" width="45" >
+ <span id="openbox">OPEN</span>
+ 
+</div>
+
 </div>
 
  <div class="ads">
@@ -97,7 +106,7 @@
  
      
   <div class="progres-ads">
-   <h4>Daily ADS</h4>
+   <h4></h4>
  <span id="progres">100</span>  
    
   </div>
@@ -133,12 +142,13 @@
   
    
 <div class="task-container">
-  <span class="header-task">Task</span>
+  <span class="header-task">Task <img src="telegram.png" width="30"></span>
 
  <div class="task-card">
+  <img class="taskimg" src="telegram.png" width="25">
   <span class="task-name">Earn channel </span>
   
-  <span class="task-prize">30 <img src="coins.png" width="25" ></span>
+  <span class="task-prize">30 <img src="coins.png" width="20" ></span>
 
   <a class="task-link" href="https://t.me/botbababab">Start</a>
   
@@ -165,7 +175,7 @@
  <form>
   
 <input type="text" required
- placeholder="FaucetPay">
+ placeholder="FaucetPay" id="email">
  
 
 <h4>Enter FaucetPay@MAil</h4>
@@ -174,7 +184,7 @@
 
 
 <input type="number"
- required placeholder="Coin">
+ required placeholder="Coin" id="coin">
 
 
  <h4>Min 300 Coin</h4>
@@ -182,15 +192,27 @@
   <img src="coins.png" class="withdrawmg">
   
 <div class="btnSumbit">
-<button id="request" type="submit">Send Request</button>
+<button id="request" type="button">Send Request</button>
 
 </div>
  </form>
  <span id="adsbalancce"></span>
 
  </div>
+ <div>
+
+ <span class="rate">100Coin<img src="coins.png" width="20">=100Pepe<img src="pepe.png" width="15"  style="border-radius: px;"></span>
  
- <span class="rate">100Coin = 0.0001USDT </span>
+ </div>
+ <input type="checkbox" id="history">
+ <label for="history" class="showhistory">Show history</label>
+ <div class="withdraw-history">
+  
+ </div>
+ <div class="withdraw-notifi">
+ 
+  <span>withdraw send </span>
+ </div>
 
 </div>
 
@@ -202,10 +224,10 @@
 
 
 <div class="refal-title">
-<img src="assest/refal2.gif" width="150" height="90">
+<img src="assest/refal2.gif" width="250" height="120">
 </div>
 
-<span class="refal-note">Her you say your refal  the pending and active one<br>refal must watch 10ADS to be active<br>you will get 100Coin for each active freind you invite...copy your link from her 👇</span>
+<span class="refal-note">Earn 100 coin<img src="coins.png" width="10"> for evrey active refal</span>
 
 <div class="refal">
  <div class="active count">
@@ -231,7 +253,17 @@
 <div class="copynotifi">
  <span>Link Copied</span>
 </div>
-
+<input type="checkbox" id="my-refal" />
+<label for="my-refal" class="my-refalbtn">My refal</label>
+<div class="my-refal">
+ <div class="refal-card">
+  <span class="refal-fhoto"></span>
+  <span class="refal-name">Ma love</span>
+  <span class="refal-ads">100 ADS </span>
+  <span class="refal-statu">ACTIVE</span>
+ </div>
+ 
+</div>
  </div>
 
 
@@ -267,10 +299,10 @@
  
  
 
-		<script src="script.js">
+		<script src="script1.js">
 		 
 		</script>
-		
+	
 		
 </body>
 </html>

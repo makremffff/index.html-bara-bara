@@ -9,6 +9,9 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  
+
+
 }
 body{
   display: flex;
@@ -18,7 +21,9 @@ body{
   font-family: Story Script;
   background: #2C2D34;
   user-select: none;
- margin: 0;
+  margin: 0;
+  user-select: none;
+ 
 }
 a{
   text-decoration: none;
@@ -36,8 +41,11 @@ a{
   height: 100vh;
   width: 100%;
   background: #121212;  
+background: black;
 
-
+}
+#wallet{
+  overflow: hidden;
 }
 #main{
   display: block;
@@ -62,7 +70,7 @@ a{
   position: relative;
   left: 10%;
   top: -50%;
-  display: one;
+  display: none;
 transition: 0.3s linear;
 z-index: 9999;
 text-align: center;
@@ -200,13 +208,16 @@ background: #000;
  
 
  .btnSumbit{
-   background: #323945;
-   padding: 10px 0;
+   padding: 30px 20px;
    border-radius: 20px;
    box-shadow: 0px 5px 0 #272B34;
    width: 80%;
-   margin-left: 25px;
+   margin-left: 30px;
   align-content: center;
+    box-shadow: 0 3px 3px  #36384A;
+display: flex;
+justify-content: center;
+border: #3A2A3A solid;
  }
 
  
@@ -321,10 +332,12 @@ border-radius: 20px;
   color: #c0c0d0;
   font-size: 14px;
   position: relative;
-  right: 17%;
+  right: 23%;
   bottom: 28px;
   font-weight: 500;
   text-align: left;
+  font-family: "Aleo", serif;
+
 }
 
 /* ===== Button ===== */
@@ -359,6 +372,8 @@ border-radius: 20px;
   font-size: 16px;
   gap: 5px;
   align-items: center;
+  font-family: "Aleo", serif;
+
 }
 
 .addtask-container .note img {
@@ -375,6 +390,8 @@ border-radius: 20px;
   flex-direction: column;
   gap: 5px;
   align-items: center;
+  font-family: "Aleo", serif;
+
 }
 
 .addtask-container .support a {
@@ -502,12 +519,7 @@ border-radius: 20px;
   z-index: -1;
 }
 
-.progres-ads:hover {
-  transform: rotateX(10deg) rotateY(-10deg) scale(1.08);
-  box-shadow:
-    0 50px 140px rgba(0,0,0,1),
-    0 0 120px rgba(60,50,120,0.15);
-}
+
 
 .progres-ads :nth-child(1) {
   font-size: 26px;
@@ -528,31 +540,17 @@ border-radius: 20px;
     0 0 40px rgba(70,60,150,0.5);
 }
 
-/* Progress Bar الأصلي */
-.progress-bar {
-  width: 85%;
-  height: 14px;
-  background: rgba(255,255,255,0.05);
-  border-radius: 30px;
-  overflow: hidden;
-  position: relative;
+.progres-ads :nth-child(1)::after{
+  content: "Daily ADS ";
+  animation: textEnergy 3s linear infinite alternate-reverse both;
+  transition: 1s;
 }
 
-.progress-bar span {
-  display: block;
-  height: 100%;
-  width: 70%;
-  background: linear-gradient(90deg, #6a7bff, #00e0ff);
-  border-radius: 30px;
-  box-shadow:
-    0 0 25px #6a7bff,
-    0 0 50px #00e0ff;
-  animation: pulseBar 1.5s infinite alternate;
-}
+
 
 #progres {
   position: absolute;
-  left: 30%;
+
   top: 43%;
 
   font-family: 'DynaPuff', cursive;
@@ -565,4 +563,121 @@ border-radius: 20px;
   color: #ffd700;
 
   animation: pulseCounter 1.5s infinite alternate;
+}
+.box-reward{
+  display: inline-flex;
+  position: absolute;
+  top: 65px;
+  left: 70%;
+  width: 30%;
+ 
+
+ 
+}
+#openbox{
+  color: navy;
+  position: absolute;
+  left: 53%;
+  top: 57px;
+  background: red;
+
+ height: fit-content;
+ padding: 3px 10px;
+ border-radius: 15px;
+ font-family: DynaPuff;
+ font-weight: bold;
+ font-size: 8px;
+ width: 40px;
+
+ 
+}
+.box-reward img{
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  animation: boxshow 1.2s linear infinite alternate-reverse;
+  transition: 1s;
+}
+@keyframes boxshow{
+  0%{rotate: -7deg;}
+  25%{rotate: 8deg;}
+  50%{rotate: -12deg;}
+  100%{rotate: 14deg; scale: 1.1;}
+}
+@keyframes textEnergy{
+  0%{content: "D";}
+  10%{content: "Da";}
+  20%{content: "Dai";}
+  30%{content: "Dail";}
+  40%{content: "Daily";}
+  50%{content: "Daily A";}
+  60%{content: "Daily AD";}
+  70%{content: "Daily ADS";}
+  
+
+}
+#my-refal{
+  display: none;
+}
+.my-refalbtn{
+  position: absolute;
+  left: 35%;
+  top: 80%;
+  background: darkred;
+  color: white;
+  padding: 10px 5px;
+  border-radius: 15px;
+  width: 30%;
+  text-align: center;
+  z-index: 999;
+  font-family: DynaPuff;
+}
+.my-refal{
+  color: white;
+  position: absolute;
+  top: -5%;
+  left: 0%;
+  width: 0%;
+  height: 0%;
+  background: black;
+ 
+
+
+
+  padding-top: 20px;
+  border-radius: 20px;
+  overflow: auto;
+  transition: 1s;
+ 
+
+}
+.refal-card{
+  position: relative;
+  left: 5%;
+  margin: 30px 0;
+  width: 90%;
+  background: navy;
+  padding: 10px 5px;
+  border-radius: 20px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  font-family: DynaPuff;
+}
+.refal-fhoto{
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-size: cover;
+ 
+}
+.refal-ads{
+  color: gold;
+}
+.refal-name{
+  color: #A4A9D7;
+}
+#my-refal:checked~ .my-refal{
+  width: 100%;
+  height: 80%;
 }
