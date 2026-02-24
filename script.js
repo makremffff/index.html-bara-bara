@@ -39,8 +39,8 @@ const API_ENDPOINT = "/api";
 
 let USER_ID = null; // store Telegram user id after sync
 
-// Client-side global API call throttling: minimum 5 seconds between any fetchApi calls
-const MIN_API_INTERVAL_MS = 5000;
+// Client-side global API call throttling: reduced for responsiveness
+const MIN_API_INTERVAL_MS = 1000;
 let lastApiCallTimestamp = 0;
 
 async function fetchApi({ type, data = {} }) {
@@ -166,9 +166,14 @@ if (btnWallet) {
         `;
       }
 
-      // update progress (daily remaining)
+      // update progress (daily remaining) with date-awareness
       const DAILY_LIMIT = 100;
-      const remaining = DAILY_LIMIT - (Number(res.dailyAds) || 0);
+      const today = new Date().toISOString().split("T")[0];
+      let dailyAds = typeof res.dailyAds !== 'undefined' ? res.dailyAds : 0;
+      if (res.lastAdDate && res.lastAdDate !== today) {
+        dailyAds = 0;
+      }
+      const remaining = DAILY_LIMIT - (Number(dailyAds) || 0);
       dailyProgres = remaining >= 0 ? remaining : 0;
       if (progres) progres.textContent = dailyProgres;
     } else {
@@ -195,6 +200,7 @@ if (bntaddTask) {
    - التحقق من event.isTrusted (يمنع dispatch programmatic)
    - إضافة حماية client-side cooldown
    - الاعتماد على تحقق server-side للفاصل الزمني الفعلي
+   - عرض إعلان فوراً وتقديم الجائزة فور اكتمال الإعلان لتحسين الإحساس بالسرعة
 ======================= */
 const adsBtn     = document.getElementById("adsbtn");
 const adsBtnn    = document.getElementById("adsbtnn");
@@ -238,12 +244,13 @@ function showSingleAd() {
           resolve(false);
         });
     } else {
+      // lightweight simulated ad experience (keeps UX snappy)
       setTimeout(function(){
         setTimeout(function(){
           adCooldown = false;
         }, adCooldownTime);
         resolve(true);
-      }, 2000);
+      }, 1000); // reduced wait to feel quicker
     }
   });
 }
@@ -304,9 +311,15 @@ async function playNotificationSound() {
 
 /* =======================
    Unified ads notification animation (used for box open and ad reward)
+   Also plays notification sound to ensure box notifications make sound.
 ======================= */
-function showAdsNotification() {
+async function showAdsNotification() {
   if (!adsNotfi) return;
+  try {
+    await playNotificationSound();
+  } catch (e) {
+    // ignore sound errors
+  }
 
   adsNotfi.style.display = "block";
   adsNotfi.style.opacity = "0.8";
@@ -334,23 +347,23 @@ function showAdsNotification() {
 }
 
 /* =======================
-   Reward button handler
+   Reward button handler (refactored for responsiveness)
+   - Shows ad immediately, rewards immediately after ad finishes
+   - Removes long artificial countdown; relies on server response for cooldown
 ======================= */
 if (adsBtn) {
   adsBtn.addEventListener("click", async function (evt) {
 
-    // 1) Reject synthetic/programmatic clicks
+    // Reject synthetic/programmatic clicks
     if (evt && typeof evt.isTrusted !== "undefined" && !evt.isTrusted) {
-      // ignore programmatic clicks to mitigate automation
       console.warn("Ignored non-user initiated click");
       return;
     }
 
-    // 2) Enforce client-side minimum interval
+    // Client-side minimum interval to avoid accidental double clicks
     const nowTs = Date.now();
     if (nowTs - lastAdTimestamp < MIN_CLIENT_AD_INTERVAL * 1000) {
       const wait = Math.ceil((MIN_CLIENT_AD_INTERVAL * 1000 - (nowTs - lastAdTimestamp)) / 1000);
-      // Provide user feedback
       if (adsBtnn) {
         adsBtnn.style.display = "block";
         adsBtn.style.display = "none";
@@ -360,154 +373,133 @@ if (adsBtn) {
           adsBtnn.style.display = 'none';
           adsBtn.style.display = 'block';
           adsBtnn.style.background = '';
-        }, Math.min(wait * 1000, 5000));
+        }, Math.min(wait * 1000, 3000));
       }
       return;
     }
 
     if (adCooldown) return;
 
-    adsBtn.style.display  = "none";
-    adsBtnn.style.display = "block";
+    // Provide immediate visual feedback that ad is starting
+    if (adsBtnn && adsBtn) {
+      adsBtn.style.display = "none";
+      adsBtnn.style.display = "block";
+      adsBtnn.textContent = "Loading...";
+    }
 
-    let timeLeft = 50;
-    adsBtnn.textContent = timeLeft + "s";
-
-    timer = setInterval(async function () {
-      timeLeft--;
-      adsBtnn.textContent = timeLeft + "s";
-
-      if (timeLeft <= 0) {
-
-        // Reward user (attach userId automatically via fetchApi)
-        const res = await fetchApi({
-          type: "rewardUser",
-          data: { amount: 100 }
-        });
-
-        if (res && res.success) {
-          ADS = Number(res.balance) || ADS;
-          if (adsBalance) adsBalance.textContent = ADS;
-
-          // update daily progress with server value
-          const DAILY_LIMIT = 100;
-          dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
-          if (dailyProgres < 0) dailyProgres = 0;
-          if (progres) progres.textContent = dailyProgres;
-
-          // refresh referral counts in case this watch activated a referral
-          refreshReferralCounts();
-
-          // update client-side lastAdTimestamp to now (server returned lastAdTime but use local now)
-          lastAdTimestamp = Date.now();
-        } else {
-          // handle errors (e.g., daily limit reached or server-side cooldown)
-          console.warn("rewardUser failed:", res && res.error);
-          const errText = (res && res.error) ? String(res.error).toLowerCase() : "";
-
-          if (errText.includes("daily limit")) {
-            // reflect limit in UI
-            adsBtn.style.display = 'none';
-            adsBtnn.style.display = "block";
-            adsBtnn.textContent = progresLimit;
-            adsBtnn.style.background = 'red';
-            // start cooldown countdown for the remaining day limit
-            dailyLimit = setInterval(function(){
-              progresLimit--;
-              adsBtnn.textContent = progresLimit;
-
-              if (progresLimit <= 0) {
-                clearInterval(dailyLimit);
-
-                adsBtnn.style.display = 'none';
-                adsBtn.style.display = 'block';
-                adsBtnn.style.background = '';
-                progresLimit = 24 * 60 * 60;
-                dailyProgres = 100;
-                if (progres) progres.textContent = dailyProgres;
-              }
-
-            }, 1000);
-          } else if (errText.includes("cooldown") || errText.includes("please wait")) {
-            // server-side ad cooldown enforced -> parse seconds
-            const match = String(res.error).match(/wait\s+([0-9]+)/i);
-            let waitSec = match ? Number(match[1]) : MIN_CLIENT_AD_INTERVAL;
-            // reflect server cooldown in UI
-            adsBtn.style.display = 'none';
-            adsBtnn.style.display = 'block';
-            adsBtnn.textContent = `${waitSec}s`;
-            adsBtnn.style.background = 'orange';
-
-            let remaining = waitSec;
-            if (dailyLimit) clearInterval(dailyLimit);
-            dailyLimit = setInterval(function(){
-              remaining--;
-              adsBtnn.textContent = `${remaining}s`;
-              if (remaining <= 0) {
-                clearInterval(dailyLimit);
-                adsBtnn.style.display = 'none';
-                adsBtn.style.display = 'block';
-                adsBtnn.style.background = '';
-                if (progres) progres.textContent = dailyProgres;
-              }
-            }, 1000);
-          } else {
-            // generic failure feedback
-            alert("Failed to claim ad reward: " + ((res && res.error) || "unknown error"));
-          }
-        }
-
-        // UI feedback for success (or even for failure it's fine to show)
-        if (res && res.success) {
-          try {
-            // Use robust notification sound player with fallback
-            await playNotificationSound();
-          } catch (e) {
-            console.warn("Notification sound play failed:", e);
-          }
-          // visual notification
-          showAdsNotification();
-        }
-
-        clearInterval(timer);
+    // 1) Show single ad (feel quicker). If you want 2 ads for box we handle that in box flow.
+    const adOk = await showSingleAd();
+    if (!adOk) {
+      // restore UI
+      if (adsBtnn && adsBtn) {
         adsBtnn.style.display = "none";
-        adsBtn.style.display  = "block";
+        adsBtn.style.display = "block";
+      }
+      alert("Ad failed to load or was not completed. Please try again.");
+      return;
+    }
 
-        // if dailyProgres depleted, set long cooldown
-        if (dailyProgres <= 0) {
-          adsBtn.style.display = 'none';
-          adsBtnn.style.display = 'block';
-          adsBtnn.textContent = progresLimit;
-          adsBtnn.style.background = 'red';
+    // 2) Call server to reward
+    const res = await fetchApi({
+      type: "rewardUser",
+      data: { amount: 100 }
+    });
 
-          dailyLimit = setInterval(function(){
+    // Update lastAdTimestamp local to now to align with server-based cooldown
+    lastAdTimestamp = Date.now();
 
-            progresLimit--;
-            adsBtnn.textContent = progresLimit;
-
-            if (progresLimit <= 0) {
-              clearInterval(dailyLimit);
-
-              adsBtnn.style.display = 'none';
-              adsBtn.style.display = 'block';
-              adsBtnn.style.background = '';
-              progresLimit = 24 * 60 * 60;
-              dailyProgres = 100;
-              if (progres) progres.textContent = dailyProgres;
-            }
-
-          }, 1000);
-        }
+    if (res && res.success) {
+      ADS = Number(res.balance) || ADS;
+      if (adsBalance) adsBalance.textContent = ADS;
+      if (walletbalance) {
+        walletbalance.innerHTML = `
+        <img src="coins.png" style="width:20px; vertical-align:middle;">
+        ${ADS}
+        `;
       }
 
-    }, 1000);
+      // update daily progress with date-awareness
+      const DAILY_LIMIT = 100;
+      const today = new Date().toISOString().split("T")[0];
+      let serverDailyAds = typeof res.dailyAds !== 'undefined' ? res.dailyAds : 0;
+      if (res.lastAdDate && res.lastAdDate !== today) serverDailyAds = 0;
+      dailyProgres = DAILY_LIMIT - (Number(serverDailyAds) || 0);
+      if (dailyProgres < 0) dailyProgres = 0;
+      if (progres) progres.textContent = dailyProgres;
 
-    // Show the ad(s) — showSingleAd handles cooldowns itself
-    await showSingleAd();
-    await showSingleAd();
-    await showSingleAd();
-    await showSingleAd();
+      // refresh referral counts in case this watch activated a referral
+      refreshReferralCounts();
 
+      // show notification + sound
+      showAdsNotification();
+
+    } else {
+      // handle errors
+      console.warn("rewardUser failed:", res && res.error);
+      const errText = (res && res.error) ? String(res.error).toLowerCase() : "";
+
+      if (errText.includes("daily limit")) {
+        // reflect limit in UI
+        adsBtn.style.display = 'none';
+        adsBtnn.style.display = "block";
+        adsBtnn.textContent = progresLimit;
+        adsBtnn.style.background = 'red';
+        // start cooldown countdown for the remaining day limit
+        dailyLimit = setInterval(function(){
+          progresLimit--;
+          adsBtnn.textContent = progresLimit;
+
+          if (progresLimit <= 0) {
+            clearInterval(dailyLimit);
+
+            adsBtnn.style.display = 'none';
+            adsBtn.style.display = 'block';
+            adsBtnn.style.background = '';
+            progresLimit = 24 * 60 * 60;
+            dailyProgres = 100;
+            if (progres) progres.textContent = dailyProgres;
+          }
+
+        }, 1000);
+      } else if (errText.includes("cooldown") || errText.includes("please wait")) {
+        // server-side ad cooldown enforced -> parse seconds
+        const match = String(res.error).match(/wait\s+([0-9]+)/i);
+        let waitSec = match ? Number(match[1]) : MIN_CLIENT_AD_INTERVAL;
+        // reflect server cooldown in UI
+        adsBtn.style.display = 'none';
+        adsBtnn.style.display = 'block';
+        adsBtnn.textContent = `${waitSec}s`;
+        adsBtnn.style.background = 'orange';
+
+        let remaining = waitSec;
+        if (dailyLimit) clearInterval(dailyLimit);
+        dailyLimit = setInterval(function(){
+          remaining--;
+          adsBtnn.textContent = `${remaining}s`;
+          if (remaining <= 0) {
+            clearInterval(dailyLimit);
+            adsBtnn.style.display = 'none';
+            adsBtn.style.display = 'block';
+            adsBtnn.style.background = '';
+            if (progres) progres.textContent = dailyProgres;
+          }
+        }, 1000);
+      } else {
+        alert("Failed to claim ad reward: " + ((res && res.error) || "unknown error"));
+      }
+    }
+
+    // restore UI if not already managed by cooldown logic
+    if (adsBtnn && adsBtn && (!dailyLimit || !(dailyLimit._onTimeout))) {
+      // if dailyLimit not running, restore the button
+      setTimeout(function(){
+        if (!adCooldown) {
+          adsBtnn.style.display = 'none';
+          adsBtn.style.display = 'block';
+          adsBtnn.style.background = '';
+        }
+      }, 500);
+    }
   });
 }
 
@@ -516,7 +508,7 @@ if (adsBtn) {
    - User must watch 2 ads (client-side)
    - Server grants a random reward (100..200) without affecting ad progress
    - Button locked for 5 minutes after opening (client and server-side)
-   - Show same ads notification animation when box opened
+   - Show same ads notification animation when box opened (includes sound)
 ======================= */
 const openBoxBtn = document.getElementById("openbox");
 let boxCooldown = false;
@@ -531,8 +523,8 @@ function formatCountdown(ms) {
   return `${mm}:${ss}`;
 }
 
-function startBoxCooldownFrom(nowMs) {
-  lastBoxTimestamp = nowMs;
+function startBoxCooldownFrom(startMs) {
+  lastBoxTimestamp = startMs;
   const end = lastBoxTimestamp + BOX_COOLDOWN_MS;
 
   if (!openBoxBtn) return;
@@ -585,18 +577,18 @@ async function handleOpenBoxClick(evt) {
   } catch (e) {}
 
   // 1) Show two ads sequentially, require both to succeed
-  let ad1 = await showSingleAd();
+  const ad1 = await showSingleAd();
   if (!ad1) {
-    alert("Ad was not completed. Please try again.");
+    alert("First ad was not completed. Please try again.");
     return;
   }
 
-  // small pause to simulate UX
-  await new Promise(r => setTimeout(r, 400));
+  // small UX pause
+  await new Promise(r => setTimeout(r, 300));
 
-  let ad2 = await showSingleAd();
+  const ad2 = await showSingleAd();
   if (!ad2) {
-    alert("Ad was not completed. Please try again.");
+    alert("Second ad was not completed. Please try again.");
     return;
   }
 
@@ -606,10 +598,10 @@ async function handleOpenBoxClick(evt) {
   if (!res || !res.success) {
     // If server returned cooldown, reflect it
     if (res && res.error && String(res.error).toLowerCase().includes("cooldown")) {
-      // parse seconds if present
       const match = String(res.error).match(/wait\s+([0-9]+)/i);
       const waitSec = match ? Number(match[1]) : 5 * 60;
       const nowMs = Date.now();
+      // compute approximate start time so that remaining equals waitSec
       startBoxCooldownFrom(nowMs - (BOX_COOLDOWN_MS - waitSec * 1000));
       alert(res.error);
       return;
@@ -621,12 +613,6 @@ async function handleOpenBoxClick(evt) {
 
   // 3) Update UI with received reward and balance
   if (res.reward) {
-    // Show a visual summary (optional)
-    try {
-      await playNotificationSound();
-    } catch (e) {}
-
-    // Update global ADS balance display only (box reward does not change ad progress)
     ADS = Number(res.balance) || ADS;
 
     if (walletbalance) {
@@ -640,7 +626,7 @@ async function handleOpenBoxClick(evt) {
       adsBalance.textContent = ADS;
     }
 
-    // show the same ads notification animation
+    // show the same ads notification animation (with sound)
     showAdsNotification();
   }
 
@@ -651,14 +637,12 @@ async function handleOpenBoxClick(evt) {
       if (!isNaN(ms)) {
         startBoxCooldownFrom(ms);
       } else {
-        // Fallback to now
         startBoxCooldownFrom(Date.now());
       }
     } catch (e) {
       startBoxCooldownFrom(Date.now());
     }
   } else {
-    // fallback if server didn't return lastBoxTime
     startBoxCooldownFrom(Date.now());
   }
 }
@@ -766,6 +750,8 @@ if (creatTask) {
 
 /* =======================
    HELPER: تحديث واجهة الرصيد (يظهر للمستخدم أول مرّة و يتحدّث تلقائياً)
+   - الآن نتحقق من تاريخ آخر إعلان لضمان أن progress يوم جديد يعرض بشكل صحيح
+   - نزامن حالة صندوق (box cooldown) مع lastBoxTime المرسل من السيرفر
 ======================= */
 function updateBalanceUI(res) {
   if (!res) return;
@@ -786,9 +772,14 @@ function updateBalanceUI(res) {
       adsBalance.textContent = ADS;
     }
 
-    // update daily progress with server value
+    // update daily progress with server value and date-awareness
     const DAILY_LIMIT = 100;
-    dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
+    const today = new Date().toISOString().split("T")[0];
+    let serverDailyAds = typeof res.dailyAds !== 'undefined' ? res.dailyAds : 0;
+    if (res.lastAdDate && res.lastAdDate !== today) {
+      serverDailyAds = 0;
+    }
+    dailyProgres = DAILY_LIMIT - (Number(serverDailyAds) || 0);
     if (dailyProgres < 0) dailyProgres = 0;
     if (progres) progres.textContent = dailyProgres;
 
@@ -917,6 +908,7 @@ function extractReferrerFromStartParam(raw) {
    Telegram WebApp User Data + referral (start params)
    عند الدخول نقرا start params ونخزن referrerId لإرساله أثناء syncUser
    كما نجلب عدد الدعوات ونحدّث واجهة invite
+   تحسين: بعد sync نُجري getBalance و getReferrals بالتوازي لتحسين السرعة
 ======================= */
 document.addEventListener("DOMContentLoaded", async function () {
 
@@ -993,16 +985,27 @@ document.addEventListener("DOMContentLoaded", async function () {
       // After sync, clear stored referrer (optional)
       try { localStorage.removeItem('referrerId'); } catch (e) {}
 
-      // Immediately fetch balance/stats to populate UI
-      const res = await fetchApi({ type: "getBalance" });
-      if (res && res.success) {
-        updateBalanceUI(res);
-      } else {
-        console.warn("Initial getBalance failed:", res && res.error);
-      }
+      // Immediately fetch balance/stats and referrals in parallel to speed up UI population
+      try {
+        const [balanceRes, referralsRes] = await Promise.all([
+          fetchApi({ type: "getBalance" }),
+          fetchApi({ type: "getReferrals" })
+        ]);
 
-      // Also fetch referral counts so invite page reflects pending/active
-      refreshReferralCounts();
+        if (balanceRes && balanceRes.success) {
+          updateBalanceUI(balanceRes);
+        } else {
+          console.warn("Initial getBalance failed:", balanceRes && balanceRes.error);
+        }
+
+        if (referralsRes && referralsRes.success) {
+          updateReferralCountsUI({ active: referralsRes.active || 0, pending: referralsRes.pending || 0 });
+        } else {
+          refreshReferralCounts();
+        }
+      } catch (e) {
+        console.warn("Parallel initial fetches failed:", e);
+      }
 
       const userPhotoContainer = document.querySelector(".user-fhoto");
       const userNameContainer = document.querySelector(".user-name");
@@ -1065,12 +1068,16 @@ document.addEventListener("DOMContentLoaded", async function () {
 /* =======================
    Ensure balance is also fetched on full load (fallback)
    This makes sure balance is displayed even if DOMContentLoaded already fired earlier
+   We fetch balance and referrals in parallel for speed
 ======================= */
 window.addEventListener('load', async function() {
   try {
-    const res = await fetchApi({ type: "getBalance" });
+    const [res, refRes] = await Promise.all([
+      fetchApi({ type: "getBalance" }),
+      fetchApi({ type: "getReferrals" })
+    ]);
     updateBalanceUI(res);
-    refreshReferralCounts();
+    if (refRes && refRes.success) updateReferralCountsUI({ active: refRes.active || 0, pending: refRes.pending || 0 });
   } catch (e) {
     console.warn("Load balance fetch failed:", e);
   }

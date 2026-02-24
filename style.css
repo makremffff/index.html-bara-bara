@@ -57,11 +57,12 @@ background: black;
 
 
 #adsnotifi{
-  color: white;
+  
+color: white;
   min-width: fit-content;
   font-size: 23px;
   font-family: DynaPuff;
-  background: black;
+  background: #1F1F21;
   height: fit-content;
   padding: 5px 50px;
   padding-bottom: 60px;
@@ -75,7 +76,6 @@ transition: 0.3s linear;
 z-index: 9999;
 text-align: center;
 font-weight: bold;
-
 
 
  
@@ -577,7 +577,7 @@ border-radius: 20px;
 #openbox{
   color: navy;
   position: absolute;
-  left: 53%;
+  left: 50%;
   top: 57px;
   background: red;
 
@@ -586,8 +586,9 @@ border-radius: 20px;
  border-radius: 15px;
  font-family: DynaPuff;
  font-weight: bold;
- font-size: 8px;
- width: 40px;
+ font-size: 12px;
+ width: 46px;
+ z-index: 9999;
 
  
 }
