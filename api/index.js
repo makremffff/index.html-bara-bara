@@ -67,7 +67,7 @@ async function supabaseRpc(fnName, body = {}) {
 
   if (!res.ok) {
     // Attempt to surface Postgres error message
-    const err = (json && json.message) ? json.message : (typeof json === "string" ? json : `Request failed with status ${res.status}`);
+    const err = (json && (json.message || json.error)) ? (json.message || json.error) : (typeof json === "string" ? json : `Request failed with status ${res.status}`);
     const error = new Error(err);
     error.status = res.status;
     throw error;
@@ -182,8 +182,6 @@ export default async function handler(req, res) {
 
     // ===============================
     // Reward Box (Open-Box) - server-side handler
-    // - Does NOT increment ad counters
-    // - Enforces a separate box cooldown (BOX_MIN_INTERVAL_SECONDS)
     // ===============================
     if (type === "rewardBox") {
       const { userId, amount } = data || {};
@@ -242,9 +240,7 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // Reward User (Save Balance + Ads) and handle referral activation
-    // Server-side enforces a minimum interval between rewarded ads to mitigate automation.
-    // If data.isBox === true -> treat as box style reward (no ad counters) and enforce box cooldown.
+    // Reward User (Save Balance + Ads)
     // ===============================
     if (type === "rewardUser") {
       const { userId, amount, isBox = false } = data || {};
@@ -319,7 +315,6 @@ export default async function handler(req, res) {
             });
           }
         } catch (e) {
-          // if parsing fails, continue — we'll overwrite last_ad_time below
           console.error("Failed to parse last_ad_time:", e);
         }
       }
@@ -359,30 +354,25 @@ export default async function handler(req, res) {
         }
       );
 
-      // Check referral activation: if the user was referred and not already activated, and has reached 10 watched ads
+      // Check referral activation...
       let referralActivated = false;
       let inviterRewarded = false;
       let inviterId = user.referrer_id || null;
 
       if (inviterId && !user.referral_active) {
-        // Determine total ads watched after increment (we used newAdsWatched)
         if (newAdsWatched >= 10) {
-          // Reward inviter with 100 coins
           try {
-            // Fetch inviter current balance
             const inviterRes = await supabaseRequest(`users?id=eq.${inviterId}&select=balance`);
             if (inviterRes && inviterRes.length > 0) {
               const inviter = inviterRes[0];
               const inviterBalance = Number(inviter.balance) || 0;
               const inviterNewBalance = inviterBalance + 100;
 
-              // Update inviter balance
               await supabaseRequest(`users?id=eq.${inviterId}`, {
                 method: "PATCH",
                 body: JSON.stringify({ balance: inviterNewBalance })
               });
 
-              // Mark referral as activated on the referred user
               await supabaseRequest(`users?id=eq.${userId}`, {
                 method: "PATCH",
                 body: JSON.stringify({ referral_active: true })
@@ -392,13 +382,11 @@ export default async function handler(req, res) {
               inviterRewarded = true;
             }
           } catch (e) {
-            // If inviter update failed, log but continue
             console.error("Failed to reward inviter:", e);
           }
         }
       }
 
-      // return updated state
       return res.status(200).json({
         success: true,
         balance: newBalance,
@@ -451,8 +439,7 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // Get Referrals counts and details for inviter (active / pending + list)
-    // Returns: { success, active, pending, referrals: [{id,name,photo,ads_watched,referral_active}] }
+    // Get Referrals counts and details for inviter
     // ===============================
     if (type === "getReferrals") {
       const { userId } = data || {};
@@ -461,7 +448,6 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing userId" });
       }
 
-      // Fetch referral rows with useful fields
       const referrals = await supabaseRequest(`users?referrer_id=eq.${userId}&select=id,name,photo,ads_watched,referral_active`);
 
       if (!referrals) {
@@ -481,17 +467,12 @@ export default async function handler(req, res) {
         success: true,
         active,
         pending,
-        referrals // array of objects: id,name,photo,ads_watched,referral_active
+        referrals
       });
     }
 
     // ===============================
     // NEW: Create Withdraw (server-side authoritative, atomic via RPC)
-    // - Validates userId, amount
-    // - amount must be numeric, >= 300, <= user.balance
-    // - Enforces last_withdraw_time minimum interval (60s)
-    // - Inserts a withdraw_history row and deducts balance and updates last_withdraw_time atomically
-    // Returns: { success: true, newBalance: ..., withdrawId: ... }
     // ===============================
     if (type === "createWithdraw") {
       const { userId, amount } = data || {};
@@ -504,7 +485,6 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing amount" });
       }
 
-      // parse and basic validation
       const parsedAmount = Number(amount);
       if (!Number.isFinite(parsedAmount) || isNaN(parsedAmount)) {
         return res.status(400).json({ success: false, error: "Amount must be a number" });
@@ -514,8 +494,6 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Amount must be at least 300" });
       }
 
-      // Use a Postgres function (RPC) to perform atomic withdraw: deduct balance, update last_withdraw_time, insert into withdraw_history
-      // The RPC function will perform the authoritative checks (balance >= amount, last_withdraw_time cooldown)
       try {
         const rpcBody = {
           p_user_id: String(userId),
@@ -523,11 +501,9 @@ export default async function handler(req, res) {
           p_min_interval_seconds: 60
         };
 
-        // Call RPC create_withdraw which must be created in the DB migration (see migration SQL)
         const rpcRes = await supabaseRpc("create_withdraw", rpcBody);
 
-        // Expected rpcRes to contain object with new_balance and withdraw_id (name depends on function's return)
-        // If RPC returns array (PostgREST may return array of rows), handle that
+        // Extract return values robustly
         let newBalance = null;
         let withdrawId = null;
         if (Array.isArray(rpcRes) && rpcRes.length > 0) {
@@ -537,8 +513,6 @@ export default async function handler(req, res) {
           newBalance = rpcRes.new_balance || rpcRes.newbalance || rpcRes.new_balance;
           withdrawId = rpcRes.withdraw_id || rpcRes.withdrawid || rpcRes.withdraw_id;
         } else {
-          // fallback: simple success without details
-          // Fetch current balance
           const result = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
           newBalance = result && result[0] ? result[0].balance : null;
         }
@@ -550,17 +524,20 @@ export default async function handler(req, res) {
         });
 
       } catch (e) {
-        // Handle RPC errors and return appropriate status codes
         const msg = e && e.message ? e.message : String(e);
         const status = e && e.status ? e.status : 500;
 
-        // If RPC threw an error due to cooldown, propagate 429
+        // If RPC endpoint not found (404), return clear message (localized can be handled client-side)
+        if (status === 404 || (String(msg).toLowerCase().includes("function") && String(msg).toLowerCase().includes("not found"))) {
+          console.error("create_withdraw RPC not found:", msg);
+          return res.status(500).json({ success: false, error: "وظيفة السحب غير منصبة على الخادم. يرجى نشر دالة create_withdraw في قاعدة البيانات." });
+        }
+
         if (String(msg).toLowerCase().includes("please wait") || String(msg).toLowerCase().includes("cooldown") || status === 429) {
           return res.status(429).json({ success: false, error: msg });
         }
 
-        // Validation errors
-        if (String(msg).toLowerCase().includes("balance") || String(msg).toLowerCase().includes("insufficient")) {
+        if (String(msg).toLowerCase().includes("insufficient") || String(msg).toLowerCase().includes("balance")) {
           return res.status(400).json({ success: false, error: msg });
         }
 
