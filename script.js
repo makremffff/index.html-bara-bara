@@ -209,6 +209,7 @@ const adsBtn     = document.getElementById("adsbtn");
 const adsBtnn    = document.getElementById("adsbtnn");
 const adsBalance = document.getElementById("adsbalance");
 const adsNotfi   = document.getElementById("adsnotifi");
+const boxNotfi   = document.getElementById("boxnotifi");
 let progres = document.getElementById("progres");
 
 let ADS   = 0;
@@ -330,39 +331,40 @@ function getBoxCooldownKey() {
 
 /* =======================
    Helper: show a box reward notification (text + animation)
-   Shows after a small delay (400ms) and updates adsNotfi content to "you get <amount>coin"
+   Uses a dedicated element (#boxnotifi) to avoid overlap with ads notification.
+   Shows after a small delay (400ms) and updates boxNotfi content to "You get <amount> coin"
 ======================= */
 function showBoxRewardNotification(amount) {
-  if (!adsNotfi) return;
+  if (!boxNotfi) return;
   try {
-    adsNotfi.textContent = `you get ${amount}coin`;
+    boxNotfi.textContent = `You get ${amount} coin`;
     // small delay before showing (400ms)
     setTimeout(function () {
       // play sound then visual animation
       playNotificationSound().catch(e => console.warn("Notification sound failed:", e));
 
-      adsNotfi.style.display = "block";
-      adsNotfi.style.opacity = "0.8";
+      boxNotfi.style.display = "block";
+      boxNotfi.style.opacity = "0.9";
 
       setTimeout(function () {
-        adsNotfi.style.opacity = "0.4";
+        boxNotfi.style.opacity = "0.5";
       }, 2500);
 
-      adsNotfi.style.transform = "translateY(-150%)";
+      boxNotfi.style.transform = "translateY(-150%)";
 
       setTimeout(function () {
-        adsNotfi.style.transform = "translateY(135px)";
+        boxNotfi.style.transform = "translateY(135px)";
       }, 100);
 
       setTimeout(function () {
-        adsNotfi.style.transform = "translateY(-150%)";
-        adsNotfi.style.opacity = "0";
+        boxNotfi.style.transform = "translateY(-150%)";
+        boxNotfi.style.opacity = "0";
       }, 3000);
 
       setTimeout(function () {
-        adsNotfi.style.display = "none";
-        adsNotfi.style.transform = "";
-        adsNotfi.style.opacity = "";
+        boxNotfi.style.display = "none";
+        boxNotfi.style.transform = "";
+        boxNotfi.style.opacity = "";
       }, 3500);
     }, 400);
   } catch (e) {
@@ -372,6 +374,8 @@ function showBoxRewardNotification(amount) {
 
 /* =======================
    Reward button handler
+   Fixed: avoid leaving adsBtnn with yellow background/countdown after successful reward.
+         Ensure cleanup of any cooldown UI left over. Prevent visual overlap between box and ads notifications.
 ======================= */
 if (adsBtn) {
   adsBtn.addEventListener("click", async function (evt) {
@@ -404,11 +408,20 @@ if (adsBtn) {
 
     if (adCooldown) return;
 
+    // Ensure any previous background is cleared
+    if (adsBtnn) adsBtnn.style.background = '';
+
     adsBtn.style.display  = "none";
     adsBtnn.style.display = "block";
 
     let timeLeft = 50;
     adsBtnn.textContent = timeLeft + "s";
+
+    // clear any previous dailyLimit interval when starting new ad flow to avoid multiple intervals
+    if (dailyLimit) {
+      clearInterval(dailyLimit);
+      dailyLimit = null;
+    }
 
     timer = setInterval(async function () {
       timeLeft--;
@@ -437,6 +450,15 @@ if (adsBtn) {
 
           // update client-side lastAdTimestamp to now (server returned lastAdTime but use local now)
           lastAdTimestamp = Date.now();
+
+          // Clean up any leftover cooldown UI/intervals that could cause a second countdown
+          if (dailyLimit) {
+            clearInterval(dailyLimit);
+            dailyLimit = null;
+          }
+          if (adsBtnn) {
+            adsBtnn.style.background = '';
+          }
         } else {
           // handle errors (e.g., daily limit reached or server-side cooldown)
           console.warn("rewardUser failed:", res && res.error);
@@ -449,12 +471,14 @@ if (adsBtn) {
             adsBtnn.textContent = progresLimit;
             adsBtnn.style.background = 'red';
             // start cooldown countdown for the remaining day limit
+            if (dailyLimit) clearInterval(dailyLimit);
             dailyLimit = setInterval(function(){
               progresLimit--;
               adsBtnn.textContent = progresLimit;
 
               if (progresLimit <= 0) {
                 clearInterval(dailyLimit);
+                dailyLimit = null;
 
                 adsBtnn.style.display = 'none';
                 adsBtn.style.display = 'block';
@@ -482,6 +506,7 @@ if (adsBtn) {
               adsBtnn.textContent = `${remaining}s`;
               if (remaining <= 0) {
                 clearInterval(dailyLimit);
+                dailyLimit = null;
                 adsBtnn.style.display = 'none';
                 adsBtn.style.display = 'block';
                 adsBtnn.style.background = '';
@@ -502,8 +527,9 @@ if (adsBtn) {
           } catch (e) {
             console.warn("Notification sound play failed:", e);
           }
-          // visual notification
+          // visual notification using dedicated adsNotfi element
           if (adsNotfi) {
+            adsNotfi.textContent = "ADS WATCHED";
             adsNotfi.style.display = "block";
             adsNotfi.style.opacity = "0.8";
 
@@ -531,7 +557,13 @@ if (adsBtn) {
         }
 
         clearInterval(timer);
-        adsBtnn.style.display = "none";
+        timer = null;
+
+        // Make sure adsBtnn style/background are reset to avoid leftover yellow
+        if (adsBtnn) {
+          adsBtnn.style.display = "none";
+          adsBtnn.style.background = '';
+        }
         adsBtn.style.display  = "block";
 
         // if dailyProgres depleted, set long cooldown
@@ -541,6 +573,7 @@ if (adsBtn) {
           adsBtnn.textContent = progresLimit;
           adsBtnn.style.background = 'red';
 
+          if (dailyLimit) clearInterval(dailyLimit);
           dailyLimit = setInterval(function(){
 
             progresLimit--;
@@ -548,6 +581,7 @@ if (adsBtn) {
 
             if (progresLimit <= 0) {
               clearInterval(dailyLimit);
+              dailyLimit = null;
 
               adsBtnn.style.display = 'none';
               adsBtn.style.display = 'block';
@@ -577,13 +611,10 @@ if (adsBtn) {
    - When user clicks OPEN -> show two ads (they don't affect main ad counter)
    - After ads complete award random reward (75|100|150|200) added to balance
    - After finishing disable open button for 5 minutes (countdown shown)
-   - Show ads notification (adsnotifi) when box reward is granted (same visual as ads button)
-   - Box ads should not affect the main ad counters; client tries to call "rewardBox" API (if backend supports it),
-     otherwise it will update UI locally and log a warning.
+   - Show box notification in separate element to avoid overlap
    - Persist cooldown in localStorage to survive reloads.
    - Box ad displays do not interfere with main adCooldown (use useGlobalCooldown=false).
-   - Fix: make cooldown per-account (use USER_ID in key) so each account has independent timing.
-   - Fix: show notification text "you get <amount>coin" after 0.4s when box reward granted.
+   - Make cooldown per-account (use USER_ID in key) so each account has independent timing.
 ======================= */
 const openBoxBtn = document.getElementById("openbox");
 const BOX_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
@@ -721,7 +752,7 @@ async function handleBoxClick(evt) {
     `;
   }
 
-  // Show notification visually similar to ads button reward but with text "you get Xcoin" after 0.4s
+  // Show notification visually similar to ads button reward but in separate element
   try {
     showBoxRewardNotification(reward);
   } catch (e) {
