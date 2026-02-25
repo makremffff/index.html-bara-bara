@@ -486,6 +486,28 @@ export default async function handler(req, res) {
     }
 
     // ===============================
+    // Get Withdraws for a user (history)
+    // - Returns withdraw rows ordered by created_at desc
+    // ===============================
+    if (type === "getWithdraws") {
+      const { userId } = data || {};
+
+      if (!userId) {
+        return res.status(400).json({ success: false, error: "Missing userId" });
+      }
+
+      // select useful fields
+      const rows = await supabaseRequest(
+        `withdraw?user_id=eq.${userId}&select=id,amount,status,destination,created_at,processed_at&order=created_at.desc`
+      );
+
+      return res.status(200).json({
+        success: true,
+        withdraws: Array.isArray(rows) ? rows : []
+      });
+    }
+
+    // ===============================
     // Get Referrals counts and details for inviter (active / pending + list)
     // Returns: { success, active, pending, referrals: [{id,name,photo,ads_watched,referral_active}] }
     // ===============================
