@@ -209,7 +209,6 @@ const adsBtn     = document.getElementById("adsbtn");
 const adsBtnn    = document.getElementById("adsbtnn");
 const adsBalance = document.getElementById("adsbalance");
 const adsNotfi   = document.getElementById("adsnotifi");
-const boxNotfi   = document.getElementById("boxnotifi");
 let progres = document.getElementById("progres");
 
 let ADS   = 0;
@@ -322,60 +321,75 @@ async function playNotificationSound() {
 }
 
 /* =======================
-   BOX COOLDOWN KEY UTIL (per-account)
-   Use USER_ID to isolate cooldown per account. If USER_ID not known, fallback to legacy key.
+   Notification helper (single element)
+   - Uses #adsnotifi element for both ad and box notifications.
+   - Keeps the image (<img src="done.gif">) as in original design.
+   - Avoids overlap by queuing the next notification if one is currently visible.
 ======================= */
-function getBoxCooldownKey() {
-  return USER_ID ? `boxCooldownUntil_${USER_ID}` : 'boxCooldownUntil';
+let notificationQueue = [];
+let notificationShowing = false;
+
+function showMainNotificationInner(htmlContent) {
+  if (!adsNotfi) return;
+  adsNotfi.innerHTML = htmlContent;
+  adsNotfi.style.display = "block";
+  adsNotfi.style.opacity = "0.9";
+  adsNotfi.style.transform = "translateY(-150%)";
+
+  // play sound
+  playNotificationSound().catch(e => console.warn("Notification sound failed:", e));
+
+  setTimeout(function () {
+    try { adsNotfi.style.transform = "translateY(135px)"; } catch (e) {}
+  }, 100);
+
+  setTimeout(function () {
+    try {
+      adsNotfi.style.transform = "translateY(-150%)";
+      adsNotfi.style.opacity = "0";
+    } catch (e) {}
+  }, 3000);
+
+  setTimeout(function () {
+    try { adsNotfi.style.display = "none"; } catch (e) {}
+    try { adsNotfi.style.transform = ""; adsNotfi.style.opacity = ""; } catch (e) {}
+    notificationShowing = false;
+    // show next queued notification if any
+    if (notificationQueue.length > 0) {
+      const next = notificationQueue.shift();
+      // small delay to avoid immediate flicker
+      setTimeout(() => {
+        notificationShowing = true;
+        showMainNotificationInner(next);
+      }, 120);
+    }
+  }, 3500);
+}
+
+function showMainNotification(htmlContent) {
+  if (!adsNotfi) return;
+  if (notificationShowing) {
+    // queue it
+    notificationQueue.push(htmlContent);
+    return;
+  }
+  notificationShowing = true;
+  showMainNotificationInner(htmlContent);
 }
 
 /* =======================
-   Helper: show a box reward notification (text + animation)
-   Uses a dedicated element (#boxnotifi) to avoid overlap with ads notification.
-   Shows after a small delay (400ms) and updates boxNotfi content to "You get <amount> coin"
+   Helper: show a box reward notification (text + image)
+   Reuses the main ads notification element and preserves the image.
 ======================= */
 function showBoxRewardNotification(amount) {
-  if (!boxNotfi) return;
-  try {
-    boxNotfi.textContent = `You get ${amount} coin`;
-    // small delay before showing (400ms)
-    setTimeout(function () {
-      // play sound then visual animation
-      playNotificationSound().catch(e => console.warn("Notification sound failed:", e));
-
-      boxNotfi.style.display = "block";
-      boxNotfi.style.opacity = "0.9";
-
-      setTimeout(function () {
-        boxNotfi.style.opacity = "0.5";
-      }, 2500);
-
-      boxNotfi.style.transform = "translateY(-150%)";
-
-      setTimeout(function () {
-        boxNotfi.style.transform = "translateY(135px)";
-      }, 100);
-
-      setTimeout(function () {
-        boxNotfi.style.transform = "translateY(-150%)";
-        boxNotfi.style.opacity = "0";
-      }, 3000);
-
-      setTimeout(function () {
-        boxNotfi.style.display = "none";
-        boxNotfi.style.transform = "";
-        boxNotfi.style.opacity = "";
-      }, 3500);
-    }, 400);
-  } catch (e) {
-    console.warn("showBoxRewardNotification failed:", e);
-  }
+  const html = `you get ${amount} coin <img src="done.gif" width="40" height="40">`;
+  showMainNotification(html);
 }
 
 /* =======================
    Reward button handler
    Fixed: avoid leaving adsBtnn with yellow background/countdown after successful reward.
-         Ensure cleanup of any cooldown UI left over. Prevent visual overlap between box and ads notifications.
+         Ensure cleanup of any cooldown UI left over. Prevent visual overlap between notifications.
 ======================= */
 if (adsBtn) {
   adsBtn.addEventListener("click", async function (evt) {
@@ -527,33 +541,9 @@ if (adsBtn) {
           } catch (e) {
             console.warn("Notification sound play failed:", e);
           }
-          // visual notification using dedicated adsNotfi element
-          if (adsNotfi) {
-            adsNotfi.textContent = "ADS WATCHED";
-            adsNotfi.style.display = "block";
-            adsNotfi.style.opacity = "0.8";
-
-            setTimeout(function () {
-              adsNotfi.style.opacity = "0.4";
-            }, 2500);
-
-            adsNotfi.style.transform = "translateY(-150%)";
-
-            setTimeout(function () {
-              adsNotfi.style.transform = "translateY(135px)";
-            }, 100);
-
-            setTimeout(function () {
-              adsNotfi.style.transform = "translateY(-150%)";
-              adsNotfi.style.opacity = "0";
-            }, 3000);
-
-            setTimeout(function () {
-              adsNotfi.style.display = "none";
-              adsNotfi.style.transform = "";
-              adsNotfi.style.opacity = "";
-            }, 3500);
-          }
+          // visual notification using dedicated adsNotfi element (keeps image)
+          const html = `ADS WATCHED <img src="done.gif" width="40" height="40">`;
+          showMainNotification(html);
         }
 
         clearInterval(timer);
@@ -611,7 +601,7 @@ if (adsBtn) {
    - When user clicks OPEN -> show two ads (they don't affect main ad counter)
    - After ads complete award random reward (75|100|150|200) added to balance
    - After finishing disable open button for 5 minutes (countdown shown)
-   - Show box notification in separate element to avoid overlap
+   - Show box notification by reusing the main notification element (text + image preserved)
    - Persist cooldown in localStorage to survive reloads.
    - Box ad displays do not interfere with main adCooldown (use useGlobalCooldown=false).
    - Make cooldown per-account (use USER_ID in key) so each account has independent timing.
@@ -752,7 +742,7 @@ async function handleBoxClick(evt) {
     `;
   }
 
-  // Show notification visually similar to ads button reward but in separate element
+  // Show notification visually using main notification element with image preserved
   try {
     showBoxRewardNotification(reward);
   } catch (e) {
