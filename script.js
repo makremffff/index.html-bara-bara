@@ -1436,16 +1436,29 @@ if (sendwithdraw) {
     }
 
     // Check minimum and sufficient balance
-    if (coin < MIN_WITHDRAW) {
-      alert(`Minimum withdraw is ${MIN_WITHDRAW} coins`);
-      return;
-    }
+    let withdrawnotifi = document.querySelector(".withdraw-notifi");
 
-    if (currentBalance < coin) {
-      alert("Insufficient balance for this withdraw");
-      return;
-    }
+if (coin < MIN_WITHDRAW) {
+  if (withdrawnotifi) {
+    withdrawnotifi.textContent = `Minimum withdraw is ${MIN_WITHDRAW} coins`;
+    withdrawnotifi.style.display = "block";
+    setTimeout(() => {
+      withdrawnotifi.style.display = "none";
+    }, 2500);
+  }
+  return;
+}
 
+if (currentBalance < coin) {
+  if (withdrawnotifi) {
+    withdrawnotifi.textContent = "Insufficient balance for this withdraw";
+    withdrawnotifi.style.display = "block";
+    setTimeout(() => {
+      withdrawnotifi.style.display = "none";
+    }, 2500);
+  }
+  return;
+}
     // Disable button to prevent duplicate submits
     sendwithdraw.disabled = true;
     sendwithdraw.style.opacity = '0.6';
