@@ -58,20 +58,20 @@ background: black;
 
 #adsnotifi{
   
-color: white;
-  min-width: fit-content;
-  font-size: 23px;
+  color: white;
+  width: 80%;
+  font-size: 17px;
   font-family: DynaPuff;
   background: navy;
   height: fit-content;
-  padding: 5px 50px;
-  padding-bottom: 60px;
+  padding: 30px 50px;
+  padding-bottom: 40px;
   border-radius: 20px;
   text-shadow: 0 0px 4px #000;
   position: relative;
   left: 10%;
-  top: -50%;
-  display: none;
+  top: -10%;
+  display: nne;
 transition: 0.3s linear;
 z-index: 9999;
 text-align: center;
@@ -582,13 +582,13 @@ border-radius: 20px;
   background: red;
 
  height: fit-content;
- padding: 3px 10px;
+ padding: 7px 10px;
  border-radius: 15px;
  font-family: DynaPuff;
  font-weight: bold;
  font-size: 12px;
  width: 46px;
- z-index: 999;
+ z-index: 9999;
 
  
 }
