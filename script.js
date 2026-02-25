@@ -1416,7 +1416,11 @@ if (sendwithdraw) {
 
     // Basic validation
     if (!coin || isNaN(coin)) {
-      alert("Please enter a valid coin amount");
+      withdrawnotifi.textContent = `Minimum withdraw is ${MIN_WITHDRAW} coins`;
+      withdrawnotifi.style.display = "block";
+    setTimeout(() => {
+      withdrawnotifi.style.display = "none";
+    }, 2500);
       return;
     }
 
