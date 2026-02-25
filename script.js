@@ -312,6 +312,58 @@ async function playNotificationSound() {
 }
 
 /* =======================
+   BOX COOLDOWN KEY UTIL (per-account)
+   Use USER_ID to isolate cooldown per account. If USER_ID not known, fallback to legacy key.
+======================= */
+function getBoxCooldownKey() {
+  return USER_ID ? `boxCooldownUntil_${USER_ID}` : 'boxCooldownUntil';
+}
+
+/* =======================
+   Helper: show a box reward notification (text + animation)
+   Shows after a small delay (400ms) and updates adsNotfi content to "you get <amount>coin"
+======================= */
+function showBoxRewardNotification(amount) {
+  if (!adsNotfi) return;
+  try {
+    adsNotfi.textContent = `you get ${amount}coin`;
+    // small delay before showing (400ms)
+    setTimeout(function () {
+      // play sound then visual animation
+      playNotificationSound().catch(e => console.warn("Notification sound failed:", e));
+
+      adsNotfi.style.display = "block";
+      adsNotfi.style.opacity = "0.8";
+
+      setTimeout(function () {
+        adsNotfi.style.opacity = "0.4";
+      }, 2500);
+
+      adsNotfi.style.transform = "translateY(-150%)";
+
+      setTimeout(function () {
+        adsNotfi.style.transform = "translateY(135px)";
+      }, 100);
+
+      setTimeout(function () {
+        adsNotfi.style.transform = "translateY(-150%)";
+        adsNotfi.style.opacity = "0";
+      }, 3000);
+
+      setTimeout(function () {
+        adsNotfi.style.display = "none";
+        adsNotfi.style.transform = "";
+        adsNotfi.style.opacity = "";
+        // Restore default text after hiding (optional)
+        // adsNotfi.textContent = ""; // if you want to clear it
+      }, 3500);
+    }, 400);
+  } catch (e) {
+    console.warn("showBoxRewardNotification failed:", e);
+  }
+}
+
+/* =======================
    Reward button handler
 ======================= */
 if (adsBtn) {
@@ -523,6 +575,8 @@ if (adsBtn) {
      otherwise it will update UI locally and log a warning.
    - Persist cooldown in localStorage to survive reloads.
    - Box ad displays do not interfere with main adCooldown (use useGlobalCooldown=false).
+   - Fix: make cooldown per-account (use USER_ID in key) so each account has independent timing.
+   - Fix: show notification text "you get <amount>coin" after 0.4s when box reward granted.
 ======================= */
 const openBoxBtn = document.getElementById("openbox");
 const BOX_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
@@ -539,18 +593,19 @@ function formatMsToMMSS(ms) {
 
 function setOpenBoxDisabled(state, untilTs = null) {
   if (!openBoxBtn) return;
+  const key = getBoxCooldownKey();
   if (state) {
     openBoxBtn.style.pointerEvents = 'none';
     openBoxBtn.style.opacity = '0.5';
-    // store cooldown until timestamp
+    // store cooldown until timestamp for this account/key
     try {
-      if (untilTs) localStorage.setItem('boxCooldownUntil', String(untilTs));
+      if (untilTs) localStorage.setItem(key, String(untilTs));
     } catch (e) {}
     // start interval to update text
     if (boxCooldownInterval) clearInterval(boxCooldownInterval);
     boxCooldownInterval = setInterval(function(){
       try {
-        const stored = Number(localStorage.getItem('boxCooldownUntil') || 0);
+        const stored = Number(localStorage.getItem(key) || 0);
         const remain = stored - Date.now();
         if (remain <= 0) {
           clearInterval(boxCooldownInterval);
@@ -558,7 +613,7 @@ function setOpenBoxDisabled(state, untilTs = null) {
           openBoxBtn.textContent = "OPEN";
           openBoxBtn.style.pointerEvents = '';
           openBoxBtn.style.opacity = '';
-          try { localStorage.removeItem('boxCooldownUntil'); } catch (e) {}
+          try { localStorage.removeItem(key); } catch (e) {}
         } else {
           openBoxBtn.textContent = formatMsToMMSS(remain);
         }
@@ -570,7 +625,7 @@ function setOpenBoxDisabled(state, untilTs = null) {
     openBoxBtn.style.pointerEvents = '';
     openBoxBtn.style.opacity = '';
     openBoxBtn.textContent = "OPEN";
-    try { localStorage.removeItem('boxCooldownUntil'); } catch (e) {}
+    try { localStorage.removeItem(key); } catch (e) {}
     if (boxCooldownInterval) {
       clearInterval(boxCooldownInterval);
       boxCooldownInterval = null;
@@ -586,9 +641,11 @@ async function handleBoxClick(evt) {
     return;
   }
 
+  const key = getBoxCooldownKey();
+
   // check persistent cooldown
   try {
-    const stored = Number(localStorage.getItem('boxCooldownUntil') || 0);
+    const stored = Number(localStorage.getItem(key) || 0);
     if (stored && stored > Date.now()) {
       // still cooling
       return;
@@ -657,37 +714,11 @@ async function handleBoxClick(evt) {
     `;
   }
 
-  // Show notification visually similar to ads button reward
+  // Show notification visually similar to ads button reward but with text "you get Xcoin" after 0.4s
   try {
-    await playNotificationSound();
+    showBoxRewardNotification(reward);
   } catch (e) {
-    console.warn("box notification sound failed:", e);
-  }
-
-  if (adsNotfi) {
-    adsNotfi.style.display = "block";
-    adsNotfi.style.opacity = "0.8";
-
-    setTimeout(function () {
-      adsNotfi.style.opacity = "0.4";
-    }, 2500);
-
-    adsNotfi.style.transform = "translateY(-150%)";
-
-    setTimeout(function () {
-      adsNotfi.style.transform = "translateY(135px)";
-    }, 100);
-
-    setTimeout(function () {
-      adsNotfi.style.transform = "translateY(-150%)";
-      adsNotfi.style.opacity = "0";
-    }, 3000);
-
-    setTimeout(function () {
-      adsNotfi.style.display = "none";
-      adsNotfi.style.transform = "";
-      adsNotfi.style.opacity = "";
-    }, 3500);
+    console.warn("box notification failed:", e);
   }
 
   // Start persistent cooldown for BOX_COOLDOWN_MS
@@ -1202,12 +1233,13 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   // Initialize OPEN BOX cooldown state from localStorage (if present)
   try {
-    const stored = Number(localStorage.getItem('boxCooldownUntil') || 0);
+    const key = getBoxCooldownKey();
+    const stored = Number(localStorage.getItem(key) || 0);
     if (stored && stored > Date.now()) {
       setOpenBoxDisabled(true, stored);
     } else {
       // cleanup any stale
-      try { localStorage.removeItem('boxCooldownUntil'); } catch (e) {}
+      try { localStorage.removeItem(key); } catch (e) {}
       setOpenBoxDisabled(false, null);
     }
   } catch (e) {
