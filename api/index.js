@@ -43,40 +43,6 @@ async function supabaseRequest(path, options = {}) {
 }
 
 // ===============================
-// Helper: Supabase RPC call (for atomic server-side withdraw transaction)
-// Uses /rpc/<fn> endpoint
-// ===============================
-async function supabaseRpc(fnName, body = {}) {
-  if (!SUPABASE_URL) {
-    throw new Error("Supabase URL not configured");
-  }
-
-  const res = await fetch(`${SUPABASE_URL}/rpc/${fnName}`, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
-
-  const text = await res.text();
-  let json = null;
-  try { json = text ? JSON.parse(text) : null; } catch (e) { json = text; }
-
-  if (!res.ok) {
-    // Attempt to surface Postgres error message
-    const err = (json && (json.message || json.error)) ? (json.message || json.error) : (typeof json === "string" ? json : `Request failed with status ${res.status}`);
-    const error = new Error(err);
-    error.status = res.status;
-    throw error;
-  }
-
-  return json;
-}
-
-// ===============================
 // API Handler
 // ===============================
 export default async function handler(req, res) {
@@ -124,9 +90,7 @@ export default async function handler(req, res) {
             // last_box_time stores ISO timestamp of last box reward (server-side anti-abuse)
             last_box_time: null,
             referrer_id: referrerId || null,
-            referral_active: false,
-            // last_withdraw_time is nullable; added for withdraw rate-limiting
-            last_withdraw_time: null
+            referral_active: false
           })
         });
 
@@ -159,7 +123,7 @@ export default async function handler(req, res) {
       }
 
       const result = await supabaseRequest(
-        `users?id=eq.${userId}&select=balance,ads_watched,daily_ads,last_ad_date,last_ad_time,referrer_id,referral_active,last_box_time,last_withdraw_time`
+        `users?id=eq.${userId}&select=balance,ads_watched,daily_ads,last_ad_date,last_ad_time,referrer_id,referral_active,last_box_time`
       );
 
       if (!result || result.length === 0) {
@@ -175,13 +139,14 @@ export default async function handler(req, res) {
         lastAdTime: result[0].last_ad_time || null,
         referrerId: result[0].referrer_id || null,
         referralActive: !!result[0].referral_active,
-        lastBoxTime: result[0].last_box_time || null,
-        lastWithdrawTime: result[0].last_withdraw_time || null
+        lastBoxTime: result[0].last_box_time || null
       });
     }
 
     // ===============================
     // Reward Box (Open-Box) - server-side handler
+    // - Does NOT increment ad counters
+    // - Enforces a separate box cooldown (BOX_MIN_INTERVAL_SECONDS)
     // ===============================
     if (type === "rewardBox") {
       const { userId, amount } = data || {};
@@ -240,7 +205,9 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // Reward User (Save Balance + Ads)
+    // Reward User (Save Balance + Ads) and handle referral activation
+    // Server-side enforces a minimum interval between rewarded ads to mitigate automation.
+    // If data.isBox === true -> treat as box style reward (no ad counters) and enforce box cooldown.
     // ===============================
     if (type === "rewardUser") {
       const { userId, amount, isBox = false } = data || {};
@@ -315,6 +282,7 @@ export default async function handler(req, res) {
             });
           }
         } catch (e) {
+          // if parsing fails, continue — we'll overwrite last_ad_time below
           console.error("Failed to parse last_ad_time:", e);
         }
       }
@@ -354,25 +322,30 @@ export default async function handler(req, res) {
         }
       );
 
-      // Check referral activation...
+      // Check referral activation: if the user was referred and not already activated, and has reached 10 watched ads
       let referralActivated = false;
       let inviterRewarded = false;
       let inviterId = user.referrer_id || null;
 
       if (inviterId && !user.referral_active) {
+        // Determine total ads watched after increment (we used newAdsWatched)
         if (newAdsWatched >= 10) {
+          // Reward inviter with 100 coins
           try {
+            // Fetch inviter current balance
             const inviterRes = await supabaseRequest(`users?id=eq.${inviterId}&select=balance`);
             if (inviterRes && inviterRes.length > 0) {
               const inviter = inviterRes[0];
               const inviterBalance = Number(inviter.balance) || 0;
               const inviterNewBalance = inviterBalance + 100;
 
+              // Update inviter balance
               await supabaseRequest(`users?id=eq.${inviterId}`, {
                 method: "PATCH",
                 body: JSON.stringify({ balance: inviterNewBalance })
               });
 
+              // Mark referral as activated on the referred user
               await supabaseRequest(`users?id=eq.${userId}`, {
                 method: "PATCH",
                 body: JSON.stringify({ referral_active: true })
@@ -382,11 +355,13 @@ export default async function handler(req, res) {
               inviterRewarded = true;
             }
           } catch (e) {
+            // If inviter update failed, log but continue
             console.error("Failed to reward inviter:", e);
           }
         }
       }
 
+      // return updated state
       return res.status(200).json({
         success: true,
         balance: newBalance,
@@ -439,7 +414,80 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // Get Referrals counts and details for inviter
+    // Create Withdraw (NEW)
+    // - Validates minimum amount (300)
+    // - Checks user balance
+    // - Inserts a row into withdraw table with status 'pending'
+    // - Deducts balance immediately (so user can't double-withdraw)
+    // Table name on server: withdraw
+    // ===============================
+    if (type === "createWithdraw") {
+      const { userId, amount, destination = null } = data || {};
+
+      if (!userId) {
+        return res.status(400).json({ success: false, error: "Missing userId" });
+      }
+
+      if (typeof amount === "undefined") {
+        return res.status(400).json({ success: false, error: "Missing amount" });
+      }
+
+      const parsedAmount = Number(amount) || 0;
+      const MIN_WITHDRAW = 300;
+
+      if (parsedAmount < MIN_WITHDRAW) {
+        return res.status(400).json({
+          success: false,
+          error: `Minimum withdraw is ${MIN_WITHDRAW} coins`
+        });
+      }
+
+      // Fetch user to verify balance
+      const users = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
+      if (!users || users.length === 0) {
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
+      const user = users[0];
+      const currentBalance = Number(user.balance) || 0;
+
+      if (currentBalance < parsedAmount) {
+        return res.status(400).json({ success: false, error: "Insufficient balance" });
+      }
+
+      const now = new Date().toISOString();
+
+      // Create withdraw row
+      const withdrawRow = {
+        user_id: userId,
+        amount: parsedAmount,
+        destination: destination || null,
+        status: "pending",
+        created_at: now
+      };
+
+      const created = await supabaseRequest("withdraw", {
+        method: "POST",
+        body: JSON.stringify(withdrawRow)
+      });
+
+      // Deduct user's balance (immediate hold)
+      const newBalance = currentBalance - parsedAmount;
+      await supabaseRequest(`users?id=eq.${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ balance: newBalance })
+      });
+
+      return res.status(200).json({
+        success: true,
+        withdraw: Array.isArray(created) ? created[0] : created,
+        balance: newBalance
+      });
+    }
+
+    // ===============================
+    // Get Referrals counts and details for inviter (active / pending + list)
+    // Returns: { success, active, pending, referrals: [{id,name,photo,ads_watched,referral_active}] }
     // ===============================
     if (type === "getReferrals") {
       const { userId } = data || {};
@@ -448,6 +496,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing userId" });
       }
 
+      // Fetch referral rows with useful fields
       const referrals = await supabaseRequest(`users?referrer_id=eq.${userId}&select=id,name,photo,ads_watched,referral_active`);
 
       if (!referrals) {
@@ -467,83 +516,8 @@ export default async function handler(req, res) {
         success: true,
         active,
         pending,
-        referrals
+        referrals // array of objects: id,name,photo,ads_watched,referral_active
       });
-    }
-
-    // ===============================
-    // NEW: Create Withdraw (server-side authoritative, atomic via RPC)
-    // ===============================
-    if (type === "createWithdraw") {
-      const { userId, amount } = data || {};
-
-      if (!userId) {
-        return res.status(400).json({ success: false, error: "Missing userId" });
-      }
-
-      if (typeof amount === "undefined") {
-        return res.status(400).json({ success: false, error: "Missing amount" });
-      }
-
-      const parsedAmount = Number(amount);
-      if (!Number.isFinite(parsedAmount) || isNaN(parsedAmount)) {
-        return res.status(400).json({ success: false, error: "Amount must be a number" });
-      }
-
-      if (parsedAmount < 300) {
-        return res.status(400).json({ success: false, error: "Amount must be at least 300" });
-      }
-
-      try {
-        const rpcBody = {
-          p_user_id: String(userId),
-          p_amount: Math.floor(parsedAmount),
-          p_min_interval_seconds: 60
-        };
-
-        const rpcRes = await supabaseRpc("create_withdraw", rpcBody);
-
-        // Extract return values robustly
-        let newBalance = null;
-        let withdrawId = null;
-        if (Array.isArray(rpcRes) && rpcRes.length > 0) {
-          newBalance = rpcRes[0].new_balance || rpcRes[0].newbalance || rpcRes[0].new_balance;
-          withdrawId = rpcRes[0].withdraw_id || rpcRes[0].withdrawid || rpcRes[0].withdraw_id;
-        } else if (rpcRes && typeof rpcRes === "object") {
-          newBalance = rpcRes.new_balance || rpcRes.newbalance || rpcRes.new_balance;
-          withdrawId = rpcRes.withdraw_id || rpcRes.withdrawid || rpcRes.withdraw_id;
-        } else {
-          const result = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
-          newBalance = result && result[0] ? result[0].balance : null;
-        }
-
-        return res.status(200).json({
-          success: true,
-          newBalance,
-          withdrawId
-        });
-
-      } catch (e) {
-        const msg = e && e.message ? e.message : String(e);
-        const status = e && e.status ? e.status : 500;
-
-        // If RPC endpoint not found (404), return clear message (localized can be handled client-side)
-        if (status === 404 || (String(msg).toLowerCase().includes("function") && String(msg).toLowerCase().includes("not found"))) {
-          console.error("create_withdraw RPC not found:", msg);
-          return res.status(500).json({ success: false, error: "وظيفة السحب غير منصبة على الخادم. يرجى نشر دالة create_withdraw في قاعدة البيانات." });
-        }
-
-        if (String(msg).toLowerCase().includes("please wait") || String(msg).toLowerCase().includes("cooldown") || status === 429) {
-          return res.status(429).json({ success: false, error: msg });
-        }
-
-        if (String(msg).toLowerCase().includes("insufficient") || String(msg).toLowerCase().includes("balance")) {
-          return res.status(400).json({ success: false, error: msg });
-        }
-
-        console.error("createWithdraw RPC error:", e);
-        return res.status(500).json({ success: false, error: msg });
-      }
     }
 
     // ===============================
