@@ -71,7 +71,7 @@ async function fetchApi({ type, data = {} }) {
 
     if (!response.ok) {
       // Normalize error shape
-      return { success: false, error: result.error || result || "Network response was not ok" };
+      return { success: false, error: result.error || result || "Network response was not ok", status: response.status };
     }
 
     return result;
@@ -483,7 +483,17 @@ if (adsBtn) {
             }, 1000);
           } else {
             // generic failure feedback
-            alert("Failed to claim ad reward: " + ((res && res.error) || "unknown error"));
+            // Use visual notification instead of alert
+            if (adsNotfi) {
+              adsNotfi.textContent = "فشل في استلام مكافأة الإعلان";
+              adsNotfi.style.display = "block";
+              adsNotfi.style.opacity = "0.8";
+              setTimeout(function(){ adsNotfi.style.opacity = "0.4"; }, 2500);
+              adsNotfi.style.transform = "translateY(-150%)";
+              setTimeout(function(){ adsNotfi.style.transform = "translateY(135px)"; }, 100);
+              setTimeout(function(){ adsNotfi.style.transform = "translateY(-150%)"; adsNotfi.style.opacity = "0"; }, 3000);
+              setTimeout(function(){ adsNotfi.style.display = "none"; adsNotfi.style.transform = ""; adsNotfi.style.opacity = ""; }, 3500);
+            }
           }
         }
 
@@ -667,7 +677,17 @@ async function handleBoxClick(evt) {
       openBoxBtn.style.pointerEvents = '';
       openBoxBtn.style.opacity = '';
     }, 2000);
-    alert("Failed to show both ads. Please try again.");
+    // Use withdraw-style notification element? No — keep adsNotfi for ad errors
+    if (adsNotfi) {
+      adsNotfi.textContent = "فشل في عرض الإعلانات للصندوق، حاول لاحقاً";
+      adsNotfi.style.display = "block";
+      adsNotfi.style.opacity = "0.8";
+      setTimeout(function(){ adsNotfi.style.opacity = "0.4"; }, 2500);
+      adsNotfi.style.transform = "translateY(-150%)";
+      setTimeout(function(){ adsNotfi.style.transform = "translateY(135px)"; }, 100);
+      setTimeout(function(){ adsNotfi.style.transform = "translateY(-150%)"; adsNotfi.style.opacity = "0"; }, 3000);
+      setTimeout(function(){ adsNotfi.style.display = "none"; adsNotfi.style.transform = ""; adsNotfi.style.opacity = ""; }, 3500);
+    }
     return;
   }
 
@@ -1272,192 +1292,222 @@ window.addEventListener('load', async function() {
 });
 
 /* =======================
-   إرسال طلب سحب — تحديث: التحقق من حد أدنى 300، منع النقرات الآلية والأوتو-كليك،
-   منع النقر المتكرر عبر حالة معالجة، واستخدام withdraw-notifi لعرض رسائل الحالة
-   تسجّل العملية في withdraw-history كما كان سابقاً وتخصم رصيداً محلياً (واجهة مستخدم).
-   يتأكد أيضاً من رصيد المستخدم الحالي عبر استعلام getBalance قبل الإرسال.
+   Withdraw (سحب) — مع نظام آمن + منع التلاعب
+   - لا تغيّر أسماء العناصر أو الكلاسات في DOM
+   - الاعتماد الكامل على التحقق في السيرفر، والواجهة تعرض نتيجة السيرفر
+   - تستخدم عنصر واحد للإشعارات: .withdraw-notifi
+   - منع النقرات البرمجية والتحكم في الـ cooldown محلياً
+   - لا تستخدم alert()
 ======================= */
+
 let sendwithdraw = document.getElementById("request");
 
-// Client-side withdraw protection
-let lastWithdrawTimestamp = 0;
-const MIN_WITHDRAW_INTERVAL_MS = 2000; // 2s guard against rapid double clicks
-let isProcessingWithdraw = false;
+// Client-side withdraw cooldown to prevent rapid double clicks (UI-level)
+let withdrawCooldown = false;
+let lastWithdrawClickTs = 0;
+const WITHDRAW_MIN_COOLDOWN_MS = 3500; // 3.5s client-side cooldown (server enforces 60s)
+const WITHDRAW_MIN_AMOUNT = 300; // client-side constant (server must also validate)
+const WITHDRAW_SERVER_MIN_INTERVAL_SECONDS = 60; // used only for display parsing if server returns wait
+
+// Utility: unified withdraw notification using existing element only
+function showWithdrawNotification(message) {
+  try {
+    const el = document.querySelector(".withdraw-notifi");
+    if (!el) return;
+    el.textContent = message;
+    el.style.display = "block";
+    el.style.opacity = "0.9";
+    el.style.transform = "translateY(-150%)";
+
+    // play a sound if available
+    playNotificationSound().catch(() => {});
+
+    setTimeout(function () {
+      el.style.transform = "translateY(135px)";
+    }, 100);
+
+    setTimeout(function () {
+      el.style.transform = "translateY(-150%)";
+      el.style.opacity = "0";
+    }, 3000);
+
+    setTimeout(function () {
+      try { el.style.display = "none"; } catch (e) {}
+      el.style.transform = "";
+      el.style.opacity = "";
+    }, 3500);
+  } catch (e) {
+    console.warn("showWithdrawNotification failed:", e);
+  }
+}
+
+// Helper: safely parse integer amount from input
+function parseCoinInput(value) {
+  if (typeof value === "string") value = value.trim();
+  if (value === "") return NaN;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return NaN;
+  return Math.floor(num);
+}
 
 if (sendwithdraw) {
   sendwithdraw.addEventListener("click", async function(evt) {
-
-    // Reject synthetic/programmatic clicks
+    // Prevent programmatic clicks
     if (evt && typeof evt.isTrusted !== "undefined" && !evt.isTrusted) {
-      console.warn("Ignored non-user initiated click (withdraw)");
+      console.warn("Ignored non-user initiated withdraw click");
       return;
     }
 
-    // Prevent rapid repeated clicks
-    const nowTs = Date.now();
-    if (nowTs - lastWithdrawTimestamp < MIN_WITHDRAW_INTERVAL_MS) {
-      console.warn("Withdraw click ignored due to rapid repeat");
+    // Basic client-side rate-limit to prevent rapid double-clicks / glitches
+    const now = Date.now();
+    if (withdrawCooldown && (now - lastWithdrawClickTs) < WITHDRAW_MIN_COOLDOWN_MS) {
       return;
     }
-    lastWithdrawTimestamp = nowTs;
+    withdrawCooldown = true;
+    lastWithdrawClickTs = now;
 
-    if (isProcessingWithdraw) {
-      console.warn("Withdraw already processing");
-      return;
-    }
-    isProcessingWithdraw = true;
+    // Disable button immediately to prevent double submissions
+    sendwithdraw.style.pointerEvents = "none";
+    sendwithdraw.style.opacity = "0.6";
 
-    // UI disable to prevent glitches (also visually indicate processing)
-    sendwithdraw.style.pointerEvents = 'none';
-    try { sendwithdraw.disabled = true; } catch(e) {}
+    // Re-enable after small client-side cooldown regardless of network result
+    const restoreAfter = setTimeout(function() {
+      withdrawCooldown = false;
+      try {
+        sendwithdraw.style.pointerEvents = "";
+        sendwithdraw.style.opacity = "";
+      } catch (e) {}
+    }, WITHDRAW_MIN_COOLDOWN_MS + 200);
 
-    const coinInput = document.getElementById("coin");
-    const withdrawnotifi = document.querySelector(".withdraw-notifi");
-    const withdrawhistory = document.querySelector(".withdraw-history");
-
-    // Defensive: ensure elements exist
-    if (!coinInput || !withdrawnotifi || !withdrawhistory) {
-      console.warn("Withdraw UI elements missing");
-      if (withdrawnotifi) {
-        withdrawnotifi.textContent = "حدث خطأ بالواجهة. حاول لاحقاً";
-        withdrawnotifi.style.display = 'block';
-        setTimeout(function(){ withdrawnotifi.style.display = 'none'; }, 2500);
-      }
-      isProcessingWithdraw = false;
-      sendwithdraw.style.pointerEvents = '';
-      try { sendwithdraw.disabled = false; } catch(e) {}
-      return;
-    }
-
-    // Parse requested amount
-    let coin = Number(coinInput.value);
-    if (isNaN(coin) || coin <= 0) {
-      withdrawnotifi.textContent = "الرجاء إدخال مبلغ سحب صحيح";
-      withdrawnotifi.style.display = 'block';
-      setTimeout(function(){ withdrawnotifi.style.display = 'none'; }, 2500);
-
-      isProcessingWithdraw = false;
-      sendwithdraw.style.pointerEvents = '';
-      try { sendwithdraw.disabled = false; } catch(e) {}
-      return;
-    }
-
-    // Fetch latest balance from server to avoid stale UI (fetchApi attaches USER_ID automatically)
-    let balanceRes = null;
     try {
-      balanceRes = await fetchApi({ type: "getBalance" });
-    } catch (e) {
-      console.warn("getBalance failed during withdraw:", e);
-    }
+      // Ensure ADS is the authoritative client-side balance snapshot
+      const inputEl = document.getElementById("coin");
+      const raw = inputEl ? inputEl.value : "";
+      const coin = parseCoinInput(raw);
 
-    if (!balanceRes || !balanceRes.success) {
-      // Could not verify balance; inform user and abort
-      withdrawnotifi.textContent = "تعذر التحقق من الرصيد حالياً. حاول لاحقاً";
-      withdrawnotifi.style.display = 'block';
-      setTimeout(function(){ withdrawnotifi.style.display = 'none'; }, 2500);
-
-      isProcessingWithdraw = false;
-      sendwithdraw.style.pointerEvents = '';
-      try { sendwithdraw.disabled = false; } catch(e) {}
-      return;
-    }
-
-    const currentBalance = Number(balanceRes.balance) || 0;
-    // Update local ADS to server value to keep UI consistent
-    ADS = currentBalance;
-    if (walletbalance) {
-      walletbalance.innerHTML = `
-        <img src="coins.png" style="width:20px; vertical-align:middle;">
-        ${ADS}
-      `;
-    }
-    if (adsBalance) adsBalance.textContent = ADS;
-
-    // Enforce minimum balance requirement (300)
-    const MIN_WITHDRAW_BALANCE = 300;
-    if (currentBalance < MIN_WITHDRAW_BALANCE) {
-      withdrawnotifi.textContent = `رصيدك أقل من الحد الأدنى للسحب (${MIN_WITHDRAW_BALANCE}). لا يمكنك السحب الآن.`;
-      withdrawnotifi.style.display = 'block';
-      setTimeout(function(){ withdrawnotifi.style.display = 'none'; }, 2500);
-
-      isProcessingWithdraw = false;
-      sendwithdraw.style.pointerEvents = '';
-      try { sendwithdraw.disabled = false; } catch(e) {}
-      return;
-    }
-
-    // Ensure user has enough for requested amount
-    if (coin > currentBalance) {
-      withdrawnotifi.textContent = `الرصيد غير كافٍ لطلب السحب للمبلغ ${coin}. رصيدك الحالي ${currentBalance}`;
-      withdrawnotifi.style.display = 'block';
-      setTimeout(function(){ withdrawnotifi.style.display = 'none'; }, 3000);
-
-      isProcessingWithdraw = false;
-      sendwithdraw.style.pointerEvents = '';
-      try { sendwithdraw.disabled = false; } catch(e) {}
-      return;
-    }
-
-    // All checks passed -> register withdraw in UI history (same format as before)
-    try {
-      let now = new Date();
-
-      // اليوم
-      let day = now.getDate();
-
-      // أسماء الأشهر
-      let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      let monthName = months[now.getMonth()];
-
-      // ساعة ودقيقة بصيغة 2 أرقام
-      let hours = String(now.getHours()).padStart(2, "0");
-      let minutes = String(now.getMinutes()).padStart(2, "0");
-
-      let formattedDate = `${day} ${monthName} ${hours}:${minutes}`;
-
-      let historyCard = document.createElement("div");
-      historyCard.className = 'history-card';
-
-      historyCard.innerHTML = `
-        <span class="date">${formattedDate}</span>
-        <span class="amount">${coin}<img src="coins.png" width="17"></span>
-        <span class="statu">pending</span>
-      `;
-
-      // prepend to history for immediacy (optional) — append as before
-      withdrawhistory.appendChild(historyCard);
-
-      // Deduct locally from ADS (UI only; server persistence would require API)
-      ADS = currentBalance - coin;
-      if (walletbalance) {
-        walletbalance.innerHTML = `
-          <img src="coins.png" style="width:20px; vertical-align:middle;">
-          ${ADS}
-        `;
+      // If current server-known ADS is less than minimum, show notification and stop
+      if ((Number(ADS) || 0) < WITHDRAW_MIN_AMOUNT) {
+        showWithdrawNotification("رصيدك أقل من الحد الأدنى للسحب (300 كوين)");
+        return;
       }
-      if (adsBalance) adsBalance.textContent = ADS;
 
-      // Notify user of successful registration of the withdraw request
-      withdrawnotifi.textContent = `تم إرسال طلب السحب بمقدار ${coin}. سيتم معالجته قريبا.`;
-      withdrawnotifi.style.display = 'block';
-      setTimeout(function(){ withdrawnotifi.style.display = 'none'; }, 3000);
+      // Validate input locally (UI-only checks), server will perform final validation
+      if (Number.isNaN(coin)) {
+        showWithdrawNotification("الرجاء إدخال قيمة سحب صحيحة (رقم)");
+        return;
+      }
+      if (coin <= 0) {
+        showWithdrawNotification("قيمة السحب يجب أن تكون أكبر من صفر");
+        return;
+      }
+      if (coin < WITHDRAW_MIN_AMOUNT) {
+        showWithdrawNotification(`الحد الأدنى لعملية السحب هو ${WITHDRAW_MIN_AMOUNT} كوين`);
+        return;
+      }
+      if (coin > ADS) {
+        showWithdrawNotification("قيمة السحب تتجاوز رصيدك الحالي");
+        return;
+      }
 
-      // Clear input
-      coinInput.value = '';
+      // UI: show pending notification immediately (single element)
+      showWithdrawNotification("جارٍ إرسال طلب السحب...");
 
-      // Optionally: you could call a server endpoint to actually record the withdraw request.
-      // e.g., await fetchApi({ type: "createWithdrawRequest", data: { amount: coin } });
-      // This implementation keeps the original behavior (UI registration) and updates client-side balance.
+      // Call server to create withdraw — server does all authoritative checks
+      const res = await fetchApi({
+        type: "createWithdraw",
+        data: { userId: USER_ID, amount: coin }
+      });
+
+      if (!res || !res.success) {
+        // server rejected; present the server-provided message or a generic one
+        const serverMessage = res && res.error ? String(res.error) : "فشل في إنشاء طلب السحب";
+        // If server returned 429 with cooldown seconds, show human-friendly message
+        if (res && res.status === 429) {
+          // attempt to extract seconds
+          const m = String(serverMessage).match(/(\d+)\s*seconds?/i);
+          if (m && m[1]) {
+            showWithdrawNotification(`الرجاء الانتظار ${m[1]} ثانية قبل تقديم طلب سحب آخر`);
+          } else {
+            showWithdrawNotification(serverMessage);
+          }
+        } else {
+          showWithdrawNotification(serverMessage);
+        }
+        return;
+      }
+
+      // Success: server returned newBalance and withdrawId
+      const newBalance = Number(res.newBalance || res.newBalance === 0 ? res.newBalance : ADS);
+      const withdrawId = res.withdrawId || null;
+
+      // Update client-side ADS to server's new balance (server authoritative)
+      ADS = newBalance;
+
+      // Update UI places that show balance
+      try {
+        if (userbalancce) userbalancce.textContent = String(ADS);
+      } catch (e) {}
+      try {
+        if (walletbalance) {
+          walletbalance.innerHTML = `<img src="coins.png" style="width:20px; vertical-align:middle;">${ADS}`;
+        }
+      } catch (e) {}
+      try {
+        if (adsBalance) adsBalance.textContent = String(ADS);
+      } catch (e) {}
+
+      // Append a history-card for this withdraw with status "pending"
+      try {
+        const withdrawhistory = document.querySelector(".withdraw-history");
+        if (withdrawhistory) {
+          const historyCard = document.createElement("div");
+          historyCard.className = 'history-card';
+          historyCard.setAttribute('data-withdraw-id', withdrawId || '');
+
+          // Format date/time for display
+          const nowDt = new Date();
+          const day = nowDt.getDate();
+          const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+          const monthName = months[nowDt.getMonth()];
+          const hours = String(nowDt.getHours()).padStart(2, "0");
+          const minutes = String(nowDt.getMinutes()).padStart(2, "0");
+          const formattedDate = `${day} ${monthName} ${hours}:${minutes}`;
+
+          historyCard.innerHTML = `
+            <span class="date">${formattedDate}</span>
+            <span class="amount">${coin}<img src="coins.png" width="17"></span>
+            <span class="statu">pending</span>
+          `;
+          withdrawhistory.appendChild(historyCard);
+        }
+      } catch (e) {
+        console.warn("Failed to append withdraw history card:", e);
+      }
+
+      // Show success message using the single notifi element
+      showWithdrawNotification("تم إنشاء طلب السحب بنجاح، الحالة: قيد الانتظار");
+
+      // Clear input after success
+      try { if (inputEl) inputEl.value = ''; } catch (e) {}
+
     } catch (e) {
-      console.error("Failed to register withdraw in UI:", e);
-      withdrawnotifi.textContent = "فشل تسجيل طلب السحب. حاول لاحقاً";
-      withdrawnotifi.style.display = 'block';
-      setTimeout(function(){ withdrawnotifi.style.display = 'none'; }, 2500);
+      console.error("Withdraw handler error:", e);
+      showWithdrawNotification("حدث خطأ أثناء معالجة طلب السحب");
+    } finally {
+      // Ensure button re-enabled after operation (handled by restoreAfter timer)
+      // But also if we return early we want to re-enable quickly
+      setTimeout(function(){
+        try {
+          sendwithdraw.style.pointerEvents = "";
+          sendwithdraw.style.opacity = "";
+          withdrawCooldown = false;
+        } catch (e) {}
+      }, WITHDRAW_MIN_COOLDOWN_MS + 300);
+      clearTimeout(restoreAfter);
     }
-
-    // restore UI state
-    isProcessingWithdraw = false;
-    sendwithdraw.style.pointerEvents = '';
-    try { sendwithdraw.disabled = false; } catch(e) {}
   });
 }
+
+/* =======================
+   End of withdraw enhancements
+======================= */
