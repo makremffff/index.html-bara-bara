@@ -1436,8 +1436,7 @@ if (sendwithdraw) {
     }
 
     // Check minimum and sufficient balance
-    let withdrawnotifi = document.querySelector(".withdraw-notifi");
-
+    
 if (coin < MIN_WITHDRAW) {
   if (withdrawnotifi) {
     withdrawnotifi.textContent = `Minimum withdraw is ${MIN_WITHDRAW} coins`;
@@ -1449,16 +1448,6 @@ if (coin < MIN_WITHDRAW) {
   return;
 }
 
-if (currentBalance < coin) {
-  if (withdrawnotifi) {
-    withdrawnotifi.textContent = "Insufficient balance for this withdraw";
-    withdrawnotifi.style.display = "block";
-    setTimeout(() => {
-      withdrawnotifi.style.display = "none";
-    }, 2500);
-  }
-  return;
-}
     // Disable button to prevent duplicate submits
     sendwithdraw.disabled = true;
     sendwithdraw.style.opacity = '0.6';
