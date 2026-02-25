@@ -70,8 +70,8 @@ background: black;
   text-shadow: 0 0px 4px #000;
   position: relative;
   left: 10%;
-  top: -10%;
-  display: nne;
+  top: -50%;
+  display: none;
 transition: 0.3s linear;
 z-index: 9999;
 text-align: center;
@@ -582,13 +582,13 @@ border-radius: 20px;
   background: red;
 
  height: fit-content;
- padding: 7px 10px;
+ padding: 8px 12px;
  border-radius: 15px;
  font-family: DynaPuff;
  font-weight: bold;
  font-size: 12px;
  width: 46px;
- z-index: 9999;
+ z-index: 999;
 
  
 }
