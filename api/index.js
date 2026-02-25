@@ -414,7 +414,8 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // Get Referrals counts for inviter (active / pending)
+    // Get Referrals counts and details for inviter (active / pending + list)
+    // Returns: { success, active, pending, referrals: [{id,name,photo,ads_watched,referral_active}] }
     // ===============================
     if (type === "getReferrals") {
       const { userId } = data || {};
@@ -423,10 +424,11 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing userId" });
       }
 
-      const referrals = await supabaseRequest(`users?referrer_id=eq.${userId}&select=referral_active`);
+      // Fetch referral rows with useful fields
+      const referrals = await supabaseRequest(`users?referrer_id=eq.${userId}&select=id,name,photo,ads_watched,referral_active`);
 
       if (!referrals) {
-        return res.status(200).json({ success: true, active: 0, pending: 0 });
+        return res.status(200).json({ success: true, active: 0, pending: 0, referrals: [] });
       }
 
       let active = 0;
@@ -441,7 +443,8 @@ export default async function handler(req, res) {
       return res.status(200).json({
         success: true,
         active,
-        pending
+        pending,
+        referrals // array of objects: id,name,photo,ads_watched,referral_active
       });
     }
 
