@@ -849,8 +849,105 @@ function updateReferralCountsUI(counts) {
 }
 
 /* =======================
-   Refresh referral counts from backend
-   Calls API type "getReferrals" which returns { success, active, pending }
+   Render referrals list into .my-refal
+   Each referral card must use the existing class names:
+   .refal-card, .refal-fhoto, .refal-name, .refal-ads, .refal-statu
+   We will not change class names in the HTML as requested.
+======================= */
+function renderReferralsList(referrals) {
+  const container = document.querySelector('.my-refal');
+  if (!container) return;
+
+  // Clear existing cards
+  container.innerHTML = '';
+
+  if (!Array.isArray(referrals) || referrals.length === 0) {
+    // Optionally keep a placeholder card (or nothing)
+    const noCard = document.createElement('div');
+    noCard.className = 'refal-card';
+    noCard.innerHTML = `
+      <span class="refal-fhoto" style="display:inline-block;width:40px;height:40px;border-radius:50%;background:#ddd;vertical-align:middle;margin-right:8px;"></span>
+      <span class="refal-name">No referrals</span>
+      <span class="refal-ads">0 ADS</span>
+      <span class="refal-statu">-</span>
+    `;
+    container.appendChild(noCard);
+    return;
+  }
+
+  referrals.forEach(ref => {
+    // Create card
+    const card = document.createElement('div');
+    card.className = 'refal-card';
+
+    // Photo element: keep class .refal-fhoto
+    const photoWrapper = document.createElement('span');
+    photoWrapper.className = 'refal-fhoto';
+    photoWrapper.style.display = 'inline-block';
+    photoWrapper.style.verticalAlign = 'middle';
+    photoWrapper.style.marginRight = '8px';
+
+    if (ref.photo) {
+      const img = document.createElement('img');
+      img.src = ref.photo;
+      img.alt = ref.name || 'User';
+      img.style.width = '40px';
+      img.style.height = '40px';
+      img.style.borderRadius = '50%';
+      img.style.objectFit = 'cover';
+      photoWrapper.appendChild(img);
+    } else {
+      // fallback placeholder with initial
+      const ph = document.createElement('div');
+      ph.style.width = '40px';
+      ph.style.height = '40px';
+      ph.style.borderRadius = '50%';
+      ph.style.background = '#666';
+      ph.style.color = '#fff';
+      ph.style.display = 'flex';
+      ph.style.alignItems = 'center';
+      ph.style.justifyContent = 'center';
+      ph.style.fontSize = '16px';
+      ph.textContent = ref.name ? String(ref.name).charAt(0).toUpperCase() : '?';
+      photoWrapper.appendChild(ph);
+    }
+
+    // Name
+    const nameEl = document.createElement('span');
+    nameEl.className = 'refal-name';
+    nameEl.style.marginRight = '8px';
+    nameEl.style.verticalAlign = 'middle';
+    nameEl.textContent = ref.name || `User ${ref.id || ''}`;
+
+    // Ads count
+    const adsEl = document.createElement('span');
+    adsEl.className = 'refal-ads';
+    adsEl.style.marginRight = '8px';
+    adsEl.style.verticalAlign = 'middle';
+    const adsCount = typeof ref.ads_watched !== 'undefined' ? Number(ref.ads_watched) : 0;
+    adsEl.textContent = `${adsCount} ADS`;
+
+    // Status
+    const statusEl = document.createElement('span');
+    statusEl.className = 'refal-statu';
+    statusEl.style.verticalAlign = 'middle';
+    statusEl.textContent = ref.referral_active ? 'ACTIVE' : 'PENDING';
+    statusEl.style.color = ref.referral_active ? 'green' : '#b8860b';
+
+    // Append to card in a layout similar to samples
+    // Keep the order and class names as requested (photo, name, ads, status)
+    card.appendChild(photoWrapper);
+    card.appendChild(nameEl);
+    card.appendChild(adsEl);
+    card.appendChild(statusEl);
+
+    container.appendChild(card);
+  });
+}
+
+/* =======================
+   Refresh referral counts and list from backend
+   Calls API type "getReferrals" which now returns { success, active, pending, referrals }
    fetchApi will attach USER_ID automatically if available.
 ======================= */
 async function refreshReferralCounts() {
@@ -858,12 +955,17 @@ async function refreshReferralCounts() {
     const res = await fetchApi({ type: "getReferrals" });
     if (res && res.success) {
       updateReferralCountsUI({ active: res.active || 0, pending: res.pending || 0 });
+      renderReferralsList(res.referrals || []);
     } else {
-      // If no user or not authorized, show 0s
+      // If no user or not authorized, show 0s and empty list
       updateReferralCountsUI({ active: 0, pending: 0 });
+      renderReferralsList([]);
+      console.warn("getReferrals failed:", res && res.error);
     }
   } catch (e) {
     console.warn("refreshReferralCounts failed:", e);
+    updateReferralCountsUI({ active: 0, pending: 0 });
+    renderReferralsList([]);
   }
 }
 
@@ -1038,7 +1140,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         console.warn("Initial getBalance failed:", res && res.error);
       }
 
-      // Also fetch referral counts so invite page reflects pending/active
+      // Also fetch referral counts and list so invite page reflects pending/active
       refreshReferralCounts();
 
       const userPhotoContainer = document.querySelector(".user-fhoto");
@@ -1094,6 +1196,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     } else {
       // If user not logged in yet, still set invite UI to 0s
       updateReferralCountsUI({ active: 0, pending: 0 });
+      renderReferralsList([]);
     }
   }
 
