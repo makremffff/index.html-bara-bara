@@ -172,8 +172,17 @@ if (btnWallet) {
       dailyProgres = remaining >= 0 ? remaining : 0;
       if (progres) progres.textContent = dailyProgres;
     } else {
-      console.warn("getBalance failed:", res && res.error);
+      // show error to user via withdraw notification element (reuse as general notification)
+      const withdrawnotifi = document.querySelector(".withdraw-notifi");
+      if (withdrawnotifi) {
+        withdrawnotifi.textContent = "Failed to fetch balance";
+        withdrawnotifi.style.display = 'block';
+        setTimeout(() => { withdrawnotifi.style.display = 'none'; }, 2500);
+      }
     }
+
+    // Load withdraw history when opening wallet
+    await loadWithdrawHistory();
   });
 }
 
@@ -354,8 +363,6 @@ function showBoxRewardNotification(amount) {
         adsNotfi.style.display = "none";
         adsNotfi.style.transform = "";
         adsNotfi.style.opacity = "";
-        // Restore default text after hiding (optional)
-        // adsNotfi.textContent = ""; // if you want to clear it
       }, 3500);
     }, 400);
   } catch (e) {
@@ -861,7 +868,13 @@ function updateBalanceUI(res) {
       } catch (e) {}
     }
   } else {
-    console.warn("updateBalanceUI: getBalance failed:", res && res.error);
+    // show error in withdraw-notifi element
+    const withdrawnotifi = document.querySelector(".withdraw-notifi");
+    if (withdrawnotifi) {
+      withdrawnotifi.textContent = "Failed to update balance";
+      withdrawnotifi.style.display = 'block';
+      setTimeout(() => { withdrawnotifi.style.display = 'none'; }, 2500);
+    }
   }
 }
 
@@ -1081,6 +1094,84 @@ function extractReferrerFromStartParam(raw) {
 }
 
 /* =======================
+   Withdraw history rendering + loader
+======================= */
+function formatCreatedAt(createdAt) {
+  try {
+    const dt = new Date(createdAt);
+    if (isNaN(dt.getTime())) return createdAt;
+    const day = dt.getDate();
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const monthName = months[dt.getMonth()];
+    const hours = String(dt.getHours()).padStart(2,"0");
+    const minutes = String(dt.getMinutes()).padStart(2,"0");
+    return `${day} ${monthName} ${hours}:${minutes}`;
+  } catch (e) {
+    return createdAt;
+  }
+}
+
+function renderWithdrawHistory(withdraws) {
+  const container = document.querySelector(".withdraw-history");
+  if (!container) return;
+  container.innerHTML = "";
+
+  if (!Array.isArray(withdraws) || withdraws.length === 0) {
+    const emptyCard = document.createElement("div");
+    emptyCard.className = "history-card";
+    emptyCard.innerHTML = `
+      <span class="date">-</span>
+      <span class="amount">0<img src="coins.png" width="17"></span>
+      <span class="statu">No withdraws</span>
+    `;
+    container.appendChild(emptyCard);
+    return;
+  }
+
+  withdraws.forEach(w => {
+    const card = document.createElement("div");
+    card.className = "history-card";
+    card.dataset.withdrawId = w.id || "";
+
+    const dateText = w.created_at ? formatCreatedAt(w.created_at) : "-";
+    const amountText = `${w.amount || 0}<img src="coins.png" width="17">`;
+    const statusText = w.status ? String(w.status) : "pending";
+
+    card.innerHTML = `
+      <span class="date">${dateText}</span>
+      <span class="amount">${amountText}</span>
+      <span class="statu">${statusText}</span>
+    `;
+    container.appendChild(card);
+  });
+}
+
+async function loadWithdrawHistory() {
+  const withdrawnotifi = document.querySelector(".withdraw-notifi");
+  try {
+    const res = await fetchApi({ type: "getWithdraws" });
+    if (res && res.success) {
+      renderWithdrawHistory(res.withdraws || []);
+    } else {
+      // show message to user
+      if (withdrawnotifi) {
+        withdrawnotifi.textContent = "Failed to load withdraw history";
+        withdrawnotifi.style.display = 'block';
+        setTimeout(() => { withdrawnotifi.style.display = 'none'; }, 2500);
+      }
+      renderWithdrawHistory([]);
+    }
+  } catch (e) {
+    if (withdrawnotifi) {
+      withdrawnotifi.textContent = "Failed to load withdraw history";
+      withdrawnotifi.style.display = 'block';
+      setTimeout(() => { withdrawnotifi.style.display = 'none'; }, 2500);
+    }
+    renderWithdrawHistory([]);
+  }
+}
+
+/* =======================
    Telegram WebApp User Data + referral (start params)
    عند الدخول نقرا start params ونخزن referrerId لإرساله أثناء syncUser
    كما نجلب عدد الدعوات ونحدّث واجهة invite
@@ -1168,7 +1259,12 @@ document.addEventListener("DOMContentLoaded", async function () {
       if (res && res.success) {
         updateBalanceUI(res);
       } else {
-        console.warn("Initial getBalance failed:", res && res.error);
+        const withdrawnotifi = document.querySelector(".withdraw-notifi");
+        if (withdrawnotifi) {
+          withdrawnotifi.textContent = "Failed to fetch initial balance";
+          withdrawnotifi.style.display = 'block';
+          setTimeout(() => { withdrawnotifi.style.display = 'none'; }, 2500);
+        }
       }
 
       // Also fetch referral counts and list so invite page reflects pending/active
@@ -1202,9 +1298,15 @@ document.addEventListener("DOMContentLoaded", async function () {
             "https://t.me/Bot_ad_watchbot/earn?startapp=ref_" + userId;
         } catch (e) {}
       }
+
+      // Load withdraw history after sync
+      await loadWithdrawHistory();
     } else {
       // If Telegram present but no user data, still refresh referrals if USER_ID exists
-      if (USER_ID) refreshReferralCounts();
+      if (USER_ID) {
+        refreshReferralCounts();
+        await loadWithdrawHistory();
+      }
     }
   } else {
     // Not a Telegram WebApp visitor.
@@ -1221,6 +1323,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         const res = await fetchApi({ type: "getBalance" });
         updateBalanceUI(res);
         refreshReferralCounts();
+        await loadWithdrawHistory();
       } catch (e) {
         console.warn("Initial balance fetch failed:", e);
       }
@@ -1228,6 +1331,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       // If user not logged in yet, still set invite UI to 0s
       updateReferralCountsUI({ active: 0, pending: 0 });
       renderReferralsList([]);
+      renderWithdrawHistory([]); // show empty history until login
     }
   }
 
@@ -1263,6 +1367,7 @@ window.addEventListener('load', async function() {
     const res = await fetchApi({ type: "getBalance" });
     updateBalanceUI(res);
     refreshReferralCounts();
+    await loadWithdrawHistory();
   } catch (e) {
     console.warn("Load balance fetch failed:", e);
   }
@@ -1318,6 +1423,37 @@ if (sendwithdraw) {
     sendwithdraw.disabled = true;
     sendwithdraw.style.opacity = '0.6';
 
+    // Optimistic UI: insert a temporary pending history card to make send feel faster
+    let withdrawhistory = document.querySelector(".withdraw-history");
+    let tempId = `temp_${Date.now()}`;
+    let now = new Date();
+    let day = now.getDate();
+    let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    let monthName = months[now.getMonth()];
+    let hours = String(now.getHours()).padStart(2, "0");
+    let minutes = String(now.getMinutes()).padStart(2, "0");
+    let formattedDate = `${day} ${monthName} ${hours}:${minutes}`;
+
+    let tempCard = document.createElement("div");
+    tempCard.className = 'history-card';
+    tempCard.id = tempId;
+    tempCard.innerHTML = `
+      <span class="date">${formattedDate}</span>
+      <span class="amount">${coin}<img src="coins.png" width="17"></span>
+      <span class="statu">pending</span>
+    `;
+
+    if (withdrawhistory) {
+      withdrawhistory.insertBefore(tempCard, withdrawhistory.firstChild);
+    }
+
+    // Show notification quickly (English)
+    let withdrawnotifi = document.querySelector(".withdraw-notifi")
+    if (withdrawnotifi) {
+      withdrawnotifi.textContent = "Sending withdraw request...";
+      withdrawnotifi.style.display = 'block';
+    }
+
     // Attempt to create withdraw on server
     try {
       const res = await fetchApi({
@@ -1352,34 +1488,26 @@ if (sendwithdraw) {
           }
         }
 
-        // Build history card using server created withdraw row if provided
+        // Remove temp card and insert server-provided card (most accurate)
+        if (tempCard && tempCard.parentNode) {
+          tempCard.parentNode.removeChild(tempCard);
+        }
+
         let created = res.withdraw || null;
-        let formattedDate = new Date().toLocaleString();
+        let createdDate = formattedDate;
         let statusText = "pending";
         if (created && created.created_at) {
-          try {
-            const dt = new Date(created.created_at);
-            if (!isNaN(dt.getTime())) formattedDate = dt.getDate() + " " + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][dt.getMonth()] + " " + String(dt.getHours()).padStart(2,'0') + ":" + String(dt.getMinutes()).padStart(2,'0');
-          } catch (e) {}
-          if (created.status) statusText = created.status;
-        } else {
-          // fallback to local formatted timestamp similar to previous implementation
-          const now = new Date();
-          let day = now.getDate();
-          let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-          let monthName = months[now.getMonth()];
-          let hours = String(now.getHours()).padStart(2, "0");
-          let minutes = String(now.getMinutes()).padStart(2, "0");
-          formattedDate = `${day} ${monthName} ${hours}:${minutes}`;
+          createdDate = formatCreatedAt(created.created_at);
+        }
+        if (created && created.status) {
+          statusText = created.status;
         }
 
         let historyCard = document.createElement("div");
         historyCard.className = 'history-card';
-
-        let withdrawhistory = document.querySelector(".withdraw-history");
-
+        historyCard.dataset.withdrawId = created && created.id ? created.id : "";
         historyCard.innerHTML = `
-          <span class="date">${formattedDate}</span>
+          <span class="date">${createdDate}</span>
           <span class="amount">${coin}<img src="coins.png" width="17"></span>
           <span class="statu">${statusText}</span>
         `;
@@ -1388,12 +1516,12 @@ if (sendwithdraw) {
           withdrawhistory.insertBefore(historyCard, withdrawhistory.firstChild);
         }
 
-        // Show notification
-        let withdrawnotifi = document.querySelector(".withdraw-notifi");
+        // Show success notification in English
         if (withdrawnotifi) {
+          withdrawnotifi.textContent = "Withdraw request sent";
           withdrawnotifi.style.display = 'block';
           setTimeout(function(){
-              withdrawnotifi.style.display = 'none';
+            withdrawnotifi.style.display = 'none';
           }, 2500);
         }
 
@@ -1402,18 +1530,42 @@ if (sendwithdraw) {
         if (emailInput) emailInput.value = '';
 
       } else {
-        // Handle server errors
+        // Server returned failure. Update temp card to failed and show error notification.
+        if (tempCard) {
+          const statuEl = tempCard.querySelector(".statu");
+          if (statuEl) statuEl.textContent = "failed";
+        }
+
         const err = res && res.error ? res.error : "Unknown error during withdraw";
-        alert("Withdraw failed: " + err);
-        console.warn("createWithdraw failed:", res && res.error);
+        if (withdrawnotifi) {
+          withdrawnotifi.textContent = `Withdraw failed: ${err}`;
+          withdrawnotifi.style.display = 'block';
+          setTimeout(function(){
+            withdrawnotifi.style.display = 'none';
+          }, 4000);
+        }
       }
     } catch (e) {
+      // Network or unexpected error
+      if (tempCard) {
+        const statuEl = tempCard.querySelector(".statu");
+        if (statuEl) statuEl.textContent = "failed";
+      }
+      if (withdrawnotifi) {
+        withdrawnotifi.textContent = `Withdraw error`;
+        withdrawnotifi.style.display = 'block';
+        setTimeout(function(){
+          withdrawnotifi.style.display = 'none';
+        }, 4000);
+      }
       console.error("createWithdraw threw:", e);
-      alert("Withdraw failed: " + (e && e.message ? e.message : "unknown error"));
     } finally {
       // restore button
       sendwithdraw.disabled = false;
       sendwithdraw.style.opacity = '';
+
+      // Refresh history from server to ensure accurate state (non-blocking)
+      try { loadWithdrawHistory(); } catch (e) {}
     }
 
   });
