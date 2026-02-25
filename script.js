@@ -1603,3 +1603,7 @@ if (coin < MIN_WITHDRAW) {
 
   });
 }
+document.addEventListener("click", function () {
+    const music = document.getElementById("bg-music");
+    music.play();
+});
