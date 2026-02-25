@@ -32,6 +32,11 @@ let barbtn = document.querySelector(".bar");
 let soundbtn  = document.getElementById("soundbtn");
 let soundads  = document.getElementById("soundads");
 
+// Background music element and control
+const bgMusicEl = document.getElementById('bgMusic');
+const musicToggleBtn = document.getElementById('musicToggle');
+let bgMusicPlaying = false;
+
 /* =======================
    API CENTRAL HANDLER
 ======================= */
@@ -312,6 +317,51 @@ async function playNotificationSound() {
 }
 
 /* =======================
+   Small helper to show textual box reward notification after 0.4s
+   It creates a temporary element displaying "you get {amount}coin"
+   then animates and removes it.
+======================= */
+function showBoxTextNotif(amount) {
+  try {
+    const txt = document.createElement('div');
+    txt.className = 'box-text-notif';
+    txt.style.position = 'fixed';
+    txt.style.left = '50%';
+    txt.style.top = '20%';
+    txt.style.transform = 'translateX(-50%)';
+    txt.style.background = 'rgba(0,0,0,0.8)';
+    txt.style.color = '#fff';
+    txt.style.padding = '12px 18px';
+    txt.style.borderRadius = '8px';
+    txt.style.zIndex = '9999';
+    txt.style.fontSize = '16px';
+    txt.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+    txt.style.opacity = '0';
+    txt.style.transition = 'opacity 200ms, transform 300ms';
+    txt.textContent = `you get ${amount}coin`;
+
+    document.body.appendChild(txt);
+
+    // animate in
+    requestAnimationFrame(() => {
+      txt.style.opacity = '1';
+      txt.style.transform = 'translateX(-50%) translateY(0)';
+    });
+
+    // remove after 3s
+    setTimeout(() => {
+      txt.style.opacity = '0';
+      txt.style.transform = 'translateX(-50%) translateY(-10px)';
+      setTimeout(() => {
+        try { document.body.removeChild(txt); } catch (e) {}
+      }, 300);
+    }, 3000);
+  } catch (e) {
+    console.warn("showBoxTextNotif failed:", e);
+  }
+}
+
+/* =======================
    Reward button handler
 ======================= */
 if (adsBtn) {
@@ -519,6 +569,7 @@ if (adsBtn) {
    - After ads complete award random reward (75|100|150|200) added to balance
    - After finishing disable open button for 5 minutes (countdown shown)
    - Show ads notification (adsnotifi) when box reward is granted (same visual as ads button)
+   - After 0.4s show textual notification "you get {amount}coin"
    - Box ads should not affect the main ad counters; client tries to call "rewardBox" API (if backend supports it),
      otherwise it will update UI locally and log a warning.
    - Persist cooldown in localStorage to survive reloads.
@@ -689,6 +740,11 @@ async function handleBoxClick(evt) {
       adsNotfi.style.opacity = "";
     }, 3500);
   }
+
+  // After 0.4s show textual notification "you get {amount}coin"
+  setTimeout(function(){
+    showBoxTextNotif(reward);
+  }, 400);
 
   // Start persistent cooldown for BOX_COOLDOWN_MS
   const until = Date.now() + BOX_COOLDOWN_MS;
@@ -1218,6 +1274,43 @@ document.addEventListener("DOMContentLoaded", async function () {
   if (openBoxBtn) {
     openBoxBtn.style.cursor = "pointer";
     openBoxBtn.addEventListener("click", handleBoxClick);
+  }
+
+  // Setup background music toggle behavior
+  if (musicToggleBtn && bgMusicEl) {
+    // initialize label
+    musicToggleBtn.textContent = bgMusicPlaying ? 'Music On' : 'Music Off';
+
+    musicToggleBtn.addEventListener('click', async function() {
+      if (!bgMusicEl) return;
+      try {
+        if (bgMusicPlaying) {
+          bgMusicEl.pause();
+          bgMusicPlaying = false;
+          musicToggleBtn.textContent = 'Music Off';
+        } else {
+          await bgMusicEl.play().catch(() => {});
+          bgMusicPlaying = !bgMusicEl.paused;
+          musicToggleBtn.textContent = bgMusicPlaying ? 'Music On' : 'Music Off';
+        }
+      } catch (e) {
+        console.warn("music toggle failed:", e);
+      }
+    });
+
+    // Try to auto-play once user interacts with the page (some browsers block autoplay)
+    function tryAutoPlayBg() {
+      if (!bgMusicEl) return;
+      bgMusicEl.play().then(() => {
+        bgMusicPlaying = true;
+        if (musicToggleBtn) musicToggleBtn.textContent = 'Music On';
+      }).catch(() => {
+        // autoplay blocked; leave as is until user clicks toggle
+      });
+      // remove listener after first attempt
+      document.removeEventListener('click', tryAutoPlayBg);
+    }
+    document.addEventListener('click', tryAutoPlayBg);
   }
 });
 
