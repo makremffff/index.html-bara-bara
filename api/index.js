@@ -10,6 +10,12 @@ const MIN_AD_INTERVAL_SECONDS = 50;
 // Box (open-box) minimum seconds between box rewards (server-side enforcement)
 const BOX_MIN_INTERVAL_SECONDS = 5 * 60; // 5 minutes
 
+// Minimum withdrawal amount required to create a withdraw request
+const MIN_WITHDRAW_AMOUNT = 300;
+
+// Minimum seconds between withdraw requests (server-side anti-automation)
+const MIN_WITHDRAW_INTERVAL_SECONDS = 3;
+
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   // If these env vars are missing, throw early so developer notices
   console.error("Missing SUPABASE environment variables.");
@@ -89,6 +95,8 @@ export default async function handler(req, res) {
             last_ad_time: null,
             // last_box_time stores ISO timestamp of last box reward (server-side anti-abuse)
             last_box_time: null,
+            // last_withdraw_time stores ISO timestamp of last withdraw request (server-side anti-abuse)
+            last_withdraw_time: null,
             referrer_id: referrerId || null,
             referral_active: false
           })
@@ -123,7 +131,7 @@ export default async function handler(req, res) {
       }
 
       const result = await supabaseRequest(
-        `users?id=eq.${userId}&select=balance,ads_watched,daily_ads,last_ad_date,last_ad_time,referrer_id,referral_active,last_box_time`
+        `users?id=eq.${userId}&select=balance,ads_watched,daily_ads,last_ad_date,last_ad_time,referrer_id,referral_active,last_box_time,last_withdraw_time`
       );
 
       if (!result || result.length === 0) {
@@ -139,7 +147,8 @@ export default async function handler(req, res) {
         lastAdTime: result[0].last_ad_time || null,
         referrerId: result[0].referrer_id || null,
         referralActive: !!result[0].referral_active,
-        lastBoxTime: result[0].last_box_time || null
+        lastBoxTime: result[0].last_box_time || null,
+        lastWithdrawTime: result[0].last_withdraw_time || null
       });
     }
 
@@ -410,6 +419,115 @@ export default async function handler(req, res) {
       return res.status(200).json({
         success: true,
         tasks
+      });
+    }
+
+    // ===============================
+    // Create Withdraw Request
+    // - Validates user balance >= MIN_WITHDRAW_AMOUNT
+    // - Validates requested amount >= MIN_WITHDRAW_AMOUNT
+    // - Enforces a small server-side interval between withdraw requests to mitigate automation
+    // - Creates a withdrawal record in "withdrawals" table (status: pending) and deducts user's balance
+    // ===============================
+    if (type === "createWithdrawRequest") {
+      const { userId, amount } = data || {};
+
+      if (!userId) {
+        return res.status(400).json({ success: false, error: "Missing userId" });
+      }
+
+      if (typeof amount === "undefined") {
+        return res.status(400).json({ success: false, error: "Missing amount" });
+      }
+
+      const parsedAmount = Number(amount);
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        return res.status(400).json({ success: false, error: "Invalid amount" });
+      }
+
+      if (parsedAmount < MIN_WITHDRAW_AMOUNT) {
+        return res.status(400).json({
+          success: false,
+          error: `Minimum withdrawal amount is ${MIN_WITHDRAW_AMOUNT}`
+        });
+      }
+
+      // Fetch user
+      const result = await supabaseRequest(`users?id=eq.${userId}&select=*`);
+      if (!result || result.length === 0) {
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
+      const user = result[0];
+      const now = new Date();
+
+      // Server-side anti-abuse: ensure minimum time elapsed since last withdraw request
+      if (user.last_withdraw_time) {
+        try {
+          const lastWithdrawTime = new Date(user.last_withdraw_time);
+          const diffSeconds = Math.floor((now.getTime() - lastWithdrawTime.getTime()) / 1000);
+          if (diffSeconds < MIN_WITHDRAW_INTERVAL_SECONDS) {
+            const wait = MIN_WITHDRAW_INTERVAL_SECONDS - diffSeconds;
+            return res.status(429).json({
+              success: false,
+              error: `Withdraw cooldown: please wait ${wait} seconds before requesting another withdrawal`
+            });
+          }
+        } catch (e) {
+          console.error("Failed to parse last_withdraw_time:", e);
+        }
+      }
+
+      const currentBalance = Number(user.balance) || 0;
+
+      if (currentBalance < MIN_WITHDRAW_AMOUNT) {
+        return res.status(400).json({
+          success: false,
+          error: `Your balance must be at least ${MIN_WITHDRAW_AMOUNT} to request a withdrawal`,
+          balance: currentBalance
+        });
+      }
+
+      if (parsedAmount > currentBalance) {
+        return res.status(400).json({
+          success: false,
+          error: "Insufficient balance for this withdrawal",
+          balance: currentBalance
+        });
+      }
+
+      // Create withdrawal record (best-effort). Table name: withdrawals
+      let createdWithdrawal = null;
+      try {
+        const created = await supabaseRequest("withdrawals", {
+          method: "POST",
+          body: JSON.stringify({
+            user_id: userId,
+            amount: parsedAmount,
+            status: "pending",
+            created_at: now.toISOString()
+          })
+        });
+        createdWithdrawal = Array.isArray(created) ? created[0] : created;
+      } catch (e) {
+        // If creating a withdrawal record fails, log and continue to attempt balance deduction.
+        console.error("Failed to create withdrawal record:", e);
+      }
+
+      // Deduct user's balance and update last_withdraw_time atomically-ish (two calls: read already done)
+      const newBalance = currentBalance - parsedAmount;
+      await supabaseRequest(`users?id=eq.${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          balance: newBalance,
+          last_withdraw_time: now.toISOString()
+        })
+      });
+
+      return res.status(200).json({
+        success: true,
+        balance: newBalance,
+        withdrawal: createdWithdrawal || { user_id: userId, amount: parsedAmount, status: "pending", created_at: now.toISOString() }
       });
     }
 
