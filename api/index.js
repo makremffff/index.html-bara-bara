@@ -10,11 +10,6 @@ const MIN_AD_INTERVAL_SECONDS = 50;
 // Box (open-box) minimum seconds between box rewards (server-side enforcement)
 const BOX_MIN_INTERVAL_SECONDS = 5 * 60; // 5 minutes
 
-// Withdraw: minimum balance required to be allowed to request any withdrawal
-const MIN_WITHDRAW_BALANCE = 300;
-// Minimum seconds between withdraw requests from the same user (simple anti-abuse)
-const MIN_WITHDRAW_INTERVAL_SECONDS = 5;
-
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   // If these env vars are missing, throw early so developer notices
   console.error("Missing SUPABASE environment variables.");
@@ -45,6 +40,40 @@ async function supabaseRequest(path, options = {}) {
   }
 
   return res.status === 204 ? null : res.json();
+}
+
+// ===============================
+// Helper: Supabase RPC call (for atomic server-side withdraw transaction)
+// Uses /rpc/<fn> endpoint
+// ===============================
+async function supabaseRpc(fnName, body = {}) {
+  if (!SUPABASE_URL) {
+    throw new Error("Supabase URL not configured");
+  }
+
+  const res = await fetch(`${SUPABASE_URL}/rpc/${fnName}`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+
+  const text = await res.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch (e) { json = text; }
+
+  if (!res.ok) {
+    // Attempt to surface Postgres error message
+    const err = (json && json.message) ? json.message : (typeof json === "string" ? json : `Request failed with status ${res.status}`);
+    const error = new Error(err);
+    error.status = res.status;
+    throw error;
+  }
+
+  return json;
 }
 
 // ===============================
@@ -94,10 +123,10 @@ export default async function handler(req, res) {
             last_ad_time: null,
             // last_box_time stores ISO timestamp of last box reward (server-side anti-abuse)
             last_box_time: null,
-            // last_withdraw_time stores ISO timestamp of last withdraw (server-side anti-abuse)
-            last_withdraw_time: null,
             referrer_id: referrerId || null,
-            referral_active: false
+            referral_active: false,
+            // last_withdraw_time is nullable; added for withdraw rate-limiting
+            last_withdraw_time: null
           })
         });
 
@@ -457,13 +486,14 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // Request Withdraw (new)
-    // - Enforces server-side minimum balance (MIN_WITHDRAW_BALANCE)
-    // - Prevents rapid repeated withdraws via last_withdraw_time
-    // - Ensures requested amount <= current balance
-    // - Creates a withdraws row with status 'pending' and deducts the user's balance immediately
+    // NEW: Create Withdraw (server-side authoritative, atomic via RPC)
+    // - Validates userId, amount
+    // - amount must be numeric, >= 300, <= user.balance
+    // - Enforces last_withdraw_time minimum interval (60s)
+    // - Inserts a withdraw_history row and deducts balance and updates last_withdraw_time atomically
+    // Returns: { success: true, newBalance: ..., withdrawId: ... }
     // ===============================
-    if (type === "requestWithdraw") {
+    if (type === "createWithdraw") {
       const { userId, amount } = data || {};
 
       if (!userId) {
@@ -474,98 +504,69 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing amount" });
       }
 
-      const parsedAmount = Number(amount) || 0;
-      if (parsedAmount <= 0) {
-        return res.status(400).json({ success: false, error: "Invalid amount" });
+      // parse and basic validation
+      const parsedAmount = Number(amount);
+      if (!Number.isFinite(parsedAmount) || isNaN(parsedAmount)) {
+        return res.status(400).json({ success: false, error: "Amount must be a number" });
       }
 
-      // Fetch current user
-      const userRes = await supabaseRequest(`users?id=eq.${userId}&select=*`);
-      if (!userRes || userRes.length === 0) {
-        return res.status(404).json({ success: false, error: "User not found" });
+      if (parsedAmount < 300) {
+        return res.status(400).json({ success: false, error: "Amount must be at least 300" });
       }
 
-      const user = userRes[0];
-      const now = new Date();
+      // Use a Postgres function (RPC) to perform atomic withdraw: deduct balance, update last_withdraw_time, insert into withdraw_history
+      // The RPC function will perform the authoritative checks (balance >= amount, last_withdraw_time cooldown)
+      try {
+        const rpcBody = {
+          p_user_id: String(userId),
+          p_amount: Math.floor(parsedAmount),
+          p_min_interval_seconds: 60
+        };
 
-      // Check last_withdraw_time cooldown
-      if (user.last_withdraw_time) {
-        try {
-          const lastWithdrawTime = new Date(user.last_withdraw_time);
-          const diffSeconds = Math.floor((now.getTime() - lastWithdrawTime.getTime()) / 1000);
-          if (diffSeconds < MIN_WITHDRAW_INTERVAL_SECONDS) {
-            const wait = MIN_WITHDRAW_INTERVAL_SECONDS - diffSeconds;
-            return res.status(429).json({
-              success: false,
-              error: `Withdraw cooldown: please wait ${wait} seconds before requesting another withdraw`
-            });
-          }
-        } catch (e) {
-          console.error("Failed to parse last_withdraw_time:", e);
+        // Call RPC create_withdraw which must be created in the DB migration (see migration SQL)
+        const rpcRes = await supabaseRpc("create_withdraw", rpcBody);
+
+        // Expected rpcRes to contain object with new_balance and withdraw_id (name depends on function's return)
+        // If RPC returns array (PostgREST may return array of rows), handle that
+        let newBalance = null;
+        let withdrawId = null;
+        if (Array.isArray(rpcRes) && rpcRes.length > 0) {
+          newBalance = rpcRes[0].new_balance || rpcRes[0].newbalance || rpcRes[0].new_balance;
+          withdrawId = rpcRes[0].withdraw_id || rpcRes[0].withdrawid || rpcRes[0].withdraw_id;
+        } else if (rpcRes && typeof rpcRes === "object") {
+          newBalance = rpcRes.new_balance || rpcRes.newbalance || rpcRes.new_balance;
+          withdrawId = rpcRes.withdraw_id || rpcRes.withdrawid || rpcRes.withdraw_id;
+        } else {
+          // fallback: simple success without details
+          // Fetch current balance
+          const result = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
+          newBalance = result && result[0] ? result[0].balance : null;
         }
-      }
 
-      const currentBalance = Number(user.balance) || 0;
-
-      // Enforce minimum balance before allowing withdraw requests
-      if (currentBalance < MIN_WITHDRAW_BALANCE) {
-        return res.status(400).json({
-          success: false,
-          error: `Minimum balance required to request withdrawal is ${MIN_WITHDRAW_BALANCE}`,
-          balance: currentBalance
+        return res.status(200).json({
+          success: true,
+          newBalance,
+          withdrawId
         });
+
+      } catch (e) {
+        // Handle RPC errors and return appropriate status codes
+        const msg = e && e.message ? e.message : String(e);
+        const status = e && e.status ? e.status : 500;
+
+        // If RPC threw an error due to cooldown, propagate 429
+        if (String(msg).toLowerCase().includes("please wait") || String(msg).toLowerCase().includes("cooldown") || status === 429) {
+          return res.status(429).json({ success: false, error: msg });
+        }
+
+        // Validation errors
+        if (String(msg).toLowerCase().includes("balance") || String(msg).toLowerCase().includes("insufficient")) {
+          return res.status(400).json({ success: false, error: msg });
+        }
+
+        console.error("createWithdraw RPC error:", e);
+        return res.status(500).json({ success: false, error: msg });
       }
-
-      // Ensure sufficient funds for the requested amount
-      if (parsedAmount > currentBalance) {
-        return res.status(400).json({
-          success: false,
-          error: "Insufficient balance for requested withdrawal",
-          balance: currentBalance
-        });
-      }
-
-      // Deduct balance and create withdraw record atomically as two REST calls (note: race conditions possible with REST; consider RPC for stronger guarantees)
-      const newBalance = currentBalance - parsedAmount;
-
-      // Create withdraws row
-      const withdrawRow = await supabaseRequest("withdraws", {
-        method: "POST",
-        body: JSON.stringify({
-          user_id: userId,
-          amount: parsedAmount,
-          status: "pending",
-          created_at: now.toISOString()
-        })
-      });
-
-      // Update user's balance and last_withdraw_time
-      await supabaseRequest(`users?id=eq.${userId}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          balance: newBalance,
-          last_withdraw_time: now.toISOString()
-        })
-      });
-
-      return res.status(200).json({
-        success: true,
-        balance: newBalance,
-        withdraw: Array.isArray(withdrawRow) ? withdrawRow[0] : withdrawRow
-      });
-    }
-
-    // ===============================
-    // Get Withdraw History for user (optional helper)
-    // ===============================
-    if (type === "getWithdraws") {
-      const { userId } = data || {};
-      if (!userId) {
-        return res.status(400).json({ success: false, error: "Missing userId" });
-      }
-
-      const rows = await supabaseRequest(`withdraws?user_id=eq.${userId}&select=id,user_id,amount,status,created_at,processed_at&order=created_at.desc`);
-      return res.status(200).json({ success: true, withdraws: rows || [] });
     }
 
     // ===============================
