@@ -67,11 +67,24 @@ async function fetchApi({ type, data = {} }) {
     // Update lastApiCallTimestamp after actual network call completed
     lastApiCallTimestamp = Date.now();
 
-    const result = await response.json();
+    // parse response robustly (handle non-json errors)
+    const contentType = response.headers.get && response.headers.get("content-type");
+    let result;
+    if (contentType && contentType.indexOf("application/json") !== -1) {
+      try {
+        result = await response.json();
+      } catch (e) {
+        result = await response.text();
+      }
+    } else {
+      result = await response.text();
+      try { result = JSON.parse(result); } catch (e) { /* leave as text */ }
+    }
 
     if (!response.ok) {
       // Normalize error shape
-      return { success: false, error: result.error || result || "Network response was not ok", status: response.status };
+      const err = (result && result.error) ? result.error : (typeof result === "string" ? result : "Network response was not ok");
+      return { success: false, error: err, status: response.status };
     }
 
     return result;
@@ -291,6 +304,10 @@ async function playNotificationSound() {
     // Fallback: small beep using WebAudio API
     if (typeof window !== "undefined" && (window.AudioContext || window.webkitAudioContext)) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      // try to resume suspended context if exists
+      if (AudioCtx && AudioCtx.state === 'suspended' && typeof AudioCtx.resume === 'function') {
+        try { await AudioCtx.resume(); } catch (e) { /* ignore */ }
+      }
       const ctx = new AudioCtx();
       const o = ctx.createOscillator();
       const g = ctx.createGain();
@@ -321,12 +338,13 @@ function getBoxCooldownKey() {
 
 /* =======================
    Helper: show a box reward notification (text + animation)
-   Shows after a small delay (400ms) and updates adsNotfi content to "you get <amount>coin"
+   Shows after a small delay (400ms) and updates adsNotfi content to "حصلت على <amount> كوين"
+   Note: localized to Arabic
 ======================= */
 function showBoxRewardNotification(amount) {
   if (!adsNotfi) return;
   try {
-    adsNotfi.textContent = `you get ${amount}coin`;
+    adsNotfi.textContent = `حصلت على ${amount} كوين`;
     // small delay before showing (400ms)
     setTimeout(function () {
       // play sound then visual animation
@@ -354,8 +372,6 @@ function showBoxRewardNotification(amount) {
         adsNotfi.style.display = "none";
         adsNotfi.style.transform = "";
         adsNotfi.style.opacity = "";
-        // Restore default text after hiding (optional)
-        // adsNotfi.textContent = ""; // if you want to clear it
       }, 3500);
     }, 400);
   } catch (e) {
@@ -365,6 +381,7 @@ function showBoxRewardNotification(amount) {
 
 /* =======================
    Reward button handler
+   (kept mostly unchanged; localized generic error messages to Arabic)
 ======================= */
 if (adsBtn) {
   adsBtn.addEventListener("click", async function (evt) {
@@ -482,17 +499,16 @@ if (adsBtn) {
               }
             }, 1000);
           } else {
-            // generic failure feedback
-            // Use visual notification instead of alert
+            // generic failure feedback (localized)
             if (adsNotfi) {
               adsNotfi.textContent = "فشل في استلام مكافأة الإعلان";
               adsNotfi.style.display = "block";
               adsNotfi.style.opacity = "0.8";
-              setTimeout(function(){ adsNotfi.style.opacity = "0.4"; }, 2500);
+              setTimeout(function () { adsNotfi.style.opacity = "0.4"; }, 2500);
               adsNotfi.style.transform = "translateY(-150%)";
-              setTimeout(function(){ adsNotfi.style.transform = "translateY(135px)"; }, 100);
-              setTimeout(function(){ adsNotfi.style.transform = "translateY(-150%)"; adsNotfi.style.opacity = "0"; }, 3000);
-              setTimeout(function(){ adsNotfi.style.display = "none"; adsNotfi.style.transform = ""; adsNotfi.style.opacity = ""; }, 3500);
+              setTimeout(function () { adsNotfi.style.transform = "translateY(135px)"; }, 100);
+              setTimeout(function () { adsNotfi.style.transform = "translateY(-150%)"; adsNotfi.style.opacity = "0"; }, 3000);
+              setTimeout(function () { adsNotfi.style.display = "none"; adsNotfi.style.transform = ""; adsNotfi.style.opacity = ""; }, 3500);
             }
           }
         }
@@ -505,8 +521,9 @@ if (adsBtn) {
           } catch (e) {
             console.warn("Notification sound play failed:", e);
           }
-          // visual notification
+          // visual notification (localized)
           if (adsNotfi) {
+            adsNotfi.textContent = "تم الحصول على المكافأة";
             adsNotfi.style.display = "block";
             adsNotfi.style.opacity = "0.8";
 
@@ -577,16 +594,6 @@ if (adsBtn) {
 
 /* =======================
    BOX (OPEN BOX) FEATURE
-   - When user clicks OPEN -> show two ads (they don't affect main ad counter)
-   - After ads complete award random reward (75|100|150|200) added to balance
-   - After finishing disable open button for 5 minutes (countdown shown)
-   - Show ads notification (adsnotifi) when box reward is granted (same visual as ads button)
-   - Box ads should not affect the main ad counters; client tries to call "rewardBox" API (if backend supports it),
-     otherwise it will update UI locally and log a warning.
-   - Persist cooldown in localStorage to survive reloads.
-   - Box ad displays do not interfere with main adCooldown (use useGlobalCooldown=false).
-   - Fix: make cooldown per-account (use USER_ID in key) so each account has independent timing.
-   - Fix: show notification text "you get <amount>coin" after 0.4s when box reward granted.
 ======================= */
 const openBoxBtn = document.getElementById("openbox");
 const BOX_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
@@ -677,7 +684,7 @@ async function handleBoxClick(evt) {
       openBoxBtn.style.pointerEvents = '';
       openBoxBtn.style.opacity = '';
     }, 2000);
-    // Use withdraw-style notification element? No — keep adsNotfi for ad errors
+    // Use adsNotfi for message (localized)
     if (adsNotfi) {
       adsNotfi.textContent = "فشل في عرض الإعلانات للصندوق، حاول لاحقاً";
       adsNotfi.style.display = "block";
@@ -734,7 +741,7 @@ async function handleBoxClick(evt) {
     `;
   }
 
-  // Show notification visually similar to ads button reward but with text "you get Xcoin" after 0.4s
+  // Show notification visually similar to ads button reward but with text "حصلت على X كوين" after 0.4s
   try {
     showBoxRewardNotification(reward);
   } catch (e) {
@@ -901,9 +908,6 @@ function updateReferralCountsUI(counts) {
 
 /* =======================
    Render referrals list into .my-refal
-   Each referral card must use the existing class names:
-   .refal-card, .refal-fhoto, .refal-name, .refal-ads, .refal-statu
-   We will not change class names in the HTML as requested.
 ======================= */
 function renderReferralsList(referrals) {
   const container = document.querySelector('.my-refal');
@@ -986,7 +990,6 @@ function renderReferralsList(referrals) {
     statusEl.style.color = ref.referral_active ? 'green' : '#b8860b';
 
     // Append to card in a layout similar to samples
-    // Keep the order and class names as requested (photo, name, ads, status)
     card.appendChild(photoWrapper);
     card.appendChild(nameEl);
     card.appendChild(adsEl);
@@ -998,8 +1001,6 @@ function renderReferralsList(referrals) {
 
 /* =======================
    Refresh referral counts and list from backend
-   Calls API type "getReferrals" which now returns { success, active, pending, referrals }
-   fetchApi will attach USER_ID automatically if available.
 ======================= */
 async function refreshReferralCounts() {
   try {
@@ -1021,18 +1022,14 @@ async function refreshReferralCounts() {
 }
 
 /* =======================
-   Referral polling: start/stop while on invite page
-   Poll interval set to 30s (adjustable)
+   Referral polling
 ======================= */
 let referralPoll = null;
 const REFERRAL_POLL_INTERVAL = 30000; // 30s
 
 function startReferralPolling() {
-  // clear any existing
   if (referralPoll) clearInterval(referralPoll);
-  // immediate refresh
   refreshReferralCounts();
-  // set interval
   referralPoll = setInterval(refreshReferralCounts, REFERRAL_POLL_INTERVAL);
 }
 
@@ -1044,15 +1041,13 @@ function stopReferralPolling() {
 }
 
 /* =======================
-   Balance polling: keep balance UI updated regularly
-   Poll interval set to 30s (adjustable). Always running.
+   Balance polling
 ======================= */
 let balancePoll = null;
 const BALANCE_POLL_INTERVAL = 30000;
 
 function startBalancePolling() {
   if (balancePoll) clearInterval(balancePoll);
-  // immediate fetch
   (async () => {
     try {
       const res = await fetchApi({ type: "getBalance" });
@@ -1073,27 +1068,19 @@ function startBalancePolling() {
 
 /* =======================
    Utility: استخراج قيمة start param بطريقة مرنة
-   يمكن قراءة start_param من Telegram initDataUnsafe أو من URL (startapp, start)
-   نتعامل مع حالات وجود حروف عربية ملصقة بعد الرقم مثل:
-   https://...startapp=ref_7741750541رابط
-   فنقوم باستخراج الرقم بعد ref_ فقط.
 ======================= */
 function extractReferrerFromStartParam(raw) {
   if (!raw || typeof raw !== "string") return null;
 
-  // Decode in case it's URI encoded
   try {
     raw = decodeURIComponent(raw);
   } catch (e) {}
 
-  // Trim whitespace
   raw = raw.trim();
 
-  // Look for patterns like "ref_7741750541" possibly followed by other chars
   const m = raw.match(/ref_([0-9]+)/i);
   if (m && m[1]) return m[1];
 
-  // Also allow alphanumeric ids after ref_ (if your ids are not pure numeric)
   const m2 = raw.match(/ref_([A-Za-z0-9-_]+)/i);
   if (m2 && m2[1]) return m2[1];
 
@@ -1102,8 +1089,6 @@ function extractReferrerFromStartParam(raw) {
 
 /* =======================
    Telegram WebApp User Data + referral (start params)
-   عند الدخول نقرا start params ونخزن referrerId لإرساله أثناء syncUser
-   كما نجلب عدد الدعوات ونحدّث واجهة invite
 ======================= */
 document.addEventListener("DOMContentLoaded", async function () {
 
@@ -1115,7 +1100,6 @@ document.addEventListener("DOMContentLoaded", async function () {
   try {
     if (typeof window.Telegram !== "undefined" && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe) {
       const init = window.Telegram.WebApp.initDataUnsafe;
-      // Telegram may provide start_param, start_payload, or start
       startParam = init.start_param || init.startpayload || init.start_payload || init.start || null;
     }
   } catch (e) {}
@@ -1128,10 +1112,8 @@ document.addEventListener("DOMContentLoaded", async function () {
     } catch (e) {}
   }
 
-  // 3) Extract referrer id robustly (handles cases like "...ref_7741750541رابط")
   let referrerId = extractReferrerFromStartParam(startParam);
 
-  // 4) If still not found, also try to find "ref_<id>" anywhere in the full URL
   if (!referrerId) {
     try {
       const fullUrl = decodeURIComponent(window.location.href || "");
@@ -1140,14 +1122,12 @@ document.addEventListener("DOMContentLoaded", async function () {
     } catch (e) {}
   }
 
-  // 5) Store referrerId locally so it can be attached later if user logs in after navigation
   if (referrerId) {
     try {
       localStorage.setItem('referrerId', String(referrerId));
     } catch (e) {}
   }
 
-  // If Telegram WebApp present -> initialize and sync user (include referrer if available)
   if (typeof window.Telegram !== "undefined") {
     const tg = window.Telegram.WebApp;
     try { tg.ready(); } catch (e) {}
@@ -1161,7 +1141,6 @@ document.addEventListener("DOMContentLoaded", async function () {
 
       USER_ID = userId;
 
-      // If we didn't get referrerId earlier from startParam, try localStorage (in case it was saved previously)
       if (!referrerId) {
         try {
           const stored = localStorage.getItem('referrerId');
@@ -1169,7 +1148,6 @@ document.addEventListener("DOMContentLoaded", async function () {
         } catch (e) {}
       }
 
-      // Send syncUser including referrerId (may be null)
       await fetchApi({
         type: "syncUser",
         data: {
@@ -1180,10 +1158,8 @@ document.addEventListener("DOMContentLoaded", async function () {
         }
       });
 
-      // After sync, clear stored referrer (optional)
       try { localStorage.removeItem('referrerId'); } catch (e) {}
 
-      // Immediately fetch balance/stats to populate UI
       const res = await fetchApi({ type: "getBalance" });
       if (res && res.success) {
         updateBalanceUI(res);
@@ -1191,7 +1167,6 @@ document.addEventListener("DOMContentLoaded", async function () {
         console.warn("Initial getBalance failed:", res && res.error);
       }
 
-      // Also fetch referral counts and list so invite page reflects pending/active
       refreshReferralCounts();
 
       const userPhotoContainer = document.querySelector(".user-fhoto");
@@ -1215,7 +1190,6 @@ document.addEventListener("DOMContentLoaded", async function () {
         userNameContainer.textContent = firstName;
       }
 
-      // Update personal referral link shown to the user
       if (link && userId) {
         try {
           link.textContent =
@@ -1223,19 +1197,15 @@ document.addEventListener("DOMContentLoaded", async function () {
         } catch (e) {}
       }
     } else {
-      // If Telegram present but no user data, still refresh referrals if USER_ID exists
       if (USER_ID) refreshReferralCounts();
     }
   } else {
-    // Not a Telegram WebApp visitor.
-    // Keep referrerId in localStorage so it can be used when the user registers/logs in later.
     if (referrerId) {
       try {
         localStorage.setItem('referrerId', String(referrerId));
       } catch (e) {}
     }
 
-    // Try to fetch balance for non-Telegram user if USER_ID exists (edge cases)
     if (USER_ID) {
       try {
         const res = await fetchApi({ type: "getBalance" });
@@ -1245,7 +1215,6 @@ document.addEventListener("DOMContentLoaded", async function () {
         console.warn("Initial balance fetch failed:", e);
       }
     } else {
-      // If user not logged in yet, still set invite UI to 0s
       updateReferralCountsUI({ active: 0, pending: 0 });
       renderReferralsList([]);
     }
@@ -1258,7 +1227,6 @@ document.addEventListener("DOMContentLoaded", async function () {
     if (stored && stored > Date.now()) {
       setOpenBoxDisabled(true, stored);
     } else {
-      // cleanup any stale
       try { localStorage.removeItem(key); } catch (e) {}
       setOpenBoxDisabled(false, null);
     }
@@ -1266,7 +1234,6 @@ document.addEventListener("DOMContentLoaded", async function () {
     console.warn("Failed to initialize box cooldown from storage:", e);
   }
 
-  // Attach box click listener
   if (openBoxBtn) {
     openBoxBtn.style.cursor = "pointer";
     openBoxBtn.addEventListener("click", handleBoxClick);
@@ -1275,8 +1242,6 @@ document.addEventListener("DOMContentLoaded", async function () {
 
 /* =======================
    Ensure balance is also fetched on full load (fallback)
-   This makes sure balance is displayed even if DOMContentLoaded already fired earlier
-   Also start polling for balance if not already started.
 ======================= */
 window.addEventListener('load', async function() {
   try {
@@ -1287,7 +1252,6 @@ window.addEventListener('load', async function() {
     console.warn("Load balance fetch failed:", e);
   }
 
-  // ensure polling active
   if (!balancePoll) startBalancePolling();
 });
 
@@ -1309,18 +1273,23 @@ const WITHDRAW_MIN_COOLDOWN_MS = 3500; // 3.5s client-side cooldown (server enfo
 const WITHDRAW_MIN_AMOUNT = 300; // client-side constant (server must also validate)
 const WITHDRAW_SERVER_MIN_INTERVAL_SECONDS = 60; // used only for display parsing if server returns wait
 
-// Utility: unified withdraw notification using existing element only
-function showWithdrawNotification(message) {
+// Utility: unified withdraw notification using existing element only (localized Arabic)
+async function showWithdrawNotification(message) {
   try {
+    // Attempt to play sound first (user gesture present on click)
+    try {
+      await playNotificationSound();
+    } catch (e) {
+      // ignore sound errors but continue to show notification
+      console.warn("playNotificationSound for withdraw failed:", e);
+    }
+
     const el = document.querySelector(".withdraw-notifi");
     if (!el) return;
     el.textContent = message;
     el.style.display = "block";
     el.style.opacity = "0.9";
     el.style.transform = "translateY(-150%)";
-
-    // play a sound if available
-    playNotificationSound().catch(() => {});
 
     setTimeout(function () {
       el.style.transform = "translateY(135px)";
@@ -1348,6 +1317,40 @@ function parseCoinInput(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) return NaN;
   return Math.floor(num);
+}
+
+// Map common server messages (English) to Arabic friendly messages
+function translateServerMessageToArabic(msg) {
+  if (!msg) return "حدث خطأ من الخادم";
+  const s = String(msg).toLowerCase();
+
+  // cooldown
+  let m = s.match(/please wait\s+([0-9]+)/i) || s.match(/please wait[:\s]*([0-9]+)/i) || s.match(/(\d+)\s*seconds?/i);
+  if (m && m[1]) {
+    return `الرجاء الانتظار ${m[1]} ثانية قبل تقديم طلب سحب آخر`;
+  }
+  if (s.includes("missing userid") || s.includes("missing user id")) {
+    return "المستخدم غير مسجل، الرجاء تسجيل الدخول عبر تيليغرام";
+  }
+  if (s.includes("amount must be at least") || s.includes("amount must be at least 300") || s.includes("amount must be at least 300")) {
+    return "قيمة السحب يجب أن لا تقل عن 300 كوين";
+  }
+  if (s.includes("insufficient balance") || s.includes("balance")) {
+    return "لا يوجد رصيد كافٍ لإتمام عملية السحب";
+  }
+  if (s.includes("invalid amount") || s.includes("amount must be a number")) {
+    return "قيمة السحب غير صحيحة";
+  }
+  if (s.includes("user not found")) {
+    return "المستخدم غير موجود";
+  }
+  if (s.includes("withdraw cooldown")) {
+    m = s.match(/(\d+)\s*seconds?/i);
+    if (m && m[1]) return `الرجاء الانتظار ${m[1]} ثانية قبل تقديم طلب سحب آخر`;
+    return "الرجاء الانتظار قبل تقديم طلب سحب آخر";
+  }
+  // default: return original message but prefer Arabic phrasing
+  return msg;
 }
 
 if (sendwithdraw) {
@@ -1387,30 +1390,30 @@ if (sendwithdraw) {
 
       // If current server-known ADS is less than minimum, show notification and stop
       if ((Number(ADS) || 0) < WITHDRAW_MIN_AMOUNT) {
-        showWithdrawNotification("رصيدك أقل من الحد الأدنى للسحب (300 كوين)");
+        await showWithdrawNotification("رصيدك أقل من الحد الأدنى للسحب (300 كوين)");
         return;
       }
 
       // Validate input locally (UI-only checks), server will perform final validation
       if (Number.isNaN(coin)) {
-        showWithdrawNotification("الرجاء إدخال قيمة سحب صحيحة (رقم)");
+        await showWithdrawNotification("الرجاء إدخال قيمة سحب صحيحة (رقم)");
         return;
       }
       if (coin <= 0) {
-        showWithdrawNotification("قيمة السحب يجب أن تكون أكبر من صفر");
+        await showWithdrawNotification("قيمة السحب يجب أن تكون أكبر من صفر");
         return;
       }
       if (coin < WITHDRAW_MIN_AMOUNT) {
-        showWithdrawNotification(`الحد الأدنى لعملية السحب هو ${WITHDRAW_MIN_AMOUNT} كوين`);
+        await showWithdrawNotification(`الحد الأدنى لعملية السحب هو ${WITHDRAW_MIN_AMOUNT} كوين`);
         return;
       }
       if (coin > ADS) {
-        showWithdrawNotification("قيمة السحب تتجاوز رصيدك الحالي");
+        await showWithdrawNotification("قيمة السحب تتجاوز رصيدك الحالي");
         return;
       }
 
       // UI: show pending notification immediately (single element)
-      showWithdrawNotification("جارٍ إرسال طلب السحب...");
+      await showWithdrawNotification("جاري إرسال طلب السحب...");
 
       // Call server to create withdraw — server does all authoritative checks
       const res = await fetchApi({
@@ -1419,20 +1422,10 @@ if (sendwithdraw) {
       });
 
       if (!res || !res.success) {
-        // server rejected; present the server-provided message or a generic one
+        // server rejected; present the server-provided message or a generic one (translated)
         const serverMessage = res && res.error ? String(res.error) : "فشل في إنشاء طلب السحب";
-        // If server returned 429 with cooldown seconds, show human-friendly message
-        if (res && res.status === 429) {
-          // attempt to extract seconds
-          const m = String(serverMessage).match(/(\d+)\s*seconds?/i);
-          if (m && m[1]) {
-            showWithdrawNotification(`الرجاء الانتظار ${m[1]} ثانية قبل تقديم طلب سحب آخر`);
-          } else {
-            showWithdrawNotification(serverMessage);
-          }
-        } else {
-          showWithdrawNotification(serverMessage);
-        }
+        const arabic = translateServerMessageToArabic(serverMessage);
+        await showWithdrawNotification(arabic);
         return;
       }
 
@@ -1484,18 +1477,17 @@ if (sendwithdraw) {
         console.warn("Failed to append withdraw history card:", e);
       }
 
-      // Show success message using the single notifi element
-      showWithdrawNotification("تم إنشاء طلب السحب بنجاح، الحالة: قيد الانتظار");
+      // Show success message using the single notifi element (Arabic)
+      await showWithdrawNotification("تم إنشاء طلب السحب بنجاح، الحالة: قيد الانتظار");
 
       // Clear input after success
       try { if (inputEl) inputEl.value = ''; } catch (e) {}
 
     } catch (e) {
       console.error("Withdraw handler error:", e);
-      showWithdrawNotification("حدث خطأ أثناء معالجة طلب السحب");
+      await showWithdrawNotification("حدث خطأ أثناء معالجة طلب السحب");
     } finally {
       // Ensure button re-enabled after operation (handled by restoreAfter timer)
-      // But also if we return early we want to re-enable quickly
       setTimeout(function(){
         try {
           sendwithdraw.style.pointerEvents = "";
