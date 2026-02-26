@@ -212,8 +212,8 @@ const adsNotfi   = document.getElementById("adsnotifi");
 let progres = document.getElementById("progres");
 
 let ADS   = 0;
-let timer = null;
-let dailyLimit = null;
+let timer = null; // main ad countdown interval
+let dailyLimit = null; // interval for long cooldowns
 let dailyProgres = 100;
 let progresLimit = 24 * 60 * 60;
 
@@ -231,40 +231,44 @@ let adRewardClaimed = false;
    Show single ad (general)
    - useGlobalCooldown: when true (default) this ad affects the global adCooldown used by the main reward button.
      When false the ad will be shown without changing global adCooldown (useful for box ads which shouldn't interfere).
+   - Ensures it resolves to true/false and never throws
 ======================= */
 function showSingleAd({ useGlobalCooldown = true } = {}) {
   return new Promise((resolve) => {
+    try {
+      if (useGlobalCooldown && adCooldown) {
+        resolve(false);
+        return;
+      }
 
-    if (useGlobalCooldown && adCooldown) {
-      resolve(false);
-      return;
-    }
+      if (useGlobalCooldown) adCooldown = true;
 
-    if (useGlobalCooldown) adCooldown = true;
-
-    if (AdsGramController && typeof AdsGramController.show === "function") {
-      AdsGramController.show()
-        .then(() => {
-          setTimeout(function(){
+      if (AdsGramController && typeof AdsGramController.show === "function") {
+        AdsGramController.show()
+          .then(() => {
+            setTimeout(function(){
+              if (useGlobalCooldown) adCooldown = false;
+              resolve(true);
+            }, adCooldownTime);
+          })
+          .catch(() => {
             if (useGlobalCooldown) adCooldown = false;
-            resolve(true);
-          }, adCooldownTime);
-        })
-        .catch(() => {
-          if (useGlobalCooldown) adCooldown = false;
-          resolve(false);
-        });
-    } else {
-      // fallback: simulate ad with timeouts
-      // If useGlobalCooldown is true we keep the existing cooldown behavior; otherwise we don't set the global flag.
-      setTimeout(function(){
-        if (useGlobalCooldown) {
-          setTimeout(function(){
-            adCooldown = false;
-          }, adCooldownTime);
-        }
-        resolve(true);
-      }, 2000);
+            resolve(false);
+          });
+      } else {
+        // fallback: simulate ad with timeouts
+        setTimeout(function(){
+          if (useGlobalCooldown) {
+            setTimeout(function(){
+              adCooldown = false;
+            }, adCooldownTime);
+          }
+          resolve(true);
+        }, 2000);
+      }
+    } catch (e) {
+      if (useGlobalCooldown) adCooldown = false;
+      resolve(false);
     }
   });
 }
@@ -328,6 +332,7 @@ async function playNotificationSound() {
    - Uses #adsnotifi element for both ad and box notifications.
    - Keeps the image (<img src="done.gif">) as in original design.
    - Avoids overlap by queuing the next notification if one is currently visible.
+   - Ensures a given notification content is shown only once at a time.
 ======================= */
 let notificationQueue = [];
 let notificationShowing = false;
@@ -384,7 +389,7 @@ function showMainNotification(htmlContent) {
    Helper: show a box reward notification (text + image)
    Reuses the main ads notification element and preserves the image.
    Sets the notification content to "you get <amount> coin" plus the image (innerHTML).
-   NOTE: This function only shows; caller must ensure it's invoked once per box operation.
+   NOTE: Caller is responsible to ensure this is invoked once per box operation.
 ======================= */
 function showBoxRewardNotification(amount) {
   const html = `you get ${amount} coin <img src="done.gif" width="40" height="40">`;
@@ -399,6 +404,7 @@ function showBoxRewardNotification(amount) {
    - prevent multiple timers
    - disable button immediately
    - ensure reward is claimed once
+   - robust cleanup on errors
 ======================= */
 if (adsBtn) {
   adsBtn.addEventListener("click", async function (evt) {
@@ -461,7 +467,7 @@ if (adsBtn) {
     // Reset claim guard
     adRewardClaimed = false;
 
-    // create interval only if not present
+    // create interval only if not present (guard at start ensures timer is null)
     timer = setInterval(async function () {
       try {
         // If timer got cleared elsewhere, exit
@@ -481,6 +487,7 @@ if (adsBtn) {
             if (adsBtnn) {
               adsBtnn.style.display = "none";
               adsBtnn.style.background = '';
+              adsBtnn.textContent = '';
             }
             try {
               adsBtn.style.display = 'block';
@@ -564,6 +571,7 @@ if (adsBtn) {
                   if (adsBtnn) {
                     adsBtnn.style.display = 'none';
                     adsBtnn.style.background = '';
+                    adsBtnn.textContent = '';
                   }
                   if (adsBtn) {
                     adsBtn.style.display = 'block';
@@ -599,6 +607,7 @@ if (adsBtn) {
                   if (adsBtnn) {
                     adsBtnn.style.display = 'none';
                     adsBtnn.style.background = '';
+                    adsBtnn.textContent = '';
                   }
                   if (adsBtn) {
                     adsBtn.style.display = 'block';
@@ -653,6 +662,7 @@ if (adsBtn) {
                 if (adsBtnn) {
                   adsBtnn.style.display = 'none';
                   adsBtnn.style.background = '';
+                  adsBtnn.textContent = '';
                 }
                 if (adsBtn) {
                   adsBtn.style.display = 'block';
@@ -718,7 +728,7 @@ let boxCooldownInterval = null;
 const BOX_REWARDS = [75, 100, 150, 200];
 
 // Hidden box notification timer and guards
-let boxHiddenTimer = null;
+let boxHiddenTimer = null; // as requested
 let boxHiddenTimerExpired = false;
 let boxNotificationShown = false;
 let rewardPendingForBox = null;
@@ -776,6 +786,12 @@ function setOpenBoxDisabled(state, untilTs = null) {
   }
 }
 
+// Ensure dataset running initialized
+if (openBoxBtn && typeof openBoxBtn.dataset.running === 'undefined') {
+  openBoxBtn.dataset.running = "0";
+  if (openBoxBtn.style) openBoxBtn.style.cursor = "pointer";
+}
+
 async function handleBoxClick(evt) {
   if (!openBoxBtn) return;
   // reject synthetic
@@ -816,6 +832,11 @@ async function handleBoxClick(evt) {
   rewardPendingForBox = null;
 
   // Start hidden 23-second timer (do not show any notification before it expires)
+  // Ensure single timer at a time
+  if (boxHiddenTimer) {
+    clearTimeout(boxHiddenTimer);
+    boxHiddenTimer = null;
+  }
   boxHiddenTimer = setTimeout(function() {
     boxHiddenTimer = null;
     boxHiddenTimerExpired = true;
@@ -827,6 +848,7 @@ async function handleBoxClick(evt) {
       } catch (e) {
         console.warn("Showing box notification failed:", e);
       }
+      rewardPendingForBox = null;
     }
   }, 23000);
 
@@ -858,7 +880,8 @@ async function handleBoxClick(evt) {
       openBoxBtn.style.pointerEvents = '';
       openBoxBtn.style.opacity = '';
       openBoxBtn.dataset.running = "0";
-    }, 2000);
+    }, 200);
+
     alert("Failed to show both ads. Please try again.");
     return;
   }
@@ -876,25 +899,18 @@ async function handleBoxClick(evt) {
       ADS = Number(res.balance) || ADS;
     } else {
       // If server didn't support rewardBox, fallback to local UI update and attempt to call rewardUser as a best-effort
-      console.warn("rewardBox failed or not supported, attempting client-side update. Server response:", res);
-      // attempt to call rewardUser but mark isBox so backend could ignore counters if implemented
       try {
         const fallback = await fetchApi({ type: "rewardUser", data: { amount: reward, isBox: true } });
         if (fallback && fallback.success) {
           ADS = Number(fallback.balance) || ADS;
         } else {
-          // final fallback: update UI locally only (non-persistent)
-          console.warn("fallback rewardUser failed:", fallback && fallback.error);
           ADS = Number(ADS) + Number(reward);
         }
       } catch (e) {
-        console.warn("fallback rewardUser threw:", e);
         ADS = Number(ADS) + Number(reward);
       }
     }
   } catch (e) {
-    console.warn("rewardBox API call failed:", e);
-    // fallback local
     ADS = Number(ADS) + Number(reward);
   }
 
@@ -926,16 +942,12 @@ async function handleBoxClick(evt) {
   const until = Date.now() + BOX_COOLDOWN_MS;
   setOpenBoxDisabled(true, until);
 
-  // Clean up hidden timer reference (we don't clear it here because it must expire naturally,
-  // but if it's null, it's already expired)
-  // Ensure we will not leak by only keeping the reference until it expires or we already cleared it on failure.
-
-  // Mark not running and re-enable pointerEvents only after marking cooldown
+  // Final cleanup: ensure we do not leave running flag set (cooldown manages pointerEvents)
   openBoxBtn.dataset.running = "0";
   openBoxBtn.style.pointerEvents = 'none';
   openBoxBtn.style.opacity = '0.5';
 
-  // If notification has not been shown yet and boxHiddenTimer is null (expired), ensure show now
+  // If hidden timer is null and notification still pending, show it now
   if (!boxHiddenTimer && rewardPendingForBox != null && !boxNotificationShown) {
     boxNotificationShown = true;
     try {
@@ -990,13 +1002,15 @@ if (copyrefal) {
       }
     }, 2000);
 
-    navigator.clipboard.writeText(link.textContent).then(function() {
+    navigator.clipboard.writeText((link && link.textContent) ? link.textContent : "").then(function() {
 
       setTimeout(function(){
         if (copyImge) copyImge.src = 'copy.png';
         if (copyrefal) copyrefal.style.boxShadow = '0 5px 0 #7880D3';
       }, 800);
 
+    }).catch((e) => {
+      console.warn("copy failed:", e);
     });
   });
 }
@@ -1330,7 +1344,7 @@ function renderWithdrawHistory(withdraws) {
   if (!container) return;
   container.innerHTML = "";
 
-  if (!Array.isArray(withdraws) || withdrawals.length === 0) {
+  if (!Array.isArray(withdraws) || withdraws.length === 0) {
     const emptyCard = document.createElement("div");
     emptyCard.className = "history-card";
     emptyCard.innerHTML = `
@@ -1601,17 +1615,20 @@ if (sendwithdraw) {
     let coin = coinInput ? Number(coinInput.value) : 0;
     let destination = emailInput ? String(emailInput.value).trim() : null;
 
+    const MIN_WITHDRAW = 300;
+    let withdrawnotifi = document.querySelector(".withdraw-notifi");
+
     // Basic validation
     if (!coin || isNaN(coin)) {
-      withdrawnotifi.textContent = `Minimum withdraw is ${MIN_WITHDRAW} coins`;
-      withdrawnotifi.style.display = "block";
-    setTimeout(() => {
-      withdrawnotifi.style.display = "none";
-    }, 2500);
+      if (withdrawnotifi) {
+        withdrawnotifi.textContent = `Please enter a valid amount`;
+        withdrawnotifi.style.display = "block";
+        setTimeout(() => { withdrawnotifi.style.display = 'none'; }, 2500);
+      } else {
+        alert("Please enter a valid amount");
+      }
       return;
     }
-
-    const MIN_WITHDRAW = 300;
 
     // Fetch the latest balance from server to be safe
     let balanceRes = null;
@@ -1627,17 +1644,23 @@ if (sendwithdraw) {
     }
 
     // Check minimum and sufficient balance
-    
-if (coin < MIN_WITHDRAW) {
-  if (withdrawnotifi) {
-    withdrawnotifi.textContent = `Minimum withdraw is ${MIN_WITHDRAW} coins`;
-    withdrawnotifi.style.display = "block";
-    setTimeout(() => {
-      withdrawnotifi.style.display = 'none';
-    }, 2500);
-  }
-  return;
-}
+    if (coin < MIN_WITHDRAW) {
+      if (withdrawnotifi) {
+        withdrawnotifi.textContent = `Minimum withdraw is ${MIN_WITHDRAW} coins`;
+        withdrawnotifi.style.display = "block";
+        setTimeout(() => { withdrawnotifi.style.display = 'none'; }, 2500);
+      }
+      return;
+    }
+
+    if (coin > currentBalance) {
+      if (withdrawnotifi) {
+        withdrawnotifi.textContent = `Insufficient balance`;
+        withdrawnotifi.style.display = "block";
+        setTimeout(() => { withdrawnotifi.style.display = 'none'; }, 2500);
+      }
+      return;
+    }
 
     // Disable button to prevent duplicate submits
     sendwithdraw.disabled = true;
@@ -1668,7 +1691,6 @@ if (coin < MIN_WITHDRAW) {
     }
 
     // Show notification quickly (English)
-    let withdrawnotifi = document.querySelector(".withdraw-notifi")
     if (withdrawnotifi) {
       withdrawnotifi.textContent = "Sending withdraw request...";
       withdrawnotifi.style.display = 'block';
@@ -1790,7 +1812,13 @@ if (coin < MIN_WITHDRAW) {
 
   });
 }
+
+// Play background music on first click (defensive)
 document.addEventListener("click", function () {
+  try {
     const music = document.getElementById("bg-music");
-    music.play();
+    if (music && typeof music.play === "function") {
+      music.play().catch(() => {});
+    }
+  } catch (e) {}
 });
