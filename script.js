@@ -167,10 +167,7 @@ if (btnWallet) {
       }
 
       // update progress (daily remaining)
-      const DAILY_LIMIT = 100;
-      const remaining = DAILY_LIMIT - (Number(res.dailyAds) || 0);
-      dailyProgres = remaining >= 0 ? remaining : 0;
-      if (progres) progres.textContent = dailyProgres;
+      updateDailyProgress(res.dailyAds);
     } else {
       // show error to user via withdraw notification element (reuse as general notification)
       const withdrawnotifi = document.querySelector(".withdraw-notifi");
@@ -225,12 +222,23 @@ let adCooldown = false;
 let adCooldownTime = 6000;
 
 /* =======================
+   Helper: تحديث العداد اليومي فورياً
+======================= */
+function updateDailyProgress(dailyAdsValue) {
+  const DAILY_LIMIT = 100;
+  let dailyAdsNum = Number(dailyAdsValue) || 0;
+  dailyProgres = DAILY_LIMIT - dailyAdsNum;
+  if (dailyProgres < 0) dailyProgres = 0;
+  if (progres) progres.textContent = dailyProgres;
+  return dailyProgres;
+}
+
+/* =======================
    Show single ad (general)
    - useGlobalCooldown: when true (default) this ad affects the global adCooldown used by the main reward button.
      When false the ad will be shown without changing global adCooldown (useful for box ads which shouldn't interfere).
-   - skipCooldownWait: (جديد) إذا كان true، سيتم إنهاء الـ Promise فوراً بعد نجاح عرض الإعلان دون انتظار adCooldownTime
 ======================= */
-function showSingleAd({ useGlobalCooldown = true, skipCooldownWait = false } = {}) {
+function showSingleAd({ useGlobalCooldown = true } = {}) {
   return new Promise((resolve) => {
 
     if (useGlobalCooldown && adCooldown) {
@@ -243,15 +251,10 @@ function showSingleAd({ useGlobalCooldown = true, skipCooldownWait = false } = {
     if (AdsGramController && typeof AdsGramController.show === "function") {
       AdsGramController.show()
         .then(() => {
-          if (skipCooldownWait) {
-             if (useGlobalCooldown) adCooldown = false;
-             resolve(true);
-          } else {
-            setTimeout(function(){
-              if (useGlobalCooldown) adCooldown = false;
-              resolve(true);
-            }, adCooldownTime);
-          }
+          setTimeout(function(){
+            if (useGlobalCooldown) adCooldown = false;
+            resolve(true);
+          }, adCooldownTime);
         })
         .catch(() => {
           if (useGlobalCooldown) adCooldown = false;
@@ -259,13 +262,12 @@ function showSingleAd({ useGlobalCooldown = true, skipCooldownWait = false } = {
         });
     } else {
       // fallback: simulate ad with timeouts
+      // If useGlobalCooldown is true we keep the existing cooldown behavior; otherwise we don't set the global flag.
       setTimeout(function(){
-        if (useGlobalCooldown && !skipCooldownWait) {
+        if (useGlobalCooldown) {
           setTimeout(function(){
             adCooldown = false;
           }, adCooldownTime);
-        } else if (useGlobalCooldown && skipCooldownWait) {
-           adCooldown = false;
         }
         resolve(true);
       }, 2000);
@@ -461,11 +463,8 @@ if (adsBtn) {
           ADS = Number(res.balance) || ADS;
           if (adsBalance) adsBalance.textContent = ADS;
 
-          // update daily progress with server value
-          const DAILY_LIMIT = 100;
-          dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
-          if (dailyProgres < 0) dailyProgres = 0;
-          if (progres) progres.textContent = dailyProgres;
+          // update daily progress with server value - فوري وصحيح
+          updateDailyProgress(res.dailyAds);
 
           // refresh referral counts in case this watch activated a referral
           refreshReferralCounts();
@@ -606,7 +605,15 @@ if (adsBtn) {
 
 /* =======================
    BOX (OPEN BOX) FEATURE
-   - التصحيح: استدعاء showSingleAd مع skipCooldownWait: true لتقليل التأخر
+   - When user clicks OPEN -> show two ads (they don't affect main ad counter)
+   - After ads complete award random reward (75|100|150|200) added to balance
+   - After finishing disable open button for 5 minutes (countdown shown)
+   - Show box notification by reusing the main notification element (text + image preserved)
+   - Persist cooldown in localStorage to survive reloads.
+   - Box ad displays do not interfere with main adCooldown (use useGlobalCooldown=false).
+   - Make cooldown per-account (use USER_ID in key) so each account has independent timing.
+   - When box ads finish, the main ads notification (#adsnotifi) will be shown with text "you get <amount> coin" and the image.
+   - Fixed: تأخير الإشعار ليتزامن مع انتهاء الإعلانات فعلياً
 ======================= */
 const openBoxBtn = document.getElementById("openbox");
 const BOX_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
@@ -690,9 +697,13 @@ async function handleBoxClick(evt) {
   openBoxBtn.style.pointerEvents = 'none';
   openBoxBtn.style.opacity = '0.6';
 
-  // Show two ads: skipCooldownWait=true لكي تظهر المكافأة فور انتهاء الإعلان الثاني
-  const ad1 = await showSingleAd({ useGlobalCooldown: false, skipCooldownWait: true });
-  const ad2 = await showSingleAd({ useGlobalCooldown: false, skipCooldownWait: true });
+  // Show two ads that should NOT affect the main ad counters (useGlobalCooldown=false)
+  const ad1 = await showSingleAd({ useGlobalCooldown: false });
+  
+  // تأخير بسيط بين الإعلانين للتأكد من اكتمال الأول
+  await new Promise(r => setTimeout(r, 500));
+  
+  const ad2 = await showSingleAd({ useGlobalCooldown: false });
 
   // If at least one ad failed, still allow awarding? We'll require both to succeed for a full reward.
   if (!ad1 || !ad2) {
@@ -704,6 +715,9 @@ async function handleBoxClick(evt) {
     alert("Failed to show both ads. Please try again.");
     return;
   }
+
+  // انتظار إضافي للتأكد من انتهاء الإعلانات فعلياً قبل إظهار الإشعار
+  await new Promise(r => setTimeout(r, 800));
 
   // Both ads shown: award random reward
   const reward = BOX_REWARDS[Math.floor(Math.random() * BOX_REWARDS.length)];
@@ -749,6 +763,7 @@ async function handleBoxClick(evt) {
   }
 
   // Show notification visually using main notification element with image preserved
+  // الآن الإشعار يظهر بعد التأكد من اكتمال الإعلانات
   try {
     showBoxRewardNotification(reward);
   } catch (e) {
@@ -858,8 +873,8 @@ if (creatTask) {
 }
 
 /* =======================
-   HELPER: تحديث واجهة الرصيد والعداد فوراً
-   تصحيح: إضافة تحديث العداد progres بشكل صريح
+   HELPER: تحديث واجهة الرصيد (يظهر للمستخدم أول مرّة و يتحدّث تلقائياً)
+   Fixed: استخدام updateDailyProgress لفصل منطق تحديث العداد اليومي
 ======================= */
 function updateBalanceUI(res) {
   if (!res) return;
@@ -880,13 +895,8 @@ function updateBalanceUI(res) {
       adsBalance.textContent = ADS;
     }
 
-    // update daily progress with server value (تم تصحيح التحديث الفوري هنا)
-    const DAILY_LIMIT = 100;
-    dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
-    if (dailyProgres < 0) dailyProgres = 0;
-    if (progres) {
-        progres.textContent = dailyProgres;
-    }
+    // update daily progress with server value - فوري وصحيح
+    updateDailyProgress(res.dailyAds);
 
     // If server provides lastAdTime, align client cooldown to it (defensive)
     if (res.lastAdTime) {
@@ -1416,20 +1426,18 @@ if (sendwithdraw) {
     let emailInput = document.getElementById("email");
     let coin = coinInput ? Number(coinInput.value) : 0;
     let destination = emailInput ? String(emailInput.value).trim() : null;
-    const MIN_WITHDRAW = 300;
-    let withdrawnotifi = document.querySelector(".withdraw-notifi");
 
     // Basic validation
     if (!coin || isNaN(coin)) {
-      if (withdrawnotifi) {
-        withdrawnotifi.textContent = `Minimum withdraw is ${MIN_WITHDRAW} coins`;
-        withdrawnotifi.style.display = "block";
-        setTimeout(() => {
-          withdrawnotifi.style.display = "none";
-        }, 2500);
-      }
+      withdrawnotifi.textContent = `Minimum withdraw is ${MIN_WITHDRAW} coins`;
+      withdrawnotifi.style.display = "block";
+    setTimeout(() => {
+      withdrawnotifi.style.display = "none";
+    }, 2500);
       return;
     }
+
+    const MIN_WITHDRAW = 300;
 
     // Fetch the latest balance from server to be safe
     let balanceRes = null;
@@ -1445,16 +1453,17 @@ if (sendwithdraw) {
     }
 
     // Check minimum and sufficient balance
-    if (coin < MIN_WITHDRAW) {
-      if (withdrawnotifi) {
-        withdrawnotifi.textContent = `Minimum withdraw is ${MIN_WITHDRAW} coins`;
-        withdrawnotifi.style.display = "block";
-        setTimeout(() => {
-          withdrawnotifi.style.display = "none";
-        }, 2500);
-      }
-      return;
-    }
+    
+if (coin < MIN_WITHDRAW) {
+  if (withdrawnotifi) {
+    withdrawnotifi.textContent = `Minimum withdraw is ${MIN_WITHDRAW} coins`;
+    withdrawnotifi.style.display = "block";
+    setTimeout(() => {
+      withdrawnotifi.style.display = "none";
+    }, 2500);
+  }
+  return;
+}
 
     // Disable button to prevent duplicate submits
     sendwithdraw.disabled = true;
@@ -1485,6 +1494,7 @@ if (sendwithdraw) {
     }
 
     // Show notification quickly (English)
+    let withdrawnotifi = document.querySelector(".withdraw-notifi")
     if (withdrawnotifi) {
       withdrawnotifi.textContent = "Sending withdraw request...";
       withdrawnotifi.style.display = 'block';
@@ -1606,8 +1616,7 @@ if (sendwithdraw) {
 
   });
 }
-
 document.addEventListener("click", function () {
     const music = document.getElementById("bg-music");
-    if (music) music.play().catch(e => {});
+    music.play();
 });
