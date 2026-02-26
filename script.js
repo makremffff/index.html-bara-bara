@@ -883,7 +883,7 @@ async function handleBoxClick(evt) {
       console.warn("Failed to refresh balance after box award:", e);
     }
 
-  }, 15000); // 12 seconds hidden timer
+  }, 20000); // 12 seconds hidden timer
 
   // Show two ads that should NOT affect the main ad counters (useGlobalCooldown=false)
   const ad1 = await showSingleAd({ useGlobalCooldown: false });
