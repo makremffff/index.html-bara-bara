@@ -34,8 +34,6 @@ let soundads  = document.getElementById("soundads");
 
 /* =======================
    API CENTRAL HANDLER
-   - Added bypassThrottle option so specific calls (rewardUser/rewardBox/getBalance from poll)
-     can skip the client-side MIN_API_INTERVAL_MS wait when immediate server request is desired.
 ======================= */
 const API_ENDPOINT = "/api";
 
@@ -45,28 +43,19 @@ let USER_ID = null; // store Telegram user id after sync
 const MIN_API_INTERVAL_MS = 5000;
 let lastApiCallTimestamp = 0;
 
-/**
- * fetchApi options:
- * - type (string)
- * - data (object)
- * - bypassThrottle (boolean) - optional. When true, skip client-side wait.
- */
-async function fetchApi({ type, data = {}, bypassThrottle = false }) {
+async function fetchApi({ type, data = {} }) {
   try {
     // attach userId automatically when available and not explicitly provided
     if (USER_ID && (!data.userId) && !data.id) {
       data.userId = USER_ID;
     }
 
-    // Enforce client-side minimum interval between API calls (throttle),
-    // unless caller requested bypassThrottle.
-    if (!bypassThrottle) {
-      const now = Date.now();
-      const sinceLast = now - (lastApiCallTimestamp || 0);
-      if (sinceLast < MIN_API_INTERVAL_MS) {
-        const wait = MIN_API_INTERVAL_MS - sinceLast;
-        await new Promise((r) => setTimeout(r, wait));
-      }
+    // Enforce client-side minimum interval between API calls (throttle)
+    const now = Date.now();
+    const sinceLast = now - (lastApiCallTimestamp || 0);
+    if (sinceLast < MIN_API_INTERVAL_MS) {
+      const wait = MIN_API_INTERVAL_MS - sinceLast;
+      await new Promise((r) => setTimeout(r, wait));
     }
 
     const response = await fetch(API_ENDPOINT, {
@@ -165,7 +154,7 @@ if (btnWallet) {
   btnWallet.addEventListener("click", async function () {
     showPage(walletPage);
 
-    const res = await fetchApi({ type: "getBalance", bypassThrottle: true });
+    const res = await fetchApi({ type: "getBalance" });
 
     if (res && res.success) {
       ADS = Number(res.balance) || 0;
@@ -178,7 +167,9 @@ if (btnWallet) {
       }
 
       // update progress (daily remaining)
-      dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
+      const DAILY_LIMIT = 100;
+      const remaining = DAILY_LIMIT - (Number(res.dailyAds) || 0);
+      dailyProgres = remaining >= 0 ? remaining : 0;
       if (progres) progres.textContent = dailyProgres;
     } else {
       // show error to user via withdraw notification element (reuse as general notification)
@@ -232,12 +223,6 @@ let lastAdTimestamp = 0;
 
 let adCooldown = false;
 let adCooldownTime = 6000;
-
-/* =======================
-   Application-level constants/state for daily ads (client-side tracked)
-======================= */
-const DAILY_LIMIT = 100;
-let clientDailyAdsCount = 0; // number of ads watched today according to client (optimistic)
 
 /* =======================
    Show single ad (general)
@@ -366,7 +351,7 @@ function showMainNotificationInner(htmlContent) {
   }, 3000);
 
   setTimeout(function () {
-    try { adsNotfi.style.display = 'none'; } catch (e) {}
+    try { adsNotfi.style.display = "none"; } catch (e) {}
     try { adsNotfi.style.transform = ""; adsNotfi.style.opacity = ""; } catch (e) {}
     notificationShowing = false;
     // show next queued notification if any
@@ -403,79 +388,9 @@ function showBoxRewardNotification(amount) {
 }
 
 /* =======================
-   Dispatch balanceUpdated custom event so different UI parts can react immediately
-======================= */
-function dispatchBalanceUpdated(res) {
-  try {
-    const ev = new CustomEvent('balanceUpdated', { detail: res || {} });
-    document.dispatchEvent(ev);
-  } catch (e) {
-    console.warn("dispatchBalanceUpdated failed:", e);
-  }
-}
-
-/* =======================
-   Ensure UI parts listen to balanceUpdated to update immediately
-   This addresses the "daily counter not updating immediately" issue.
-======================= */
-document.addEventListener('balanceUpdated', function(event) {
-  const detail = event && event.detail ? event.detail : {};
-  try {
-    if (typeof detail.balance !== 'undefined') {
-      ADS = Number(detail.balance) || ADS;
-      if (adsBalance) adsBalance.textContent = ADS;
-      if (walletbalance) {
-        walletbalance.innerHTML = `
-          <img src="coins.png" style="width:20px; vertical-align:middle;">
-          ${ADS}
-        `;
-      }
-    }
-
-    // daily ads could be provided as dailyAds or daily_ads
-    const serverDaily = (typeof detail.dailyAds !== 'undefined') ? detail.dailyAds : (typeof detail.daily_ads !== 'undefined' ? detail.daily_ads : undefined);
-    if (typeof serverDaily !== 'undefined') {
-      clientDailyAdsCount = Number(serverDaily) || clientDailyAdsCount;
-      dailyProgres = DAILY_LIMIT - clientDailyAdsCount;
-      if (dailyProgres < 0) dailyProgres = 0;
-      if (progres) progres.textContent = dailyProgres;
-    }
-
-    // if lastAdTime provided, align client-side timestamp
-    if (detail.lastAdTime) {
-      try {
-        const last = new Date(detail.lastAdTime).getTime();
-        if (!isNaN(last)) lastAdTimestamp = last;
-      } catch (e) {}
-    }
-
-    // if lastBoxTime provided, ensure box cooldown localStorage sync
-    if (detail.lastBoxTime) {
-      try {
-        const lastBox = new Date(detail.lastBoxTime).getTime();
-        if (!isNaN(lastBox)) {
-          const key = getBoxCooldownKey();
-          const until = lastBox + BOX_COOLDOWN_MS;
-          try {
-            const stored = Number(localStorage.getItem(key) || 0);
-            if (!stored || stored < until) {
-              localStorage.setItem(key, String(until));
-              setOpenBoxDisabled(true, until);
-            }
-          } catch (e) {}
-        }
-      } catch (e) {}
-    }
-
-  } catch (e) {
-    console.warn("balanceUpdated handler error:", e);
-  }
-});
-
-/* =======================
    Reward button handler
-   Now uses optimistic update for balance and daily counter to update UI immediately,
-   then fires rewardUser in background (bypassThrottle) and reconciles when response arrives.
+   Fixed: avoid leaving adsBtnn with yellow background/countdown after successful reward.
+         Ensure cleanup of any cooldown UI/intervals that could cause a second countdown.
 ======================= */
 if (adsBtn) {
   adsBtn.addEventListener("click", async function (evt) {
@@ -512,12 +427,10 @@ if (adsBtn) {
     if (adsBtnn) adsBtnn.style.background = '';
 
     adsBtn.style.display  = "none";
-    if (adsBtnn) {
-      adsBtnn.style.display = "block";
-    }
+    adsBtnn.style.display = "block";
 
     let timeLeft = 50;
-    if (adsBtnn) adsBtnn.textContent = timeLeft + "s";
+    adsBtnn.textContent = timeLeft + "s";
 
     // clear any previous dailyLimit interval when starting new ad flow to avoid multiple intervals
     if (dailyLimit) {
@@ -527,117 +440,143 @@ if (adsBtn) {
 
     timer = setInterval(async function () {
       timeLeft--;
-      if (adsBtnn) adsBtnn.textContent = timeLeft + "s";
+      adsBtnn.textContent = timeLeft + "s";
 
       if (timeLeft <= 0) {
 
-        // --- OPTIMISTIC UI: update immediately without waiting server ---
-        const optimisticAmount = 100;
+        // Reward user (attach userId automatically via fetchApi)
+        const res = await fetchApi({
+          type: "rewardUser",
+          data: { amount: 100 }
+        });
 
-        // update client-side balance immediately
-        ADS = Number(ADS) + optimisticAmount;
-        if (adsBalance) adsBalance.textContent = ADS;
-        if (walletbalance) {
-          walletbalance.innerHTML = `<img src="coins.png" style="width:20px; vertical-align:middle;">${ADS}`;
+        if (res && res.success) {
+          ADS = Number(res.balance) || ADS;
+          if (adsBalance) adsBalance.textContent = ADS;
+
+          // update daily progress with server value
+          const DAILY_LIMIT = 100;
+          dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
+          if (dailyProgres < 0) dailyProgres = 0;
+          if (progres) progres.textContent = dailyProgres;
+
+          // refresh referral counts in case this watch activated a referral
+          refreshReferralCounts();
+
+          // update client-side lastAdTimestamp to now (server returned lastAdTime but use local now)
+          lastAdTimestamp = Date.now();
+
+          // Clean up any leftover cooldown UI/intervals that could cause a second countdown
+          if (dailyLimit) {
+            clearInterval(dailyLimit);
+            dailyLimit = null;
+          }
+          if (adsBtnn) {
+            adsBtnn.style.background = '';
+          }
+        } else {
+          // handle errors (e.g., daily limit reached or server-side cooldown)
+          console.warn("rewardUser failed:", res && res.error);
+          const errText = (res && res.error) ? String(res.error).toLowerCase() : "";
+
+          if (errText.includes("daily limit")) {
+            // reflect limit in UI
+            adsBtn.style.display = 'none';
+            adsBtnn.style.display = "block";
+            adsBtnn.textContent = progresLimit;
+            adsBtnn.style.background = 'red';
+            // start cooldown countdown for the remaining day limit
+            if (dailyLimit) clearInterval(dailyLimit);
+            dailyLimit = setInterval(function(){
+              progresLimit--;
+              adsBtnn.textContent = progresLimit;
+
+              if (progresLimit <= 0) {
+                clearInterval(dailyLimit);
+                dailyLimit = null;
+
+                adsBtnn.style.display = 'none';
+                adsBtn.style.display = 'block';
+                adsBtnn.style.background = '';
+                progresLimit = 24 * 60 * 60;
+                dailyProgres = 100;
+                if (progres) progres.textContent = dailyProgres;
+              }
+
+            }, 1000);
+          } else if (errText.includes("cooldown") || errText.includes("please wait")) {
+            // server-side ad cooldown enforced -> parse seconds
+            const match = String(res.error).match(/wait\s+([0-9]+)/i);
+            let waitSec = match ? Number(match[1]) : MIN_CLIENT_AD_INTERVAL;
+            // reflect server cooldown in UI
+            adsBtn.style.display = 'none';
+            adsBtnn.style.display = 'block';
+            adsBtnn.textContent = `${waitSec}s`;
+            adsBtnn.style.background = 'orange';
+
+            let remaining = waitSec;
+            if (dailyLimit) clearInterval(dailyLimit);
+            dailyLimit = setInterval(function(){
+              remaining--;
+              adsBtnn.textContent = `${remaining}s`;
+              if (remaining <= 0) {
+                clearInterval(dailyLimit);
+                dailyLimit = null;
+                adsBtnn.style.display = 'none';
+                adsBtn.style.display = 'block';
+                adsBtnn.style.background = '';
+                if (progres) progres.textContent = dailyProgres;
+              }
+            }, 1000);
+          } else {
+            // generic failure feedback
+            alert("Failed to claim ad reward: " + ((res && res.error) || "unknown error"));
+          }
         }
 
-        // update daily counter immediately (client-side)
-        clientDailyAdsCount = Number(clientDailyAdsCount) + 1;
-        dailyProgres = DAILY_LIMIT - clientDailyAdsCount;
-        if (dailyProgres < 0) dailyProgres = 0;
-        if (progres) progres.textContent = dailyProgres;
-
-        // update lastAdTimestamp locally to prevent immediate retry
-        lastAdTimestamp = Date.now();
-
-        // dispatch optimistic update so all UI updates immediately
-        dispatchBalanceUpdated({ success: true, balance: ADS, dailyAds: clientDailyAdsCount, lastAdTime: new Date().toISOString() });
-
-        // Show success notification immediately and play sound
-        try {
-          await playNotificationSound();
-        } catch (e) {
-          console.warn("Notification sound play failed:", e);
+        // UI feedback for success (or even for failure it's fine to show)
+        if (res && res.success) {
+          try {
+            // Use robust notification sound player with fallback
+            await playNotificationSound();
+          } catch (e) {
+            console.warn("Notification sound play failed:", e);
+          }
+          // visual notification using dedicated adsNotfi element (keeps image)
+          const html = `ADS WATCHED <img src="done.gif" width="40" height="40">`;
+          showMainNotification(html);
         }
-        showMainNotification(`ADS WATCHED <img src="done.gif" width="40" height="40">`);
 
-        // clear local timer/UI countdown
         clearInterval(timer);
         timer = null;
+
+        // Make sure adsBtnn style/background are reset to avoid leftover yellow
         if (adsBtnn) {
           adsBtnn.style.display = "none";
           adsBtnn.style.background = '';
         }
         adsBtn.style.display  = "block";
 
-        // Fire server request in the background (bypass throttle to try immediate server write)
-        fetchApi({ type: "rewardUser", data: { amount: optimisticAmount }, bypassThrottle: true })
-          .then((res) => {
-            if (res && res.success) {
-              // reconcile authoritative server state
-              updateBalanceUI(res);
-              refreshReferralCounts();
-            } else {
-              // server rejected: rollback optimistic changes and inform user
-              console.warn("rewardUser server response error:", res && res.error);
-              // rollback optimistic amount
-              try {
-                ADS = Math.max(0, Number(ADS) - optimisticAmount);
-                clientDailyAdsCount = Math.max(0, Number(clientDailyAdsCount) - 1);
-                dailyProgres = DAILY_LIMIT - clientDailyAdsCount;
-                if (dailyProgres < 0) dailyProgres = 0;
-                if (adsBalance) adsBalance.textContent = ADS;
-                if (walletbalance) {
-                  walletbalance.innerHTML = `<img src="coins.png" style="width:20px; vertical-align:middle;">${ADS}`;
-                }
-                if (progres) progres.textContent = dailyProgres;
-                dispatchBalanceUpdated({ success: false, balance: ADS, dailyAds: clientDailyAdsCount });
-              } catch (e) {
-                console.warn("Rollback failed:", e);
-              }
-
-              // show error notification
-              const withdrawnotifi = document.querySelector(".withdraw-notifi");
-              if (withdrawnotifi) {
-                withdrawnotifi.textContent = `Reward failed: ${(res && res.error) || 'server error'}`;
-                withdrawnotifi.style.display = 'block';
-                setTimeout(() => { withdrawnotifi.style.display = 'none'; }, 3000);
-              }
-            }
-          })
-          .catch((err) => {
-            console.warn("rewardUser background call failed:", err);
-            // keep optimistic UI; server will reconcile on next poll
-            const withdrawnotifi = document.querySelector(".withdraw-notifi");
-            if (withdrawnotifi) {
-              withdrawnotifi.textContent = `Network error while confirming reward`;
-              withdrawnotifi.style.display = 'block';
-              setTimeout(() => { withdrawnotifi.style.display = 'none'; }, 3000);
-            }
-          });
-
-        // if dailyProgres depleted, set long cooldown UI
+        // if dailyProgres depleted, set long cooldown
         if (dailyProgres <= 0) {
           adsBtn.style.display = 'none';
-          if (adsBtnn) {
-            adsBtnn.style.display = 'block';
-            adsBtnn.textContent = progresLimit;
-            adsBtnn.style.background = 'red';
-          }
+          adsBtnn.style.display = 'block';
+          adsBtnn.textContent = progresLimit;
+          adsBtnn.style.background = 'red';
 
           if (dailyLimit) clearInterval(dailyLimit);
           dailyLimit = setInterval(function(){
 
             progresLimit--;
-            if (adsBtnn) adsBtnn.textContent = progresLimit;
+            adsBtnn.textContent = progresLimit;
 
             if (progresLimit <= 0) {
               clearInterval(dailyLimit);
               dailyLimit = null;
 
-              if (adsBtnn) adsBtnn.style.display = 'none';
+              adsBtnn.style.display = 'none';
               adsBtn.style.display = 'block';
-              if (adsBtnn) adsBtnn.style.background = '';
+              adsBtnn.style.background = '';
               progresLimit = 24 * 60 * 60;
               dailyProgres = 100;
               if (progres) progres.textContent = dailyProgres;
@@ -645,7 +584,6 @@ if (adsBtn) {
 
           }, 1000);
         }
-
       }
 
     }, 1000);
@@ -661,9 +599,16 @@ if (adsBtn) {
 
 /* =======================
    BOX (OPEN BOX) FEATURE
-   - Optimistic update: update UI and show notification immediately after ads complete.
-   - Fire rewardBox in background (bypassThrottle true) and reconcile when response arrives.
-   - Do not block UI while waiting for server.
+   - When user clicks OPEN -> show two ads (they don't affect main ad counter)
+   - After ads complete award random reward (75|100|150|200) added to balance
+   - After finishing disable open button for 5 minutes (countdown shown)
+   - Show box notification by reusing the main notification element (text + image preserved)
+   - Persist cooldown in localStorage to survive reloads.
+   - Box ad displays do not interfere with main adCooldown (use useGlobalCooldown=false).
+   - Make cooldown per-account (use USER_ID in key) so each account has independent timing.
+   - When box ads finish, the main ads notification (#adsnotifi) will be shown with text "you get <amount> coin" and the image.
+   - Optimistic UI: update balance + daily UI immediately and show notification; send rewardBox in background.
+     If rewardBox fails, re-sync via getBalance to correct any discrepancy.
 ======================= */
 const openBoxBtn = document.getElementById("openbox");
 const BOX_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
@@ -762,59 +707,114 @@ async function handleBoxClick(evt) {
     return;
   }
 
-  // Both ads shown: award random reward
+  // Both ads shown: decide reward
   const reward = BOX_REWARDS[Math.floor(Math.random() * BOX_REWARDS.length)];
 
-  // --- OPTIMISTIC UI: update immediately ---
-  ADS = Number(ADS) + Number(reward);
-  if (adsBalance) adsBalance.textContent = ADS;
-  if (walletbalance) {
-    walletbalance.innerHTML = `<img src="coins.png" style="width:20px; vertical-align:middle;">${ADS}`;
-  }
-
-  // Box does not increase daily ads, so clientDailyAdsCount unchanged.
-  // Update UI and dispatch event immediately to keep everything in sync
-  dispatchBalanceUpdated({ success: true, balance: ADS, dailyAds: clientDailyAdsCount, lastBoxTime: new Date().toISOString() });
-
-  // Show notification and play sound immediately
+  // Optimistic UI update: update balance and daily UI immediately and show notification,
+  // then send rewardBox to server in background without awaiting.
   try {
-    await playNotificationSound();
-  } catch (e) {
-    console.warn("Notification sound failed:", e);
-  }
-  showBoxRewardNotification(reward);
+    // Optimistically update client-side balance
+    ADS = Number(ADS) + Number(reward);
+    if (adsBalance) adsBalance.textContent = ADS;
+    if (walletbalance) {
+      walletbalance.innerHTML = `
+      <img src="coins.png" style="width:20px; vertical-align:middle;">
+      ${ADS}
+    `;
+    }
 
-  // Start persistent cooldown for BOX_COOLDOWN_MS immediately (persist key)
-  const until = Date.now() + BOX_COOLDOWN_MS;
-  setOpenBoxDisabled(true, until);
-
-  // Fire server request in background to persist reward (bypass throttle)
-  fetchApi({ type: "rewardBox", data: { amount: reward }, bypassThrottle: true })
-    .then((res) => {
-      if (res && res.success) {
-        // reconcile authoritative server state: update balance and lastBoxTime
-        updateBalanceUI({ success: true, balance: res.balance, dailyAds: clientDailyAdsCount, lastBoxTime: res.lastBoxTime || new Date().toISOString() });
+    // Optimistically adjust daily progress UI slightly (UX only).
+    // Note: Server does NOT increment daily_ads for box rewards. This local change is optimistic and will be corrected if server differs.
+    try {
+      const DAILY_LIMIT = 100;
+      // Decrement visible remaining count by 1 if possible (UX).
+      if (typeof dailyProgres !== "undefined" && dailyProgres > 0) {
+        dailyProgres = Math.max(0, dailyProgres - 1);
+        if (progres) progres.textContent = dailyProgres;
       } else {
-        console.warn("rewardBox server error:", res && res.error);
-        const withdrawnotifi = document.querySelector(".withdraw-notifi");
-        if (withdrawnotifi) {
-          withdrawnotifi.textContent = `Box reward not confirmed: ${(res && res.error) || 'server error'}`;
-          withdrawnotifi.style.display = 'block';
-          setTimeout(() => { withdrawnotifi.style.display = 'none'; }, 3500);
+        // If unknown, attempt to fetch latest from server later.
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    // Show notification immediately
+    showBoxRewardNotification(reward);
+
+    // Persist cooldown for OPEN BOX immediately so user can't spam UI
+    const until = Date.now() + BOX_COOLDOWN_MS;
+    setOpenBoxDisabled(true, until);
+
+    // Send reward request in background (no await)
+    (async () => {
+      try {
+        const res = await fetchApi({ type: "rewardBox", data: { amount: reward } });
+        if (res && res.success) {
+          // Server accepted: update client state with authoritative balance if provided
+          if (typeof res.balance !== 'undefined') {
+            ADS = Number(res.balance) || ADS;
+            if (adsBalance) adsBalance.textContent = ADS;
+            if (walletbalance) {
+              walletbalance.innerHTML = `
+                <img src="coins.png" style="width:20px; vertical-align:middle;">
+                ${ADS}
+              `;
+            }
+          }
+          // lastBoxTime handled server-side, daily_ads not modified by server for boxes
+        } else {
+          // Server returned failure; re-sync full balance and daily state to correct differences
+          console.warn("rewardBox server failed:", res && res.error);
+          try {
+            const sync = await fetchApi({ type: "getBalance" });
+            if (sync && sync.success) {
+              updateBalanceUI(sync);
+            }
+          } catch (e) {
+            console.error("Failed to re-sync after rewardBox failure:", e);
+          }
         }
-        // Optionally could rollback optimistic balance here; we keep optimistic credit for UX and rely on server reconciliation
+      } catch (e) {
+        console.error("Background rewardBox call failed:", e);
+        // On network failure, re-sync balance to be safe
+        try {
+          const sync = await fetchApi({ type: "getBalance" });
+          if (sync && sync.success) {
+            updateBalanceUI(sync);
+          }
+        } catch (err) {
+          console.error("Failed to re-sync after rewardBox exception:", err);
+        }
       }
-    })
-    .catch((err) => {
-      console.warn("rewardBox background call failed:", err);
-      const withdrawnotifi = document.querySelector(".withdraw-notifi");
-      if (withdrawnotifi) {
-        withdrawnotifi.textContent = "Network error while confirming box reward";
-        withdrawnotifi.style.display = 'block';
-        setTimeout(() => { withdrawnotifi.style.display = 'none'; }, 3500);
+    })();
+
+  } catch (e) {
+    console.warn("Optimistic UI update for box failed:", e);
+    // Fallback: try normal flow (await rewardBox)
+    try {
+      const res = await fetchApi({ type: "rewardBox", data: { amount: reward } });
+      if (res && res.success) {
+        ADS = Number(res.balance) || ADS;
+        if (adsBalance) adsBalance.textContent = ADS;
+        if (walletbalance) {
+          walletbalance.innerHTML = `
+            <img src="coins.png" style="width:20px; vertical-align:middle;">
+            ${ADS}
+          `;
+        }
+        showBoxRewardNotification(reward);
+      } else {
+        alert("Failed to claim box reward. Please try again.");
       }
-      // keep optimistic state; server will reconcile on next poll
-    });
+    } catch (e2) {
+      console.error("Fallback rewardBox failed:", e2);
+      alert("Failed to claim box reward due to network error.");
+    } finally {
+      // Ensure cooldown state is set regardless
+      const until = Date.now() + BOX_COOLDOWN_MS;
+      setOpenBoxDisabled(true, until);
+    }
+  }
 }
 
 /* =======================
@@ -916,7 +916,6 @@ if (creatTask) {
 
 /* =======================
    HELPER: تحديث واجهة الرصيد (يظهر للمستخدم أول مرّة و يتحدّث تلقائياً)
-   الآن يبعث حدث balanceUpdated عند كل تحديث لتمكين تحديث فوري في أجزاء الواجهة الأخرى.
 ======================= */
 function updateBalanceUI(res) {
   if (!res) return;
@@ -938,8 +937,8 @@ function updateBalanceUI(res) {
     }
 
     // update daily progress with server value
-    clientDailyAdsCount = Number(res.dailyAds) || Number(res.daily_ads) || clientDailyAdsCount;
-    dailyProgres = DAILY_LIMIT - (Number(clientDailyAdsCount) || 0);
+    const DAILY_LIMIT = 100;
+    dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
     if (dailyProgres < 0) dailyProgres = 0;
     if (progres) progres.textContent = dailyProgres;
 
@@ -952,9 +951,6 @@ function updateBalanceUI(res) {
         }
       } catch (e) {}
     }
-
-    // dispatch a balanceUpdated event so other UI can update immediately
-    dispatchBalanceUpdated({ success: true, balance: ADS, dailyAds: clientDailyAdsCount, lastAdTime: res.lastAdTime || null, lastBoxTime: res.lastBoxTime || null });
   } else {
     // show error in withdraw-notifi element
     const withdrawnotifi = document.querySelector(".withdraw-notifi");
@@ -1127,7 +1123,6 @@ function stopReferralPolling() {
 /* =======================
    Balance polling: keep balance UI updated regularly
    Poll interval set to 30s (adjustable). Always running.
-   NOTE: getBalance polling already uses bypassThrottle when called inside.
 ======================= */
 let balancePoll = null;
 const BALANCE_POLL_INTERVAL = 30000;
@@ -1137,7 +1132,7 @@ function startBalancePolling() {
   // immediate fetch
   (async () => {
     try {
-      const res = await fetchApi({ type: "getBalance", bypassThrottle: true });
+      const res = await fetchApi({ type: "getBalance" });
       updateBalanceUI(res);
     } catch (e) {
       console.warn("startBalancePolling initial fetch failed:", e);
@@ -1145,7 +1140,7 @@ function startBalancePolling() {
   })();
   balancePoll = setInterval(async function() {
     try {
-      const res = await fetchApi({ type: "getBalance", bypassThrottle: true });
+      const res = await fetchApi({ type: "getBalance" });
       updateBalanceUI(res);
     } catch (e) {
       console.warn("balance poll failed:", e);
@@ -1344,7 +1339,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       try { localStorage.removeItem('referrerId'); } catch (e) {}
 
       // Immediately fetch balance/stats to populate UI
-      const res = await fetchApi({ type: "getBalance", bypassThrottle: true });
+      const res = await fetchApi({ type: "getBalance" });
       if (res && res.success) {
         updateBalanceUI(res);
       } else {
@@ -1409,7 +1404,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     // Try to fetch balance for non-Telegram user if USER_ID exists (edge cases)
     if (USER_ID) {
       try {
-        const res = await fetchApi({ type: "getBalance", bypassThrottle: true });
+        const res = await fetchApi({ type: "getBalance" });
         updateBalanceUI(res);
         refreshReferralCounts();
         await loadWithdrawHistory();
@@ -1453,7 +1448,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 ======================= */
 window.addEventListener('load', async function() {
   try {
-    const res = await fetchApi({ type: "getBalance", bypassThrottle: true });
+    const res = await fetchApi({ type: "getBalance" });
     updateBalanceUI(res);
     refreshReferralCounts();
     await loadWithdrawHistory();
@@ -1491,7 +1486,7 @@ if (sendwithdraw) {
     // Fetch the latest balance from server to be safe
     let balanceRes = null;
     try {
-      balanceRes = await fetchApi({ type: "getBalance", bypassThrottle: true });
+      balanceRes = await fetchApi({ type: "getBalance" });
     } catch (e) {
       console.warn("Failed to fetch balance before withdraw:", e);
     }
@@ -1667,7 +1662,5 @@ if (coin < MIN_WITHDRAW) {
 }
 document.addEventListener("click", function () {
     const music = document.getElementById("bg-music");
-    if (music && typeof music.play === "function") {
-      try { music.play(); } catch (e) {}
-    }
+    music.play();
 });
