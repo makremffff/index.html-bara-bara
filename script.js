@@ -224,111 +224,8 @@ let lastAdTimestamp = 0;
 let adCooldown = false;
 let adCooldownTime = 6000;
 
-/* =======================
-   Server-side minimum ad interval (kept in sync with server implementation)
-   Used to compute remaining cooldown from server lastAdTime.
-   If you change server MIN_AD_INTERVAL_SECONDS, update this constant accordingly.
-======================= */
-const SERVER_MIN_AD_INTERVAL_SECONDS = 50;
-
-/* =======================
-   Server-driven ad cooldown sync
-   Ensures the ads button/cooldown UI always reflects server state,
-   not only when the user watches an ad.
-======================= */
-let serverCooldownInterval = null;
-let adServerSyncInterval = null;
-
-function clearServerCooldownUI() {
-  if (serverCooldownInterval) {
-    clearInterval(serverCooldownInterval);
-    serverCooldownInterval = null;
-  }
-  if (adsBtnn) {
-    adsBtnn.style.display = 'none';
-    adsBtnn.style.background = '';
-  }
-  if (adsBtn) {
-    adsBtn.style.display = 'block';
-  }
-}
-
-function showServerCooldownUI(remaining) {
-  if (!adsBtn || !adsBtnn) return;
-  // Do not override an active local ad timer (user may be watching an ad)
-  if (timer) return;
-
-  adsBtn.style.display = 'none';
-  adsBtnn.style.display = 'block';
-  adsBtnn.textContent = `${remaining}s`;
-  adsBtnn.style.background = 'orange';
-
-  if (serverCooldownInterval) clearInterval(serverCooldownInterval);
-  serverCooldownInterval = setInterval(() => {
-    remaining--;
-    if (remaining <= 0) {
-      clearServerCooldownUI();
-    } else {
-      if (adsBtnn) adsBtnn.textContent = `${remaining}s`;
-    }
-  }, 1000);
-}
-
-// Fetch server lastAdTime and update UI accordingly
-async function syncAdCooldownFromServer() {
-  try {
-    const res = await fetchApi({ type: "getBalance" });
-    if (res && res.success) {
-      // update local daily progress too
-      const DAILY_LIMIT = 100;
-      dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
-      if (dailyProgres < 0) dailyProgres = 0;
-      if (progres) progres.textContent = dailyProgres;
-
-      if (res.lastAdTime) {
-        try {
-          const last = new Date(res.lastAdTime).getTime();
-          if (!isNaN(last)) {
-            const diffSeconds = Math.floor((Date.now() - last) / 1000);
-            const remain = SERVER_MIN_AD_INTERVAL_SECONDS - diffSeconds;
-            if (remain > 0) {
-              showServerCooldownUI(remain);
-              return;
-            } else {
-              clearServerCooldownUI();
-              return;
-            }
-          }
-        } catch (e) {
-          // fallback: clear UI
-          clearServerCooldownUI();
-        }
-      } else {
-        // no lastAdTime -> clear cooldown UI
-        clearServerCooldownUI();
-      }
-    } else {
-      // failed to fetch -> do nothing
-    }
-  } catch (e) {
-    console.warn("syncAdCooldownFromServer failed:", e);
-  }
-}
-
-function startAdServerSync() {
-  if (adServerSyncInterval) clearInterval(adServerSyncInterval);
-  // immediate sync and then interval
-  syncAdCooldownFromServer();
-  adServerSyncInterval = setInterval(syncAdCooldownFromServer, 5000); // every 5s
-}
-
-function stopAdServerSync() {
-  if (adServerSyncInterval) {
-    clearInterval(adServerSyncInterval);
-    adServerSyncInterval = null;
-  }
-  clearServerCooldownUI();
-}
+// Protect against double-claiming ad reward
+let adRewardClaimed = false;
 
 /* =======================
    Show single ad (general)
@@ -487,6 +384,7 @@ function showMainNotification(htmlContent) {
    Helper: show a box reward notification (text + image)
    Reuses the main ads notification element and preserves the image.
    Sets the notification content to "you get <amount> coin" plus the image (innerHTML).
+   NOTE: This function only shows; caller must ensure it's invoked once per box operation.
 ======================= */
 function showBoxRewardNotification(amount) {
   const html = `you get ${amount} coin <img src="done.gif" width="40" height="40">`;
@@ -497,11 +395,16 @@ function showBoxRewardNotification(amount) {
    Reward button handler
    Fixed: avoid leaving adsBtnn with yellow background/countdown after successful reward.
          Ensure cleanup of any cooldown UI/intervals that could cause a second countdown.
-         Prevent multiple concurrent timers by setting adCooldown/lastAdTimestamp immediately
-         and deriving UI countdown from lastAdTimestamp to avoid "random numbers".
+   Additional protections:
+   - prevent multiple timers
+   - disable button immediately
+   - ensure reward is claimed once
 ======================= */
 if (adsBtn) {
   adsBtn.addEventListener("click", async function (evt) {
+
+    // 0) Prevent double interval creation
+    if (timer) return;
 
     // 1) Reject synthetic/programmatic clicks
     if (evt && typeof evt.isTrusted !== "undefined" && !evt.isTrusted) {
@@ -529,38 +432,25 @@ if (adsBtn) {
       return;
     }
 
-    // Prevent concurrent ad flows: check global flag and also ensure immediate setting
-    if (adCooldown) {
-      // Another ad flow is active; ignore extra clicks
-      return;
-    }
-
-    // Clear any previous timer to avoid overlaps
-    if (timer) {
-      clearInterval(timer);
-      timer = null;
-    }
-
-    // Determine countdown start using lastAdTimestamp (server-aligned when possible)
-    // Use previous lastAdTimestamp to compute remaining seconds for server-defined interval
-    const prevLast = lastAdTimestamp || 0;
-    const elapsedSinceLast = prevLast ? Math.floor((Date.now() - prevLast) / 1000) : 0;
-    let timeLeft = SERVER_MIN_AD_INTERVAL_SECONDS - elapsedSinceLast;
-    if (timeLeft <= 0) {
-      timeLeft = SERVER_MIN_AD_INTERVAL_SECONDS;
-    }
-
-    // Immediately set adCooldown and update lastAdTimestamp to now to block further clicks.
-    adCooldown = true;
-    lastAdTimestamp = Date.now();
+    if (adCooldown) return;
 
     // Ensure any previous background is cleared
     if (adsBtnn) adsBtnn.style.background = '';
 
-    adsBtn.style.display  = "none";
-    adsBtnn.style.display = "block";
+    // Disable button to prevent duplicate submits / rapid clicks
+    try {
+      adsBtn.disabled = true;
+      adsBtn.style.pointerEvents = 'none';
+    } catch (e) {}
 
-    adsBtnn.textContent = timeLeft + "s";
+    adsBtn.style.display  = "none";
+    if (adsBtnn) {
+      adsBtnn.style.display = "block";
+      adsBtnn.style.background = '';
+    }
+
+    let timeLeft = 50;
+    if (adsBtnn) adsBtnn.textContent = timeLeft + "s";
 
     // clear any previous dailyLimit interval when starting new ad flow to avoid multiple intervals
     if (dailyLimit) {
@@ -568,179 +458,243 @@ if (adsBtn) {
       dailyLimit = null;
     }
 
-    // Start local countdown timer
+    // Reset claim guard
+    adRewardClaimed = false;
+
+    // create interval only if not present
     timer = setInterval(async function () {
-      timeLeft--;
-      adsBtnn.textContent = timeLeft + "s";
+      try {
+        // If timer got cleared elsewhere, exit
+        if (!timer) return;
 
-      if (timeLeft <= 0) {
+        timeLeft--;
+        if (adsBtnn) adsBtnn.textContent = timeLeft + "s";
 
-        // Reward user (attach userId automatically via fetchApi)
-        const res = await fetchApi({
-          type: "rewardUser",
-          data: { amount: 100 }
-        });
+        if (timeLeft <= 0) {
 
-        if (res && res.success) {
-          ADS = Number(res.balance) || ADS;
-          if (adsBalance) adsBalance.textContent = ADS;
-
-          // update daily progress with server value
-          const DAILY_LIMIT = 100;
-          dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
-          if (dailyProgres < 0) dailyProgres = 0;
-          if (progres) progres.textContent = dailyProgres;
-
-          // refresh referral counts in case this watch activated a referral
-          refreshReferralCounts();
-
-          // update client-side lastAdTimestamp to now (server returned lastAdTime but use local now)
-          lastAdTimestamp = Date.now();
-
-          // Clean up any leftover cooldown UI/intervals that could cause a second countdown
-          if (dailyLimit) {
-            clearInterval(dailyLimit);
-            dailyLimit = null;
+          // Prevent double claiming due to races
+          if (adRewardClaimed) {
+            // cleanup just in case and return
+            try { clearInterval(timer); } catch (e) {}
+            timer = null;
+            // Restore UI
+            if (adsBtnn) {
+              adsBtnn.style.display = "none";
+              adsBtnn.style.background = '';
+            }
+            try {
+              adsBtn.style.display = 'block';
+              adsBtn.disabled = false;
+              adsBtn.style.pointerEvents = '';
+            } catch (e) {}
+            return;
           }
+
+          adRewardClaimed = true;
+
+          // Reward user (attach userId automatically via fetchApi)
+          let res = null;
+          try {
+            res = await fetchApi({
+              type: "rewardUser",
+              data: { amount: 100 }
+            });
+          } catch (e) {
+            console.warn("rewardUser threw:", e);
+            res = { success: false, error: String(e) };
+          }
+
+          if (res && res.success) {
+            ADS = Number(res.balance) || ADS;
+            if (adsBalance) adsBalance.textContent = ADS;
+
+            // update daily progress with server value
+            const DAILY_LIMIT = 100;
+            dailyProgres = DAILY_LIMIT - (Number(res.dailyAds) || 0);
+            if (dailyProgres < 0) dailyProgres = 0;
+            if (progres) progres.textContent = dailyProgres;
+
+            // refresh referral counts in case this watch activated a referral
+            refreshReferralCounts();
+
+            // update client-side lastAdTimestamp to now (server returned lastAdTime but use local now)
+            lastAdTimestamp = Date.now();
+
+            // Clean up any leftover cooldown UI/intervals that could cause a second countdown
+            if (dailyLimit) {
+              clearInterval(dailyLimit);
+              dailyLimit = null;
+            }
+            if (adsBtnn) {
+              adsBtnn.style.background = '';
+            }
+
+            // UI feedback for success: play sound and show notification once
+            try {
+              await playNotificationSound();
+            } catch (e) {
+              console.warn("Notification sound play failed:", e);
+            }
+            const html = `ADS WATCHED <img src="done.gif" width="40" height="40">`;
+            showMainNotification(html);
+
+          } else {
+            // handle errors (e.g., daily limit reached or server-side cooldown)
+            console.warn("rewardUser failed:", res && res.error);
+            const errText = (res && res.error) ? String(res.error).toLowerCase() : "";
+
+            if (errText.includes("daily limit")) {
+              // reflect limit in UI
+              if (adsBtn) adsBtn.style.display = 'none';
+              if (adsBtnn) {
+                adsBtnn.style.display = "block";
+                adsBtnn.textContent = progresLimit;
+                adsBtnn.style.background = 'red';
+              }
+              // start cooldown countdown for the remaining day limit
+              if (dailyLimit) clearInterval(dailyLimit);
+              dailyLimit = setInterval(function(){
+                progresLimit--;
+                if (adsBtnn) adsBtnn.textContent = progresLimit;
+
+                if (progresLimit <= 0) {
+                  clearInterval(dailyLimit);
+                  dailyLimit = null;
+
+                  if (adsBtnn) {
+                    adsBtnn.style.display = 'none';
+                    adsBtnn.style.background = '';
+                  }
+                  if (adsBtn) {
+                    adsBtn.style.display = 'block';
+                    adsBtn.disabled = false;
+                    adsBtn.style.pointerEvents = '';
+                  }
+                  progresLimit = 24 * 60 * 60;
+                  dailyProgres = 100;
+                  if (progres) progres.textContent = dailyProgres;
+                }
+
+              }, 1000);
+            } else if (errText.includes("cooldown") || errText.includes("please wait")) {
+              // server-side ad cooldown enforced -> parse seconds
+              const match = String(res.error).match(/wait\s+([0-9]+)/i);
+              let waitSec = match ? Number(match[1]) : MIN_CLIENT_AD_INTERVAL;
+              // reflect server cooldown in UI
+              if (adsBtn) adsBtn.style.display = 'none';
+              if (adsBtnn) {
+                adsBtnn.style.display = 'block';
+                adsBtnn.textContent = `${waitSec}s`;
+                adsBtnn.style.background = 'orange';
+              }
+
+              let remaining = waitSec;
+              if (dailyLimit) clearInterval(dailyLimit);
+              dailyLimit = setInterval(function(){
+                remaining--;
+                if (adsBtnn) adsBtnn.textContent = `${remaining}s`;
+                if (remaining <= 0) {
+                  clearInterval(dailyLimit);
+                  dailyLimit = null;
+                  if (adsBtnn) {
+                    adsBtnn.style.display = 'none';
+                    adsBtnn.style.background = '';
+                  }
+                  if (adsBtn) {
+                    adsBtn.style.display = 'block';
+                    adsBtn.disabled = false;
+                    adsBtn.style.pointerEvents = '';
+                  }
+                  if (progres) progres.textContent = dailyProgres;
+                }
+              }, 1000);
+            } else {
+              // generic failure feedback
+              alert("Failed to claim ad reward: " + ((res && res.error) || "unknown error"));
+            }
+          }
+
+          // Final cleanup for this ad operation
+          try { clearInterval(timer); } catch (e) {}
+          timer = null;
+
+          // Make sure adsBtnn style/background are reset to avoid leftover yellow
           if (adsBtnn) {
+            adsBtnn.style.display = "none";
             adsBtnn.style.background = '';
+            adsBtnn.textContent = '';
           }
-        } else {
-          // handle errors (e.g., daily limit reached or server-side cooldown)
-          console.warn("rewardUser failed:", res && res.error);
-          const errText = (res && res.error) ? String(res.error).toLowerCase() : "";
 
-          if (errText.includes("daily limit")) {
-            // reflect limit in UI
-            adsBtn.style.display = 'none';
-            adsBtnn.style.display = "block";
-            adsBtnn.textContent = progresLimit;
-            adsBtnn.style.background = 'red';
-            // start cooldown countdown for the remaining day limit
+          try {
+            adsBtn.style.display  = "block";
+            adsBtn.disabled = false;
+            adsBtn.style.pointerEvents = '';
+          } catch (e) {}
+
+          // if dailyProgres depleted, set long cooldown
+          if (dailyProgres <= 0) {
+            if (adsBtn) adsBtn.style.display = 'none';
+            if (adsBtnn) {
+              adsBtnn.style.display = 'block';
+              adsBtnn.textContent = progresLimit;
+              adsBtnn.style.background = 'red';
+            }
+
             if (dailyLimit) clearInterval(dailyLimit);
             dailyLimit = setInterval(function(){
+
               progresLimit--;
-              adsBtnn.textContent = progresLimit;
+              if (adsBtnn) adsBtnn.textContent = progresLimit;
 
               if (progresLimit <= 0) {
                 clearInterval(dailyLimit);
                 dailyLimit = null;
 
-                adsBtnn.style.display = 'none';
-                adsBtn.style.display = 'block';
-                adsBtnn.style.background = '';
+                if (adsBtnn) {
+                  adsBtnn.style.display = 'none';
+                  adsBtnn.style.background = '';
+                }
+                if (adsBtn) {
+                  adsBtn.style.display = 'block';
+                  adsBtn.disabled = false;
+                  adsBtn.style.pointerEvents = '';
+                }
                 progresLimit = 24 * 60 * 60;
                 dailyProgres = 100;
                 if (progres) progres.textContent = dailyProgres;
               }
 
             }, 1000);
-
-            // release local adCooldown and sync with server to ensure UI consistency
-            adCooldown = false;
-            syncAdCooldownFromServer();
-          } else if (errText.includes("cooldown") || errText.includes("please wait")) {
-            // server-side ad cooldown enforced -> parse seconds
-            const match = String(res.error).match(/wait\s+([0-9]+)/i);
-            let waitSec = match ? Number(match[1]) : MIN_CLIENT_AD_INTERVAL;
-            // reflect server cooldown in UI
-            adsBtn.style.display = 'none';
-            adsBtnn.style.display = 'block';
-            adsBtnn.textContent = `${waitSec}s`;
-            adsBtnn.style.background = 'orange';
-
-            let remaining = waitSec;
-            if (dailyLimit) clearInterval(dailyLimit);
-            dailyLimit = setInterval(function(){
-              remaining--;
-              adsBtnn.textContent = `${remaining}s`;
-              if (remaining <= 0) {
-                clearInterval(dailyLimit);
-                dailyLimit = null;
-                adsBtnn.style.display = 'none';
-                adsBtn.style.display = 'block';
-                adsBtnn.style.background = '';
-                if (progres) progres.textContent = dailyProgres;
-              }
-            }, 1000);
-
-            // release local adCooldown (server now controls)
-            adCooldown = false;
-            // align UI with server state
-            syncAdCooldownFromServer();
-          } else {
-            // generic failure feedback
-            alert("Failed to claim ad reward: " + ((res && res.error) || "unknown error"));
-            // allow another attempt after a short recovery
-            adCooldown = false;
-            syncAdCooldownFromServer();
           }
         }
-
-        // UI feedback for success (or even for failure it's fine to show)
-        if (res && res.success) {
-          try {
-            // Use robust notification sound player with fallback
-            await playNotificationSound();
-          } catch (e) {
-            console.warn("Notification sound play failed:", e);
-          }
-          // visual notification using dedicated adsNotfi element (keeps image)
-          const html = `ADS WATCHED <img src="done.gif" width="40" height="40">`;
-          showMainNotification(html);
-        }
-
-        clearInterval(timer);
+      } catch (e) {
+        console.error("ads timer loop error:", e);
+        try { clearInterval(timer); } catch (e2) {}
         timer = null;
-
-        // Make sure adsBtnn style/background are reset to avoid leftover yellow
         if (adsBtnn) {
           adsBtnn.style.display = "none";
           adsBtnn.style.background = '';
+          adsBtnn.textContent = '';
         }
-        adsBtn.style.display  = "block";
-
-        // release local ad cooldown now (the server sync will re-apply if needed)
-        adCooldown = false;
-        // fetch server state to ensure UI matches server cooldown/limits
-        syncAdCooldownFromServer();
-
-        // if dailyProgres depleted, set long cooldown
-        if (dailyProgres <= 0) {
-          adsBtn.style.display = 'none';
-          adsBtnn.style.display = 'block';
-          adsBtnn.textContent = progresLimit;
-          adsBtnn.style.background = 'red';
-
-          if (dailyLimit) clearInterval(dailyLimit);
-          dailyLimit = setInterval(function(){
-
-            progresLimit--;
-            adsBtnn.textContent = progresLimit;
-
-            if (progresLimit <= 0) {
-              clearInterval(dailyLimit);
-              dailyLimit = null;
-
-              adsBtnn.style.display = 'none';
-              adsBtn.style.display = 'block';
-              adsBtnn.style.background = '';
-              progresLimit = 24 * 60 * 60;
-              dailyProgres = 100;
-              if (progres) progres.textContent = dailyProgres;
-            }
-
-          }, 1000);
-        }
+        try {
+          adsBtn.style.display = 'block';
+          adsBtn.disabled = false;
+          adsBtn.style.pointerEvents = '';
+        } catch (e3) {}
       }
 
     }, 1000);
 
     // Show the ad(s) — showSingleAd handles cooldowns itself
-    await showSingleAd();
-    await showSingleAd();
-    await showSingleAd();
-    await showSingleAd();
+    // Keep these awaited separately; UI timer is running independently.
+    try {
+      await showSingleAd();
+      await showSingleAd();
+      await showSingleAd();
+      await showSingleAd();
+    } catch (e) {
+      console.warn("showSingleAd sequence threw:", e);
+    }
 
   });
 }
@@ -755,14 +709,19 @@ if (adsBtn) {
    - Box ad displays do not interfere with main adCooldown (use useGlobalCooldown=false).
    - Make cooldown per-account (use USER_ID in key) so each account has independent timing.
    - When box ads finish, the main ads notification (#adsnotifi) will be shown with text "you get <amount> coin" and the image.
-   - NEW: start a hidden 12s timer at the *start* of the box flow; only after 12s the notification appears and the server is requested to credit the reward.
-   - NEW: after awarding we refresh server balance/counters so daily ad counter on the UI is up-to-date.
+   - New: hidden 23s timer controlling when the notification is shown, ensuring single notification and clean cancellation on failure.
 ======================= */
 const openBoxBtn = document.getElementById("openbox");
 const BOX_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 let boxCooldownTimer = null;
 let boxCooldownInterval = null;
 const BOX_REWARDS = [75, 100, 150, 200];
+
+// Hidden box notification timer and guards
+let boxHiddenTimer = null;
+let boxHiddenTimerExpired = false;
+let boxNotificationShown = false;
+let rewardPendingForBox = null;
 
 function formatMsToMMSS(ms) {
   const totalSec = Math.ceil(ms / 1000);
@@ -825,6 +784,12 @@ async function handleBoxClick(evt) {
     return;
   }
 
+  // Prevent multiple concurrent box operations
+  if (boxHiddenTimer || openBoxBtn.dataset.running === "1") {
+    // Already in progress, ignore
+    return;
+  }
+
   const key = getBoxCooldownKey();
 
   // check persistent cooldown
@@ -839,119 +804,147 @@ async function handleBoxClick(evt) {
   // Provide immediate UI feedback
   openBoxBtn.style.pointerEvents = 'none';
   openBoxBtn.style.opacity = '0.6';
+  openBoxBtn.dataset.running = "1";
 
-  // Start a hidden 12-second timer at the START of the box flow.
-  // Only after 12 seconds we will show the notification and request the server to credit the reward.
-  // This timer is independent from ad display; it ensures the notification appears 12s after the user initiated the box.
-  let boxAwarded = false;
-  const hiddenTimer = setTimeout(async function() {
-    if (boxAwarded) return;
-    boxAwarded = true;
+  // Clear existing hidden timer/state before starting
+  if (boxHiddenTimer) {
+    try { clearTimeout(boxHiddenTimer); } catch (e) {}
+    boxHiddenTimer = null;
+  }
+  boxHiddenTimerExpired = false;
+  boxNotificationShown = false;
+  rewardPendingForBox = null;
 
-    // Award random reward
-    const reward = BOX_REWARDS[Math.floor(Math.random() * BOX_REWARDS.length)];
+  // Start hidden 23-second timer (do not show any notification before it expires)
+  boxHiddenTimer = setTimeout(function() {
+    boxHiddenTimer = null;
+    boxHiddenTimerExpired = true;
+    // If reward already ready and notification not yet shown -> show it now
+    if (rewardPendingForBox != null && !boxNotificationShown) {
+      boxNotificationShown = true;
+      try {
+        showBoxRewardNotification(rewardPendingForBox);
+      } catch (e) {
+        console.warn("Showing box notification failed:", e);
+      }
+    }
+  }, 23000);
 
-    // Try server-side reward (preferable). Backend may implement "rewardBox" to avoid counting toward ad counters.
-    let res = null;
-    try {
-      res = await fetchApi({ type: "rewardBox", data: { amount: reward } });
-      if (res && res.success) {
-        // server returned updated balance
-        ADS = Number(res.balance) || ADS;
-      } else {
-        // If server didn't support rewardBox, fallback to local UI update and attempt to call rewardUser as a best-effort
-        console.warn("rewardBox failed or not supported, attempting client-side update. Server response:", res);
-        // attempt to call rewardUser but mark isBox so backend could ignore counters if implemented
-        try {
-          const fallback = await fetchApi({ type: "rewardUser", data: { amount: reward, isBox: true } });
-          if (fallback && fallback.success) {
-            ADS = Number(fallback.balance) || ADS;
-          } else {
-            // final fallback: update UI locally only (non-persistent)
-            console.warn("fallback rewardUser failed:", fallback && fallback.error);
-            ADS = Number(ADS) + Number(reward);
-          }
-        } catch (e) {
-          console.warn("fallback rewardUser threw:", e);
+  // Show two ads that should NOT affect the main ad counters (useGlobalCooldown=false)
+  let ad1 = false;
+  let ad2 = false;
+  try {
+    ad1 = await showSingleAd({ useGlobalCooldown: false });
+    ad2 = await showSingleAd({ useGlobalCooldown: false });
+  } catch (e) {
+    console.warn("Box ads threw:", e);
+    ad1 = ad1 || false;
+    ad2 = ad2 || false;
+  }
+
+  // If at least one ad failed, cancel hidden timer and restore button
+  if (!ad1 || !ad2) {
+    // cancel hidden notification timer
+    if (boxHiddenTimer) {
+      try { clearTimeout(boxHiddenTimer); } catch (e) {}
+      boxHiddenTimer = null;
+    }
+    boxHiddenTimerExpired = false;
+    boxNotificationShown = false;
+    rewardPendingForBox = null;
+
+    // restore button (short delay to avoid rapid retries)
+    setTimeout(function(){
+      openBoxBtn.style.pointerEvents = '';
+      openBoxBtn.style.opacity = '';
+      openBoxBtn.dataset.running = "0";
+    }, 2000);
+    alert("Failed to show both ads. Please try again.");
+    return;
+  }
+
+  // Both ads shown: award random reward
+  const reward = BOX_REWARDS[Math.floor(Math.random() * BOX_REWARDS.length)];
+  rewardPendingForBox = reward;
+
+  // Try server-side reward (preferable). Backend may implement "rewardBox" to avoid counting toward ad counters.
+  let res = null;
+  try {
+    res = await fetchApi({ type: "rewardBox", data: { amount: reward } });
+    if (res && res.success) {
+      // server returned updated balance
+      ADS = Number(res.balance) || ADS;
+    } else {
+      // If server didn't support rewardBox, fallback to local UI update and attempt to call rewardUser as a best-effort
+      console.warn("rewardBox failed or not supported, attempting client-side update. Server response:", res);
+      // attempt to call rewardUser but mark isBox so backend could ignore counters if implemented
+      try {
+        const fallback = await fetchApi({ type: "rewardUser", data: { amount: reward, isBox: true } });
+        if (fallback && fallback.success) {
+          ADS = Number(fallback.balance) || ADS;
+        } else {
+          // final fallback: update UI locally only (non-persistent)
+          console.warn("fallback rewardUser failed:", fallback && fallback.error);
           ADS = Number(ADS) + Number(reward);
         }
+      } catch (e) {
+        console.warn("fallback rewardUser threw:", e);
+        ADS = Number(ADS) + Number(reward);
       }
-    } catch (e) {
-      console.warn("rewardBox API call failed:", e);
-      // fallback local
-      ADS = Number(ADS) + Number(reward);
     }
+  } catch (e) {
+    console.warn("rewardBox API call failed:", e);
+    // fallback local
+    ADS = Number(ADS) + Number(reward);
+  }
 
-    // Update UI
-    if (adsBalance) adsBalance.textContent = ADS;
-    if (walletbalance) {
-      walletbalance.innerHTML = `
-        <img src="coins.png" style="width:20px; vertical-align:middle;">
-        ${ADS}
-      `;
-    }
+  // Update UI
+  if (adsBalance) adsBalance.textContent = ADS;
+  if (walletbalance) {
+    walletbalance.innerHTML = `
+      <img src="coins.png" style="width:20px; vertical-align:middle;">
+      ${ADS}
+    `;
+  }
 
-    // Show notification visually using main notification element with image preserved
+  // If hidden timer already expired -> show notification immediately (but ensure only once)
+  if (boxHiddenTimerExpired && !boxNotificationShown) {
+    boxNotificationShown = true;
     try {
       showBoxRewardNotification(reward);
     } catch (e) {
       console.warn("box notification failed:", e);
     }
-
-    // Start persistent cooldown for BOX_COOLDOWN_MS
-    const until = Date.now() + BOX_COOLDOWN_MS;
-    setOpenBoxDisabled(true, until);
-
-    // Refresh server balance and counters to ensure daily ads and other counters are up-to-date in the UI
-    try {
-      const refreshed = await fetchApi({ type: "getBalance" });
-      if (refreshed && refreshed.success) {
-        // update global ADS and UI
-        ADS = Number(refreshed.balance) || ADS;
-        if (adsBalance) adsBalance.textContent = ADS;
-        if (walletbalance) {
-          walletbalance.innerHTML = `
-            <img src="coins.png" style="width:20px; vertical-align:middle;">
-            ${ADS}
-          `;
-        }
-        // update daily progress
-        const DAILY_LIMIT = 100;
-        dailyProgres = DAILY_LIMIT - (Number(refreshed.dailyAds) || 0);
-        if (dailyProgres < 0) dailyProgres = 0;
-        if (progres) progres.textContent = dailyProgres;
-      }
-    } catch (e) {
-      console.warn("Failed to refresh balance after box award:", e);
-    }
-
-  }, 20000); // 12 seconds hidden timer
-
-  // Show two ads that should NOT affect the main ad counters (useGlobalCooldown=false)
-  const ad1 = await showSingleAd({ useGlobalCooldown: false });
-  const ad2 = await showSingleAd({ useGlobalCooldown: false });
-
-  // If at least one ad failed, we still allow the hidden timer to proceed (per requested behavior).
-  if (!ad1 || !ad2) {
-    // restore button briefly (but hidden timer may still award)
-    setTimeout(function(){
-      try {
-        if (!boxAwarded) {
-          // keep visual disabled until hidden timer executes or until we explicitly re-enable after a short period
-          openBoxBtn.style.pointerEvents = '';
-          openBoxBtn.style.opacity = '';
-        }
-      } catch (e) {}
-    }, 2000);
-    // Inform user but do not cancel hidden award per spec
-    // Note: we avoid cancelling the hiddenTimer so the notification still appears after 12s
-    // alert("Failed to show both ads. Please try again.");
+    // clear pending reward since shown
+    rewardPendingForBox = null;
+  } else {
+    // Wait for timer to expire; when it does the setTimeout handler will show the notification
+    // but ensure we do not schedule a second notify here.
   }
 
-  // After ads displayed, we rely on the hidden 12s timer to perform the award and UI update.
-  // If for any reason the ads finished after the hidden timer, the hidden timer's boxAwarded flag prevents double-award.
+  // Start persistent cooldown for BOX_COOLDOWN_MS
+  const until = Date.now() + BOX_COOLDOWN_MS;
+  setOpenBoxDisabled(true, until);
 
-  // If the user closed or navigated away and we still have a pending hiddenTimer, we keep it (to satisfy requested behavior).
+  // Clean up hidden timer reference (we don't clear it here because it must expire naturally,
+  // but if it's null, it's already expired)
+  // Ensure we will not leak by only keeping the reference until it expires or we already cleared it on failure.
+
+  // Mark not running and re-enable pointerEvents only after marking cooldown
+  openBoxBtn.dataset.running = "0";
+  openBoxBtn.style.pointerEvents = 'none';
+  openBoxBtn.style.opacity = '0.5';
+
+  // If notification has not been shown yet and boxHiddenTimer is null (expired), ensure show now
+  if (!boxHiddenTimer && rewardPendingForBox != null && !boxNotificationShown) {
+    boxNotificationShown = true;
+    try {
+      showBoxRewardNotification(rewardPendingForBox);
+    } catch (e) {
+      console.warn("box notification (post) failed:", e);
+    }
+    rewardPendingForBox = null;
+  }
 }
 
 /* =======================
@@ -1260,7 +1253,6 @@ function stopReferralPolling() {
 /* =======================
    Balance polling: keep balance UI updated regularly
    Poll interval set to 30s (adjustable). Always running.
-   Also starts server-driven ad cooldown sync to make sure ads cooldown UI is always derived from server.
 ======================= */
 let balancePoll = null;
 const BALANCE_POLL_INTERVAL = 30000;
@@ -1284,9 +1276,6 @@ function startBalancePolling() {
       console.warn("balance poll failed:", e);
     }
   }, BALANCE_POLL_INTERVAL);
-
-  // start server-driven ad cooldown sync (separate faster interval)
-  startAdServerSync();
 }
 
 /* =======================
@@ -1341,7 +1330,7 @@ function renderWithdrawHistory(withdraws) {
   if (!container) return;
   container.innerHTML = "";
 
-  if (!Array.isArray(withdraws) || withdraws.length === 0) {
+  if (!Array.isArray(withdraws) || withdrawals.length === 0) {
     const emptyCard = document.createElement("div");
     emptyCard.className = "history-card";
     emptyCard.innerHTML = `
@@ -1644,7 +1633,7 @@ if (coin < MIN_WITHDRAW) {
     withdrawnotifi.textContent = `Minimum withdraw is ${MIN_WITHDRAW} coins`;
     withdrawnotifi.style.display = "block";
     setTimeout(() => {
-      withdrawnotifi.style.display = "none";
+      withdrawnotifi.style.display = 'none';
     }, 2500);
   }
   return;
