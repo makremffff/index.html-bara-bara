@@ -115,7 +115,7 @@ export default async function handler(req, res) {
     // ===============================
     // Get Balance + Stats
     // ===============================
-    if (type === "getBalance") {
+    if (type === "getBalance" || type === "getBalanceRealtime") {
       const { userId } = data || {};
 
       if (!userId) {
@@ -130,16 +130,40 @@ export default async function handler(req, res) {
         return res.status(404).json({ success: false, error: "User not found" });
       }
 
+      // Ensure daily_ads is reset at day boundary on the server-side for accurate UI immediately
+      const user = result[0];
+      const now = new Date();
+      const today = now.toISOString().split("T")[0];
+
+      if (user.last_ad_date !== today) {
+        try {
+          await supabaseRequest(`users?id=eq.${userId}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              daily_ads: 0,
+              last_ad_date: today
+            })
+          });
+
+          // reflect changes locally so returned payload is correct
+          user.daily_ads = 0;
+          user.last_ad_date = today;
+        } catch (e) {
+          console.error("Failed to reset daily_ads in getBalance:", e);
+          // Don't fail the request; return the fetched values as fallback
+        }
+      }
+
       return res.status(200).json({
         success: true,
-        balance: result[0].balance,
-        adsWatched: result[0].ads_watched,
-        dailyAds: result[0].daily_ads,
-        lastAdDate: result[0].last_ad_date,
-        lastAdTime: result[0].last_ad_time || null,
-        referrerId: result[0].referrer_id || null,
-        referralActive: !!result[0].referral_active,
-        lastBoxTime: result[0].last_box_time || null
+        balance: user.balance,
+        adsWatched: user.ads_watched,
+        dailyAds: user.daily_ads,
+        lastAdDate: user.last_ad_date,
+        lastAdTime: user.last_ad_time || null,
+        referrerId: user.referrer_id || null,
+        referralActive: !!user.referral_active,
+        lastBoxTime: user.last_box_time || null
       });
     }
 
@@ -287,12 +311,32 @@ export default async function handler(req, res) {
         }
       }
 
+      // Ensure daily_ads is reset at day boundary before evaluating daily limits
+      if (user.last_ad_date !== today) {
+        try {
+          await supabaseRequest(`users?id=eq.${userId}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              daily_ads: 0,
+              last_ad_date: today
+            })
+          });
+
+          // reflect change locally
+          user.daily_ads = 0;
+          user.last_ad_date = today;
+        } catch (e) {
+          console.error("Failed to reset daily_ads in rewardUser:", e);
+          // proceed with the safest approach using local values
+          user.daily_ads = 0;
+          user.last_ad_date = today;
+        }
+      }
+
       let dailyAds = user.daily_ads || 0;
       if (user.last_ad_date !== today) {
         dailyAds = 0;
       }
-
-      const DAILY_LIMIT = 100;
 
       if (dailyAds >= DAILY_LIMIT) {
         return res.status(400).json({
