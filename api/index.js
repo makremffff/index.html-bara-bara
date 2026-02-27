@@ -42,20 +42,6 @@ async function supabaseRequest(path, options = {}) {
   return res.status === 204 ? null : res.json();
 }
 
-// Helper to safely build equality filter for PostgREST while handling string quoting
-function buildEq(field, value) {
-  // Escape single quotes by doubling them (Postgres style) inside the quoted literal
-  const v = String(value).replace(/'/g, "''");
-  // Wrap the value in single quotes and encode so URL is safe: eq.%27value%27
-  return `${field}=eq.${encodeURIComponent("'" + v + "'")}`;
-}
-
-// Convenience: build path with select clause appended
-function withSelect(pathBase, selectClause) {
-  if (!selectClause) return pathBase;
-  return `${pathBase}&select=${encodeURIComponent(selectClause)}`;
-}
-
 // ===============================
 // API Handler
 // ===============================
@@ -85,7 +71,7 @@ export default async function handler(req, res) {
       const today = new Date().toISOString().split("T")[0];
 
       // Check if user exists
-      const existing = await supabaseRequest(withSelect(`users?${buildEq('id', id)}`, '*'));
+      const existing = await supabaseRequest(`users?id=eq.${id}&select=*`);
 
       if (!existing || existing.length === 0) {
         // Create new user with initial values. Save referrer if provided.
@@ -114,7 +100,7 @@ export default async function handler(req, res) {
       // If user exists, but a referrerId is provided and the user doesn't already have a referrer, set it (prevent self-referral)
       const user = existing[0];
       if (referrerId && !user.referrer_id && String(user.id) !== String(referrerId)) {
-        await supabaseRequest(`users?${buildEq('id', id)}`, {
+        await supabaseRequest(`users?id=eq.${id}`, {
           method: "PATCH",
           body: JSON.stringify({
             referrer_id: referrerId,
@@ -137,7 +123,7 @@ export default async function handler(req, res) {
       }
 
       const result = await supabaseRequest(
-        withSelect(`users?${buildEq('id', userId)}`, 'balance,ads_watched,daily_ads,last_ad_date,last_ad_time,referrer_id,referral_active,last_box_time')
+        `users?id=eq.${userId}&select=balance,ads_watched,daily_ads,last_ad_date,last_ad_time,referrer_id,referral_active,last_box_time`
       );
 
       if (!result || result.length === 0) {
@@ -173,7 +159,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing amount" });
       }
 
-      const result = await supabaseRequest(withSelect(`users?${buildEq('id', userId)}`, '*'));
+      const result = await supabaseRequest(`users?id=eq.${userId}&select=*`);
 
       if (!result || result.length === 0) {
         return res.status(404).json({ success: false, error: "User not found" });
@@ -203,7 +189,7 @@ export default async function handler(req, res) {
       const newBalance = (Number(user.balance) || 0) + parsedAmount;
 
       // Update only balance and last_box_time (no ad counters)
-      await supabaseRequest(`users?${buildEq('id', userId)}`, {
+      await supabaseRequest(`users?id=eq.${userId}`, {
         method: "PATCH",
         body: JSON.stringify({
           balance: newBalance,
@@ -235,7 +221,7 @@ export default async function handler(req, res) {
       }
 
       const result = await supabaseRequest(
-        withSelect(`users?${buildEq('id', userId)}`, '*')
+        `users?id=eq.${userId}&select=*`
       );
 
       if (!result || result.length === 0) {
@@ -268,7 +254,7 @@ export default async function handler(req, res) {
         const newBalance = (Number(user.balance) || 0) + parsedAmount;
 
         // Update only balance and last_box_time
-        await supabaseRequest(`users?${buildEq('id', userId)}`, {
+        await supabaseRequest(`users?id=eq.${userId}`, {
           method: "PATCH",
           body: JSON.stringify({
             balance: newBalance,
@@ -323,7 +309,7 @@ export default async function handler(req, res) {
 
       // Update the user's balance and ad counters and last_ad_time
       const updatedUser = await supabaseRequest(
-        `users?${buildEq('id', userId)}`,
+        `users?id=eq.${userId}`,
         {
           method: "PATCH",
           body: JSON.stringify({
@@ -347,20 +333,20 @@ export default async function handler(req, res) {
           // Reward inviter with 100 coins
           try {
             // Fetch inviter current balance
-            const inviterRes = await supabaseRequest(withSelect(`users?${buildEq('id', inviterId)}`, 'balance'));
+            const inviterRes = await supabaseRequest(`users?id=eq.${inviterId}&select=balance`);
             if (inviterRes && inviterRes.length > 0) {
               const inviter = inviterRes[0];
               const inviterBalance = Number(inviter.balance) || 0;
               const inviterNewBalance = inviterBalance + 100;
 
               // Update inviter balance
-              await supabaseRequest(`users?${buildEq('id', inviterId)}`, {
+              await supabaseRequest(`users?id=eq.${inviterId}`, {
                 method: "PATCH",
                 body: JSON.stringify({ balance: inviterNewBalance })
               });
 
               // Mark referral as activated on the referred user
-              await supabaseRequest(`users?${buildEq('id', userId)}`, {
+              await supabaseRequest(`users?id=eq.${userId}`, {
                 method: "PATCH",
                 body: JSON.stringify({ referral_active: true })
               });
@@ -415,102 +401,15 @@ export default async function handler(req, res) {
 
     // ===============================
     // Get Tasks
-    // - If userId provided, annotate tasks with claimed: true/false for that user
     // ===============================
     if (type === "getTasks") {
-      const { userId } = data || {};
-
       const tasks = await supabaseRequest(
         `tasks?select=*`
       );
 
-      // If no user provided, return tasks directly
-      if (!userId) {
-        return res.status(200).json({
-          success: true,
-          tasks
-        });
-      }
-
-      // Fetch claims for this user
-      const claims = await supabaseRequest(`task_claims?${buildEq('user_id', userId)}&select=task_id`);
-      const claimedSet = new Set((claims || []).map(c => String(c.task_id)));
-
-      // Annotate tasks with claimed boolean
-      const annotated = (tasks || []).map(t => ({
-        ...t,
-        claimed: claimedSet.has(String(t.id))
-      }));
-
       return res.status(200).json({
         success: true,
-        tasks: annotated
-      });
-    }
-
-    // ===============================
-    // Claim Task (NEW)
-    // - Each user can claim each task once
-    // - Adds task.reward to user's balance and creates a row in task_claims
-    // - Returns updated balance and claim record
-    // ===============================
-    if (type === "claimTask") {
-      const { userId, taskId } = data || {};
-
-      if (!userId) {
-        return res.status(400).json({ success: false, error: "Missing userId" });
-      }
-      if (typeof taskId === "undefined" || taskId === null) {
-        return res.status(400).json({ success: false, error: "Missing taskId" });
-      }
-
-      // Fetch task
-      const taskRes = await supabaseRequest(withSelect(`tasks?${buildEq('id', taskId)}`, '*'));
-      if (!taskRes || taskRes.length === 0) {
-        return res.status(404).json({ success: false, error: "Task not found" });
-      }
-      const task = taskRes[0];
-
-      // Check if user already claimed
-      const existingClaim = await supabaseRequest(withSelect(`task_claims?${buildEq('user_id', userId)}&${buildEq('task_id', taskId)}`, '*'));
-      if (existingClaim && existingClaim.length > 0) {
-        return res.status(400).json({ success: false, error: "Task already claimed by this user" });
-      }
-
-      // Fetch user
-      const users = await supabaseRequest(withSelect(`users?${buildEq('id', userId)}`, 'balance'));
-      if (!users || users.length === 0) {
-        return res.status(404).json({ success: false, error: "User not found" });
-      }
-      const user = users[0];
-      const currentBalance = Number(user.balance) || 0;
-
-      const now = new Date().toISOString();
-
-      // Create task_claims row
-      const claimRow = {
-        user_id: userId,
-        task_id: task.id,
-        created_at: now
-      };
-
-      const createdClaim = await supabaseRequest("task_claims", {
-        method: "POST",
-        body: JSON.stringify(claimRow)
-      });
-
-      // Add reward to user's balance
-      const newBalance = currentBalance + (Number(task.reward) || 0);
-      await supabaseRequest(`users?${buildEq('id', userId)}`, {
-        method: "PATCH",
-        body: JSON.stringify({ balance: newBalance })
-      });
-
-      return res.status(200).json({
-        success: true,
-        balance: newBalance,
-        claim: Array.isArray(createdClaim) ? createdClaim[0] : createdClaim,
-        reward: Number(task.reward) || 0
+        tasks
       });
     }
 
@@ -544,7 +443,7 @@ export default async function handler(req, res) {
       }
 
       // Fetch user to verify balance
-      const users = await supabaseRequest(withSelect(`users?${buildEq('id', userId)}`, 'balance'));
+      const users = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
       if (!users || users.length === 0) {
         return res.status(404).json({ success: false, error: "User not found" });
       }
@@ -574,7 +473,7 @@ export default async function handler(req, res) {
 
       // Deduct user's balance (immediate hold)
       const newBalance = currentBalance - parsedAmount;
-      await supabaseRequest(`users?${buildEq('id', userId)}`, {
+      await supabaseRequest(`users?id=eq.${userId}`, {
         method: "PATCH",
         body: JSON.stringify({ balance: newBalance })
       });
@@ -599,7 +498,7 @@ export default async function handler(req, res) {
 
       // select useful fields
       const rows = await supabaseRequest(
-        `withdraw?${buildEq('user_id', userId)}&select=id,amount,status,destination,created_at,processed_at&order=created_at.desc`
+        `withdraw?user_id=eq.${userId}&select=id,amount,status,destination,created_at,processed_at&order=created_at.desc`
       );
 
       return res.status(200).json({
@@ -620,7 +519,7 @@ export default async function handler(req, res) {
       }
 
       // Fetch referral rows with useful fields
-      const referrals = await supabaseRequest(withSelect(`users?${buildEq('referrer_id', userId)}`, 'id,name,photo,ads_watched,referral_active'));
+      const referrals = await supabaseRequest(`users?referrer_id=eq.${userId}&select=id,name,photo,ads_watched,referral_active`);
 
       if (!referrals) {
         return res.status(200).json({ success: true, active: 0, pending: 0, referrals: [] });
