@@ -3,13 +3,14 @@
 // ===============================
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const BOT_TOKEN = process.env.BOT_TOKEN || null;
 
 // Minimum seconds required between rewarded ads (server-side enforcement)
 const MIN_AD_INTERVAL_SECONDS = 50;
 
 // Box (open-box) minimum seconds between box rewards (server-side enforcement)
 const BOX_MIN_INTERVAL_SECONDS = 5 * 60; // 5 minutes
+
+const { randomUUID } = require("crypto");
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   // If these env vars are missing, throw early so developer notices
@@ -24,7 +25,10 @@ async function supabaseRequest(path, options = {}) {
     throw new Error("Supabase URL not configured");
   }
 
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+  // Ensure path is a string and safe to append
+  const url = `${SUPABASE_URL}/rest/v1/${path}`;
+
+  const res = await fetch(url, {
     ...options,
     headers: {
       apikey: SUPABASE_ANON_KEY,
@@ -44,112 +48,18 @@ async function supabaseRequest(path, options = {}) {
 }
 
 // ===============================
-// Helper: call Telegram getChatMember
+// Utilities
 // ===============================
-async function checkTelegramMembership(chatIdentifier, userId) {
-  if (!TELEGRAM_BOT_TOKEN) {
-    throw new Error("Telegram bot token not configured on server");
-  }
-
-  // chatIdentifier may be like "@channel" or "channel" or a full link
-  // Normalize to @username if possible
-  let chatId = chatIdentifier || "";
-  chatId = String(chatId).trim();
-
-  // If it's a full url like https://t.me/username or t.me/username, extract username
-  const m = chatId.match(/t\.me\/(\+?[A-Za-z0-9_]+)/i);
-  if (m && m[1]) {
-    chatId = m[1];
-  }
-
-  // remove leading @ if present for the API we will prefix if necessary
-  if (chatId.startsWith("@")) chatId = chatId.slice(1);
-
-  // For safety, if it looks like an invite link (starts with +), the bot can't use getChatMember with +invite
-  if (chatId.startsWith("+")) {
-    throw new Error("Cannot verify invite-link style chat ids. Use a channel username.");
-  }
-
-  const encodedChat = encodeURIComponent("@" + chatId);
-  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChatMember?chat_id=${encodedChat}&user_id=${encodeURIComponent(userId)}`;
-
-  const res = await fetch(url);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Telegram API error: ${res.status} ${text}`);
-  }
-
-  const json = await res.json();
-  if (!json || typeof json.ok === "undefined" || json.ok !== true) {
-    // Telegram responded but not ok
-    const description = json && json.description ? json.description : "unknown";
-    throw new Error(`Telegram API failed: ${description}`);
-  }
-
-  const status = json.result && json.result.status ? String(json.result.status) : "";
-  const memberStatuses = ["creator", "administrator", "member"];
-  return memberStatuses.includes(status);
+function ensureStringId(id) {
+  // Prevent sending raw numbers to UUID columns.
+  // Convert anything to string; caller must ensure DB types align.
+  if (id === null || typeof id === "undefined") return null;
+  return String(id);
 }
 
-// ===============================
-// Helper: resolve internal user id
-// Many deployments use a UUID primary key for users while the client (Telegram WebApp)
-// may attach a numeric Telegram user id. To avoid "invalid input syntax for type uuid"
-// errors we attempt multiple strategies to resolve an internal user id for DB ops:
-// 1) Try direct id lookup (users?id=eq.<value>)
-// 2) If that fails due to uuid parse error or returns empty, try common alternative
-//    columns that may hold Telegram id: telegram_id, tg_id, external_id
-// Returns the internal user's id string (if found), or null.
-async function resolveInternalUserId(providedUserId) {
-  if (!providedUserId) return null;
-
-  // 1) Try direct id match (wrap in try/catch to catch uuid parse errors coming from Postgrest)
-  try {
-    const direct = await supabaseRequest(`users?id=eq.${encodeURIComponent(providedUserId)}&select=id`);
-    if (Array.isArray(direct) && direct.length > 0) {
-      return direct[0].id;
-    }
-  } catch (e) {
-    // If there's an error that looks like Postgres uuid parse issue, continue to fallback methods.
-    // Log for diagnostics but don't fail the whole request.
-    const errStr = String(e.message || e);
-    if (!errStr.includes("invalid input syntax for type uuid")) {
-      // If it's some other error, still continue to try fallback approaches.
-      // But keep a note in logs.
-      console.warn("resolveInternalUserId - direct lookup error (non-uuid):", e);
-    } else {
-      // silence expected uuid parse issues
-    }
-  }
-
-  // 2) Try common alternative columns (telegram_id, tg_id, external_id)
-  const altCols = ["telegram_id", "tg_id", "external_id"];
-  for (const col of altCols) {
-    try {
-      const q = `users?${col}=eq.${encodeURIComponent(providedUserId)}&select=id`;
-      const found = await supabaseRequest(q);
-      if (Array.isArray(found) && found.length > 0) {
-        return found[0].id;
-      }
-    } catch (e) {
-      // ignore and continue, maybe column doesn't exist
-    }
-  }
-
-  // 3) As a last resort try to match by id cast to text if PostgREST schema allows text comparison
-  // (This attempt may or may not work depending on PostgREST configuration; try safe select and filter on server side)
-  try {
-    const allUsers = await supabaseRequest(`users?select=id`);
-    if (Array.isArray(allUsers)) {
-      const str = String(providedUserId);
-      const matched = allUsers.find(u => String(u.id) === str);
-      if (matched) return matched.id;
-    }
-  } catch (e) {
-    // if this is heavy or failing, ignore
-  }
-
-  return null;
+function encodeFilterValue(val) {
+  // Wrap in single quotes and return safely
+  return `'${String(val).replace(/'/g, "''")}'`;
 }
 
 // ===============================
@@ -181,17 +91,16 @@ export default async function handler(req, res) {
       const today = new Date().toISOString().split("T")[0];
 
       // Check if user exists
-      const existing = await supabaseRequest(`users?id=eq.${encodeURIComponent(id)}&select=*`);
+      // Use quoted filter to avoid invalid uuid syntax errors when id is numeric
+      const userIdStr = ensureStringId(id);
+      const existing = await supabaseRequest(`users?select=*&id=eq.${encodeFilterValue(userIdStr)}`);
 
       if (!existing || existing.length === 0) {
         // Create new user with initial values. Save referrer if provided.
         const created = await supabaseRequest("users", {
           method: "POST",
           body: JSON.stringify({
-            // Attempt to save both id and a telegram_id field when possible.
-            // If the DB has 'telegram_id' column this will be ignored if it doesn't exist.
-            id,
-            telegram_id: id,
+            id: userIdStr,
             name,
             photo,
             balance: 0,
@@ -202,7 +111,7 @@ export default async function handler(req, res) {
             last_ad_time: null,
             // last_box_time stores ISO timestamp of last box reward (server-side anti-abuse)
             last_box_time: null,
-            referrer_id: referrerId || null,
+            referrer_id: referrerId ? ensureStringId(referrerId) : null,
             referral_active: false
           })
         });
@@ -213,10 +122,10 @@ export default async function handler(req, res) {
       // If user exists, but a referrerId is provided and the user doesn't already have a referrer, set it (prevent self-referral)
       const user = existing[0];
       if (referrerId && !user.referrer_id && String(user.id) !== String(referrerId)) {
-        await supabaseRequest(`users?id=eq.${encodeURIComponent(id)}`, {
+        await supabaseRequest(`users?id=eq.${encodeFilterValue(userIdStr)}`, {
           method: "PATCH",
           body: JSON.stringify({
-            referrer_id: referrerId,
+            referrer_id: ensureStringId(referrerId),
             referral_active: false
           })
         });
@@ -235,14 +144,10 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing userId" });
       }
 
-      // Resolve internal user id if necessary
-      const internalId = await resolveInternalUserId(userId);
-      if (!internalId) {
-        return res.status(404).json({ success: false, error: "User not found" });
-      }
+      const userIdStr = ensureStringId(userId);
 
       const result = await supabaseRequest(
-        `users?id=eq.${encodeURIComponent(internalId)}&select=balance,ads_watched,daily_ads,last_ad_date,last_ad_time,referrer_id,referral_active,last_box_time`
+        `users?select=balance,ads_watched,daily_ads,last_ad_date,last_ad_time,referrer_id,referral_active,last_box_time&id=eq.${encodeFilterValue(userIdStr)}`
       );
 
       if (!result || result.length === 0) {
@@ -264,8 +169,6 @@ export default async function handler(req, res) {
 
     // ===============================
     // Reward Box (Open-Box) - server-side handler
-    // - Does NOT increment ad counters
-    // - Enforces a separate box cooldown (BOX_MIN_INTERVAL_SECONDS)
     // ===============================
     if (type === "rewardBox") {
       const { userId, amount } = data || {};
@@ -278,13 +181,8 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing amount" });
       }
 
-      // Resolve internal user id
-      const internalId = await resolveInternalUserId(userId);
-      if (!internalId) {
-        return res.status(404).json({ success: false, error: "User not found" });
-      }
-
-      const result = await supabaseRequest(`users?id=eq.${encodeURIComponent(internalId)}&select=*`);
+      const userIdStr = ensureStringId(userId);
+      const result = await supabaseRequest(`users?id=eq.${encodeFilterValue(userIdStr)}&select=*`);
 
       if (!result || result.length === 0) {
         return res.status(404).json({ success: false, error: "User not found" });
@@ -314,7 +212,7 @@ export default async function handler(req, res) {
       const newBalance = (Number(user.balance) || 0) + parsedAmount;
 
       // Update only balance and last_box_time (no ad counters)
-      await supabaseRequest(`users?id=eq.${encodeURIComponent(internalId)}`, {
+      await supabaseRequest(`users?id=eq.${encodeFilterValue(userIdStr)}`, {
         method: "PATCH",
         body: JSON.stringify({
           balance: newBalance,
@@ -331,8 +229,7 @@ export default async function handler(req, res) {
 
     // ===============================
     // Reward User (Save Balance + Ads) and handle referral activation
-    // Server-side enforces a minimum interval between rewarded ads to mitigate automation.
-    // If data.isBox === true -> treat as box style reward (no ad counters) and enforce box cooldown.
+    // (unchanged existing logic except using quoted ids)
     // ===============================
     if (type === "rewardUser") {
       const { userId, amount, isBox = false } = data || {};
@@ -345,14 +242,10 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing amount" });
       }
 
-      // Resolve internal user id
-      const internalId = await resolveInternalUserId(userId);
-      if (!internalId) {
-        return res.status(404).json({ success: false, error: "User not found" });
-      }
+      const userIdStr = ensureStringId(userId);
 
       const result = await supabaseRequest(
-        `users?id=eq.${encodeURIComponent(internalId)}&select=*`
+        `users?id=eq.${encodeFilterValue(userIdStr)}&select=*`
       );
 
       if (!result || result.length === 0) {
@@ -385,7 +278,7 @@ export default async function handler(req, res) {
         const newBalance = (Number(user.balance) || 0) + parsedAmount;
 
         // Update only balance and last_box_time
-        await supabaseRequest(`users?id=eq.${encodeURIComponent(internalId)}`, {
+        await supabaseRequest(`users?id=eq.${encodeFilterValue(userIdStr)}`, {
           method: "PATCH",
           body: JSON.stringify({
             balance: newBalance,
@@ -440,7 +333,7 @@ export default async function handler(req, res) {
 
       // Update the user's balance and ad counters and last_ad_time
       const updatedUser = await supabaseRequest(
-        `users?id=eq.${encodeURIComponent(internalId)}`,
+        `users?id=eq.${encodeFilterValue(userIdStr)}`,
         {
           method: "PATCH",
           body: JSON.stringify({
@@ -464,20 +357,20 @@ export default async function handler(req, res) {
           // Reward inviter with 100 coins
           try {
             // Fetch inviter current balance
-            const inviterRes = await supabaseRequest(`users?id=eq.${encodeURIComponent(inviterId)}&select=balance`);
+            const inviterRes = await supabaseRequest(`users?id=eq.${encodeFilterValue(ensureStringId(inviterId))}&select=balance`);
             if (inviterRes && inviterRes.length > 0) {
               const inviter = inviterRes[0];
               const inviterBalance = Number(inviter.balance) || 0;
               const inviterNewBalance = inviterBalance + 100;
 
               // Update inviter balance
-              await supabaseRequest(`users?id=eq.${encodeURIComponent(inviterId)}`, {
+              await supabaseRequest(`users?id=eq.${encodeFilterValue(ensureStringId(inviterId))}`, {
                 method: "PATCH",
                 body: JSON.stringify({ balance: inviterNewBalance })
               });
 
               // Mark referral as activated on the referred user
-              await supabaseRequest(`users?id=eq.${encodeURIComponent(internalId)}`, {
+              await supabaseRequest(`users?id=eq.${encodeFilterValue(userIdStr)}`, {
                 method: "PATCH",
                 body: JSON.stringify({ referral_active: true })
               });
@@ -532,181 +425,221 @@ export default async function handler(req, res) {
 
     // ===============================
     // Get Tasks
-    // - If data.userId provided, exclude tasks already completed by that user
+    // - Exclude tasks that are already completed by this user
     // ===============================
     if (type === "getTasks") {
       const { userId } = data || {};
 
-      // Fetch all tasks
-      const tasks = await supabaseRequest(`tasks?select=*`);
-
-      let filteredTasks = Array.isArray(tasks) ? tasks : [];
-
-      if (userId) {
-        // Resolve internal user id (if possible) before checking user_tasks
-        const internalId = await resolveInternalUserId(userId);
-        if (internalId) {
-          // Fetch completed task ids for this user and filter them out
-          const completed = await supabaseRequest(`user_tasks?user_id=eq.${encodeURIComponent(internalId)}&select=task_id`);
-          const completedIds = Array.isArray(completed) ? completed.map(r => Number(r.task_id) || r.task_id) : [];
-          filteredTasks = filteredTasks.filter(t => !completedIds.includes(Number(t.id) || t.id));
-        }
+      // If no userId provided, just return all tasks
+      if (!userId) {
+        const tasks = await supabaseRequest(`tasks?select=*`);
+        return res.status(200).json({ success: true, tasks });
       }
 
+      const userIdStr = ensureStringId(userId);
+
+      // Fetch completed task ids for this user
+      const completedRows = await supabaseRequest(
+        `user_tasks?user_id=eq.${encodeFilterValue(userIdStr)}&status=eq.completed&select=task_id`
+      );
+
+      let completedIds = [];
+      if (Array.isArray(completedRows) && completedRows.length > 0) {
+        completedIds = completedRows.map(r => String(r.task_id));
+      }
+
+      // If no completed ids, return all tasks
+      if (completedIds.length === 0) {
+        const tasks = await supabaseRequest(`tasks?select=*`);
+        return res.status(200).json({ success: true, tasks });
+      }
+
+      // Build not.in filter with quoted values
+      const quoted = completedIds.map(id => encodeURIComponent(`'${id.replace(/'/g, "''")}'`)).join(',');
+      // Compose path carefully: use encodeURI to not over-encode reserved characters like parentheses
+      const path = encodeURI(`tasks?select=*&id=not.in.(${completedIds.map(id => `'${id.replace(/'/g, "''")}'`).join(",")})`);
+
+      const tasks = await supabaseRequest(path);
       return res.status(200).json({
         success: true,
-        tasks: filteredTasks
+        tasks
       });
     }
 
     // ===============================
-    // Complete Task (verify Telegram channel join + reward user + record completion)
-    // Expects: data.userId (attached automatically by client), data.taskId
-    // Flow:
-    //  - Ensure user & task exist
-    //  - Ensure user hasn't already completed task (user_tasks)
-    //  - Try to parse task.link to a channel username
-    //  - Use Telegram Bot API getChatMember to verify membership
-    //  - If member: insert user_tasks row, increment user's balance by task.reward, return success with new balance
+    // New: Start Task
+    // - Records that a user started a task (status = started)
+    // - Does NOT grant any reward
+    // - Prevents duplicate entries via server-side unique constraint / pre-check
     // ===============================
-    if (type === "completeTask") {
-      const { userId: providedUserId, taskId } = data || {};
+    if (type === "startTask") {
+      const { userId, taskId } = data || {};
 
-      if (!providedUserId) {
+      if (!userId) {
         return res.status(400).json({ success: false, error: "Missing userId" });
       }
       if (!taskId) {
         return res.status(400).json({ success: false, error: "Missing taskId" });
       }
 
-      // Resolve internal user id for DB operations (this may differ from Telegram numeric id)
-      const internalUserId = await resolveInternalUserId(providedUserId);
-      if (!internalUserId) {
-        return res.status(404).json({ success: false, error: "User not found" });
-      }
+      const userIdStr = ensureStringId(userId);
+      const taskIdStr = ensureStringId(taskId);
 
-      // Check if user exists (fetch minimal for balance)
-      const users = await supabaseRequest(`users?id=eq.${encodeURIComponent(internalUserId)}&select=balance`);
-      if (!users || users.length === 0) {
-        return res.status(404).json({ success: false, error: "User not found" });
-      }
+      // Check if a record already exists
+      const existing = await supabaseRequest(
+        `user_tasks?user_id=eq.${encodeFilterValue(userIdStr)}&task_id=eq.${encodeFilterValue(taskIdStr)}&select=*`
+      );
 
-      // Check if task exists
-      const tasks = await supabaseRequest(`tasks?id=eq.${encodeURIComponent(taskId)}&select=*`);
-      if (!tasks || tasks.length === 0) {
-        return res.status(404).json({ success: false, error: "Task not found" });
-      }
-      const task = tasks[0];
-
-      // Check if already completed (use internal user id for user_tasks lookups)
-      const existing = await supabaseRequest(`user_tasks?user_id=eq.${encodeURIComponent(internalUserId)}&task_id=eq.${encodeURIComponent(taskId)}&select=*`);
       if (existing && existing.length > 0) {
-        return res.status(400).json({ success: false, error: "Task already completed" });
+        // If already exists, return current status (started or completed)
+        return res.status(200).json({
+          success: true,
+          message: "Already started or completed",
+          status: existing[0].status || "started"
+        });
       }
 
-      // Try to parse a channel identifier from task.link
-      let chatIdentifier = null;
-      try {
-        if (task.link) {
-          const linkStr = String(task.link).trim();
-          // If link contains t.me/username => extract
-          const mm = linkStr.match(/t\.me\/(\+?[A-Za-z0-9_]+)/i);
-          if (mm && mm[1]) {
-            chatIdentifier = mm[1];
-          } else {
-            // If link contains @username
-            const mm2 = linkStr.match(/@([A-Za-z0-9_]+)/i);
-            if (mm2 && mm2[1]) chatIdentifier = mm2[1];
-            else chatIdentifier = linkStr; // fallback, try raw
-          }
-        }
-      } catch (e) {
-        console.error("Failed to parse task link for chat identifier:", e);
-      }
-
-      if (!chatIdentifier) {
-        return res.status(400).json({ success: false, error: "Unable to determine channel username from task link" });
-      }
-
-      // Check membership via Telegram API
-      let isMember = false;
-      try {
-        // For Telegram verification we must use the Telegram numeric user id (providedUserId)
-        isMember = await checkTelegramMembership(chatIdentifier, providedUserId);
-      } catch (e) {
-        // If verification failed due to bot missing token or other API error, surface clear error
-        console.error("Telegram membership check error:", e);
-        return res.status(500).json({ success: false, error: `Failed to verify membership: ${e.message || String(e)}` });
-      }
-
-      if (!isMember) {
-        return res.status(400).json({ success: false, error: "User is not a member of the channel" });
-      }
-
-      // Record completion in user_tasks using internal user id
+      // Insert new user_tasks row
       const now = new Date().toISOString();
-      await supabaseRequest("user_tasks", {
+      const newRow = {
+        id: randomUUID(),
+        user_id: userIdStr,
+        task_id: taskIdStr,
+        status: "started",
+        created_at: now
+      };
+
+      const created = await supabaseRequest("user_tasks", {
         method: "POST",
-        body: JSON.stringify({
-          user_id: internalUserId,
-          task_id: taskId,
-          created_at: now
-        })
-      });
-
-      // Reward the user: increment balance by task.reward
-      const user = users[0];
-      const currentBalance = Number(user.balance) || 0;
-      const reward = Number(task.reward) || 0;
-      const newBalance = currentBalance + reward;
-
-      await supabaseRequest(`users?id=eq.${encodeURIComponent(internalUserId)}`, {
-        method: "PATCH",
-        body: JSON.stringify({ balance: newBalance })
+        body: JSON.stringify(newRow)
       });
 
       return res.status(200).json({
         success: true,
-        rewarded: reward,
-        balance: newBalance,
-        taskId
+        userTask: Array.isArray(created) ? created[0] : created
       });
     }
 
     // ===============================
-    // Get Withdraws for a user (history)
-    // - Returns withdraw rows ordered by created_at desc
+    // New: Complete Task
+    // - Verifies the task was started and not already completed
+    // - Atomically marks user_task as completed (only if status=started)
+    // - Atomically increments user's balance with optimistic conditional updates / retries
+    // - Ensures that completing is effective only once
     // ===============================
-    if (type === "getWithdraws") {
-      const { userId } = data || {};
+    if (type === "completeTask") {
+      const { userId, taskId } = data || {};
 
       if (!userId) {
         return res.status(400).json({ success: false, error: "Missing userId" });
       }
-
-      const internalId = await resolveInternalUserId(userId);
-      if (!internalId) {
-        return res.status(404).json({ success: false, error: "User not found" });
+      if (!taskId) {
+        return res.status(400).json({ success: false, error: "Missing taskId" });
       }
 
-      // select useful fields
+      const userIdStr = ensureStringId(userId);
+      const taskIdStr = ensureStringId(taskId);
+
+      // Fetch user_task row
       const rows = await supabaseRequest(
-        `withdraw?user_id=eq.${encodeURIComponent(internalId)}&select=id,amount,status,destination,created_at,processed_at&order=created_at.desc`
+        `user_tasks?user_id=eq.${encodeFilterValue(userIdStr)}&task_id=eq.${encodeFilterValue(taskIdStr)}&select=*`
       );
 
+      if (!rows || rows.length === 0) {
+        return res.status(400).json({ success: false, error: "Task not started or record missing" });
+      }
+
+      const userTask = rows[0];
+
+      if (userTask.status === "completed") {
+        return res.status(200).json({ success: true, message: "Already completed", alreadyCompleted: true });
+      }
+
+      // Fetch task reward
+      const tasks = await supabaseRequest(`tasks?id=eq.${encodeFilterValue(taskIdStr)}&select=reward`);
+      if (!tasks || tasks.length === 0) {
+        return res.status(404).json({ success: false, error: "Task not found" });
+      }
+      const reward = Number(tasks[0].reward) || 0;
+
+      // 1) Attempt to atomically set user_tasks.status = completed only if currently started
+      const patchRes = await supabaseRequest(
+        `user_tasks?id=eq.${encodeFilterValue(String(userTask.id))}&status=eq.started`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status: "completed" })
+        }
+      );
+
+      // If no rows updated, another process may have completed it already
+      if (!patchRes || (Array.isArray(patchRes) && patchRes.length === 0)) {
+        return res.status(200).json({ success: true, message: "Already completed or could not mark completed", alreadyCompleted: true });
+      }
+
+      // 2) Now credit the user's balance with safe conditional retries to avoid race
+      const MAX_RETRIES = 3;
+      let attempt = 0;
+      let finalBalance = null;
+      let credited = false;
+
+      while (attempt < MAX_RETRIES && !credited) {
+        attempt++;
+        // Read current balance
+        const userRows = await supabaseRequest(`users?id=eq.${encodeFilterValue(userIdStr)}&select=balance`);
+        if (!userRows || userRows.length === 0) {
+          // Try to rollback user_tasks to 'started' to avoid marking completed without credit
+          try {
+            await supabaseRequest(`user_tasks?id=eq.${encodeFilterValue(String(userTask.id))}`, {
+              method: "PATCH",
+              body: JSON.stringify({ status: "started" })
+            });
+          } catch (e) { console.error("Rollback failed:", e); }
+          return res.status(404).json({ success: false, error: "User not found while crediting reward" });
+        }
+        const currentBalance = Number(userRows[0].balance) || 0;
+        const newBalance = currentBalance + reward;
+
+        // Try conditional update: only succeed if balance still equals currentBalance
+        const updateRes = await supabaseRequest(
+          `users?id=eq.${encodeFilterValue(userIdStr)}&balance=eq.${encodeFilterValue(String(currentBalance))}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ balance: newBalance })
+          }
+        );
+
+        if (updateRes && Array.isArray(updateRes) && updateRes.length > 0) {
+          finalBalance = newBalance;
+          credited = true;
+          break;
+        }
+
+        // If updateRes is empty, another concurrent update changed balance — retry
+      }
+
+      if (!credited) {
+        // Could not credit within retries - revert the user_task status to started to keep consistency
+        try {
+          await supabaseRequest(`user_tasks?id=eq.${encodeFilterValue(String(userTask.id))}`, {
+            method: "PATCH",
+            body: JSON.stringify({ status: "started" })
+          });
+        } catch (e) {
+          console.error("Failed to revert user_task after credit failure:", e);
+        }
+        return res.status(500).json({ success: false, error: "Failed to credit reward after multiple attempts" });
+      }
+
+      // Success: return new balance
       return res.status(200).json({
         success: true,
-        withdraws: Array.isArray(rows) ? rows : []
+        balance: finalBalance,
+        taskCompleted: true
       });
     }
 
     // ===============================
     // Create Withdraw (NEW)
-    // - Validates minimum amount (300)
-    // - Checks user balance
-    // - Inserts a row into withdraw table with status 'pending'
-    // - Deducts balance immediately (so user can't double-withdraw)
-    // Table name on server: withdraw
     // ===============================
     if (type === "createWithdraw") {
       const { userId, amount, destination = null } = data || {};
@@ -719,11 +652,6 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing amount" });
       }
 
-      const internalId = await resolveInternalUserId(userId);
-      if (!internalId) {
-        return res.status(404).json({ success: false, error: "User not found" });
-      }
-
       const parsedAmount = Number(amount) || 0;
       const MIN_WITHDRAW = 300;
 
@@ -734,8 +662,10 @@ export default async function handler(req, res) {
         });
       }
 
+      const userIdStr = ensureStringId(userId);
+
       // Fetch user to verify balance
-      const users = await supabaseRequest(`users?id=eq.${encodeURIComponent(internalId)}&select=balance`);
+      const users = await supabaseRequest(`users?id=eq.${encodeFilterValue(userIdStr)}&select=balance`);
       if (!users || users.length === 0) {
         return res.status(404).json({ success: false, error: "User not found" });
       }
@@ -751,7 +681,7 @@ export default async function handler(req, res) {
 
       // Create withdraw row
       const withdrawRow = {
-        user_id: internalId,
+        user_id: userIdStr,
         amount: parsedAmount,
         destination: destination || null,
         status: "pending",
@@ -765,7 +695,7 @@ export default async function handler(req, res) {
 
       // Deduct user's balance (immediate hold)
       const newBalance = currentBalance - parsedAmount;
-      await supabaseRequest(`users?id=eq.${encodeURIComponent(internalId)}`, {
+      await supabaseRequest(`users?id=eq.${encodeFilterValue(userIdStr)}`, {
         method: "PATCH",
         body: JSON.stringify({ balance: newBalance })
       });
@@ -778,8 +708,30 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // Get Referrals counts and details for inviter (active / pending + list)
-    // Returns: { success, active, pending, referrals: [{id,name,photo,ads_watched,referral_active}] }
+    // Get Withdraws for a user (history)
+    // ===============================
+    if (type === "getWithdraws") {
+      const { userId } = data || {};
+
+      if (!userId) {
+        return res.status(400).json({ success: false, error: "Missing userId" });
+      }
+
+      const userIdStr = ensureStringId(userId);
+
+      // select useful fields
+      const rows = await supabaseRequest(
+        `withdraw?user_id=eq.${encodeFilterValue(userIdStr)}&select=id,amount,status,destination,created_at,processed_at&order=created_at.desc`
+      );
+
+      return res.status(200).json({
+        success: true,
+        withdraws: Array.isArray(rows) ? rows : []
+      });
+    }
+
+    // ===============================
+    // Get Referrals counts and details for inviter
     // ===============================
     if (type === "getReferrals") {
       const { userId } = data || {};
@@ -788,13 +740,10 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing userId" });
       }
 
-      const internalId = await resolveInternalUserId(userId);
-      if (!internalId) {
-        return res.status(404).json({ success: false, error: "User not found" });
-      }
+      const userIdStr = ensureStringId(userId);
 
       // Fetch referral rows with useful fields
-      const referrals = await supabaseRequest(`users?referrer_id=eq.${encodeURIComponent(internalId)}&select=id,name,photo,ads_watched,referral_active`);
+      const referrals = await supabaseRequest(`users?referrer_id=eq.${encodeFilterValue(userIdStr)}&select=id,name,photo,ads_watched,referral_active`);
 
       if (!referrals) {
         return res.status(200).json({ success: true, active: 0, pending: 0, referrals: [] });
