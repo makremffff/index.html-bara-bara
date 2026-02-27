@@ -16,11 +16,6 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.error("Missing SUPABASE environment variables.");
 }
 
-// Warn if Telegram token missing (verification will fail)
-if (!TELEGRAM_BOT_TOKEN) {
-  console.warn("TELEGRAM_BOT_TOKEN not configured. Channel membership verification will not work.");
-}
-
 // ===============================
 // Helper: Supabase REST Request
 // ===============================
@@ -48,33 +43,52 @@ async function supabaseRequest(path, options = {}) {
   return res.status === 204 ? null : res.json();
 }
 
-// Helper: call Telegram getChatMember to verify membership
-async function telegramIsUserMember(chatIdentifier, userId) {
+// ===============================
+// Helper: call Telegram getChatMember
+// ===============================
+async function checkTelegramMembership(chatIdentifier, userId) {
   if (!TELEGRAM_BOT_TOKEN) {
-    // cannot verify, return false
-    return { ok: false, error: "Telegram bot token not configured" };
+    throw new Error("Telegram bot token not configured on server");
   }
 
-  try {
-    // chatIdentifier should be like "@channelusername" or numerical chat_id
-    const chatParam = encodeURIComponent(chatIdentifier);
-    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChatMember?chat_id=${chatParam}&user_id=${encodeURIComponent(userId)}`;
+  // chatIdentifier may be like "@channel" or "channel" or a full link
+  // Normalize to @username if possible
+  let chatId = chatIdentifier || "";
+  chatId = String(chatId).trim();
 
-    const resp = await fetch(url);
-    const json = await resp.json();
-
-    if (!json || !json.ok) {
-      return { ok: false, error: (json && json.description) ? json.description : "Telegram API error" };
-    }
-
-    const status = (json.result && json.result.status) ? json.result.status : null;
-    // statuses that indicate the user is a member
-    const okStatuses = ["creator", "administrator", "member"];
-    return { ok: okStatuses.includes(status), status, raw: json };
-  } catch (e) {
-    console.error("telegramIsUserMember error:", e);
-    return { ok: false, error: String(e) };
+  // If it's a full url like https://t.me/username or t.me/username, extract username
+  const m = chatId.match(/t\.me\/(\+?[A-Za-z0-9_]+)/i);
+  if (m && m[1]) {
+    chatId = m[1];
   }
+
+  // remove leading @ if present for the API we will prefix if necessary
+  if (chatId.startsWith("@")) chatId = chatId.slice(1);
+
+  // For safety, if it looks like an invite link (starts with +), the bot can't use getChatMember with +invite
+  if (chatId.startsWith("+")) {
+    throw new Error("Cannot verify invite-link style chat ids. Use a channel username.");
+  }
+
+  const encodedChat = encodeURIComponent("@" + chatId);
+  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChatMember?chat_id=${encodedChat}&user_id=${encodeURIComponent(userId)}`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Telegram API error: ${res.status} ${text}`);
+  }
+
+  const json = await res.json();
+  if (!json || typeof json.ok === "undefined" || json.ok !== true) {
+    // Telegram responded but not ok
+    const description = json && json.description ? json.description : "unknown";
+    throw new Error(`Telegram API failed: ${description}`);
+  }
+
+  const status = json.result && json.result.status ? String(json.result.status) : "";
+  const memberStatuses = ["creator", "administrator", "member"];
+  return memberStatuses.includes(status);
 }
 
 // ===============================
@@ -180,6 +194,8 @@ export default async function handler(req, res) {
 
     // ===============================
     // Reward Box (Open-Box) - server-side handler
+    // - Does NOT increment ad counters
+    // - Enforces a separate box cooldown (BOX_MIN_INTERVAL_SECONDS)
     // ===============================
     if (type === "rewardBox") {
       const { userId, amount } = data || {};
@@ -239,6 +255,8 @@ export default async function handler(req, res) {
 
     // ===============================
     // Reward User (Save Balance + Ads) and handle referral activation
+    // Server-side enforces a minimum interval between rewarded ads to mitigate automation.
+    // If data.isBox === true -> treat as box style reward (no ad counters) and enforce box cooldown.
     // ===============================
     if (type === "rewardUser") {
       const { userId, amount, isBox = false } = data || {};
@@ -432,34 +450,38 @@ export default async function handler(req, res) {
 
     // ===============================
     // Get Tasks
-    // - If userId provided, exclude tasks the user already completed (user_tasks table)
+    // - If data.userId provided, exclude tasks already completed by that user
     // ===============================
     if (type === "getTasks") {
       const { userId } = data || {};
 
-      // Fetch tasks list
+      // Fetch all tasks
       const tasks = await supabaseRequest(`tasks?select=*`);
 
-      if (!Array.isArray(tasks)) {
-        return res.status(200).json({ success: true, tasks: [] });
-      }
+      let filteredTasks = Array.isArray(tasks) ? tasks : [];
 
-      // If userId provided, filter out tasks already completed by this user
       if (userId) {
-        const completedRows = await supabaseRequest(`user_tasks?user_id=eq.${userId}&select=task_id`);
-        const completedTaskIds = Array.isArray(completedRows) ? completedRows.map(r => String(r.task_id)) : [];
-        const filtered = tasks.filter(t => !completedTaskIds.includes(String(t.id)));
-        return res.status(200).json({ success: true, tasks: filtered });
+        // Fetch completed task ids for this user and filter them out
+        const completed = await supabaseRequest(`user_tasks?user_id=eq.${userId}&select=task_id`);
+        const completedIds = Array.isArray(completed) ? completed.map(r => Number(r.task_id)) : [];
+        filteredTasks = filteredTasks.filter(t => !completedIds.includes(Number(t.id)));
       }
 
-      return res.status(200).json({ success: true, tasks });
+      return res.status(200).json({
+        success: true,
+        tasks: filteredTasks
+      });
     }
 
     // ===============================
-    // Complete Task (verify join + reward + mark as done)
-    // - Expects: userId (auto-attached), taskId
-    // - Verifies membership using Telegram Bot API (requires TELEGRAM_BOT_TOKEN)
-    // - If verified and not already completed, credits user's balance by task.reward and inserts user_tasks entry
+    // Complete Task (verify Telegram channel join + reward user + record completion)
+    // Expects: data.userId (attached automatically by client), data.taskId
+    // Flow:
+    //  - Ensure user & task exist
+    //  - Ensure user hasn't already completed task (user_tasks)
+    //  - Try to parse task.link to a channel username
+    //  - Use Telegram Bot API getChatMember to verify membership
+    //  - If member: insert user_tasks row, increment user's balance by task.reward, return success with new balance
     // ===============================
     if (type === "completeTask") {
       const { userId, taskId } = data || {};
@@ -471,77 +493,78 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing taskId" });
       }
 
-      // Fetch task
-      const taskRows = await supabaseRequest(`tasks?id=eq.${taskId}&select=*`);
-      if (!taskRows || taskRows.length === 0) {
+      // Check if user exists
+      const users = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
+      if (!users || users.length === 0) {
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
+      // Check if task exists
+      const tasks = await supabaseRequest(`tasks?id=eq.${taskId}&select=*`);
+      if (!tasks || tasks.length === 0) {
         return res.status(404).json({ success: false, error: "Task not found" });
       }
-      const task = taskRows[0];
-      const reward = Number(task.reward) || 30;
-      const link = task.link || "";
+      const task = tasks[0];
 
-      // Check if user already completed this task
+      // Check if already completed
       const existing = await supabaseRequest(`user_tasks?user_id=eq.${userId}&task_id=eq.${taskId}&select=*`);
       if (existing && existing.length > 0) {
         return res.status(400).json({ success: false, error: "Task already completed" });
       }
 
-      // Parse channel username from the link
-      // Accept patterns: https://t.me/username or https://t.me/joinchat/... (joinchat cannot be verified)
-      let channelIdentifier = null;
+      // Try to parse a channel identifier from task.link
+      let chatIdentifier = null;
       try {
-        const m = String(link).match(/t\.me\/(@?[A-Za-z0-9_]+)/i);
-        if (m && m[1]) {
-          channelIdentifier = m[1];
-          // normalize to @username
-          if (!channelIdentifier.startsWith('@')) channelIdentifier = '@' + channelIdentifier;
-        } else {
-          // try alt patterns
-          const m2 = String(link).match(/telegram\.me\/(@?[A-Za-z0-9_]+)/i);
-          if (m2 && m2[1]) {
-            channelIdentifier = m2[1];
-            if (!channelIdentifier.startsWith('@')) channelIdentifier = '@' + channelIdentifier;
+        if (task.link) {
+          const linkStr = String(task.link).trim();
+          // If link contains t.me/username => extract
+          const mm = linkStr.match(/t\.me\/(\+?[A-Za-z0-9_]+)/i);
+          if (mm && mm[1]) {
+            chatIdentifier = mm[1];
           } else {
-            // Could not parse username (invite link or other). Can't verify.
-            return res.status(400).json({ success: false, error: "Task link is not a public channel link. Verification requires a public channel username (t.me/username)." });
+            // If link contains @username
+            const mm2 = linkStr.match(/@([A-Za-z0-9_]+)/i);
+            if (mm2 && mm2[1]) chatIdentifier = mm2[1];
+            else chatIdentifier = linkStr; // fallback, try raw
           }
         }
       } catch (e) {
-        console.error("Failed to parse channel username:", e);
-        return res.status(400).json({ success: false, error: "Failed to parse task link" });
+        console.error("Failed to parse task link for chat identifier:", e);
       }
 
-      // Verify membership using Telegram API
-      const verification = await telegramIsUserMember(channelIdentifier, userId);
-      if (!verification.ok) {
-        // If telegram check not possible or negative, return informative error
-        const msg = verification.error ? String(verification.error) : "User not a member";
-        return res.status(400).json({ success: false, error: `Verification failed: ${msg}` });
+      if (!chatIdentifier) {
+        return res.status(400).json({ success: false, error: "Unable to determine channel username from task link" });
       }
 
-      // Passed verification: grant reward and mark as completed
-      // Start DB transaction-like sequence (multiple requests)
-      // 1) Insert into user_tasks
+      // Check membership via Telegram API
+      let isMember = false;
+      try {
+        isMember = await checkTelegramMembership(chatIdentifier, userId);
+      } catch (e) {
+        // If verification failed due to bot missing token or other API error, surface clear error
+        console.error("Telegram membership check error:", e);
+        return res.status(500).json({ success: false, error: `Failed to verify membership: ${e.message || String(e)}` });
+      }
+
+      if (!isMember) {
+        return res.status(400).json({ success: false, error: "User is not a member of the channel" });
+      }
+
+      // Record completion in user_tasks
       const now = new Date().toISOString();
-      const inserted = await supabaseRequest("user_tasks", {
+      await supabaseRequest("user_tasks", {
         method: "POST",
         body: JSON.stringify({
           user_id: userId,
           task_id: taskId,
-          reward: reward,
           created_at: now
         })
       });
 
-      // 2) Update user's balance
-      // fetch current user
-      const users = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
-      if (!users || users.length === 0) {
-        // rollback insert maybe, but continue with error
-        return res.status(404).json({ success: false, error: "User not found when updating balance" });
-      }
+      // Reward the user: increment balance by task.reward
       const user = users[0];
       const currentBalance = Number(user.balance) || 0;
+      const reward = Number(task.reward) || 0;
       const newBalance = currentBalance + reward;
 
       await supabaseRequest(`users?id=eq.${userId}`, {
@@ -549,16 +572,17 @@ export default async function handler(req, res) {
         body: JSON.stringify({ balance: newBalance })
       });
 
-      // Return success with new balance and reward
       return res.status(200).json({
         success: true,
-        reward: reward,
-        balance: newBalance
+        rewarded: reward,
+        balance: newBalance,
+        taskId
       });
     }
 
     // ===============================
     // Get Withdraws for a user (history)
+    // - Returns withdraw rows ordered by created_at desc
     // ===============================
     if (type === "getWithdraws") {
       const { userId } = data || {};
@@ -579,7 +603,80 @@ export default async function handler(req, res) {
     }
 
     // ===============================
+    // Create Withdraw (NEW)
+    // - Validates minimum amount (300)
+    // - Checks user balance
+    // - Inserts a row into withdraw table with status 'pending'
+    // - Deducts balance immediately (so user can't double-withdraw)
+    // Table name on server: withdraw
+    // ===============================
+    if (type === "createWithdraw") {
+      const { userId, amount, destination = null } = data || {};
+
+      if (!userId) {
+        return res.status(400).json({ success: false, error: "Missing userId" });
+      }
+
+      if (typeof amount === "undefined") {
+        return res.status(400).json({ success: false, error: "Missing amount" });
+      }
+
+      const parsedAmount = Number(amount) || 0;
+      const MIN_WITHDRAW = 300;
+
+      if (parsedAmount < MIN_WITHDRAW) {
+        return res.status(400).json({
+          success: false,
+          error: `Minimum withdraw is ${MIN_WITHDRAW} coins`
+        });
+      }
+
+      // Fetch user to verify balance
+      const users = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
+      if (!users || users.length === 0) {
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
+      const user = users[0];
+      const currentBalance = Number(user.balance) || 0;
+
+      if (currentBalance < parsedAmount) {
+        return res.status(400).json({ success: false, error: "Insufficient balance" });
+      }
+
+      const now = new Date().toISOString();
+
+      // Create withdraw row
+      const withdrawRow = {
+        user_id: userId,
+        amount: parsedAmount,
+        destination: destination || null,
+        status: "pending",
+        created_at: now
+      };
+
+      const created = await supabaseRequest("withdraw", {
+        method: "POST",
+        body: JSON.stringify(withdrawRow)
+      });
+
+      // Deduct user's balance (immediate hold)
+      const newBalance = currentBalance - parsedAmount;
+      await supabaseRequest(`users?id=eq.${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ balance: newBalance })
+      });
+
+      return res.status(200).json({
+        success: true,
+        withdraw: Array.isArray(created) ? created[0] : created,
+        balance: newBalance
+      });
+    }
+
+    // ===============================
     // Get Referrals counts and details for inviter (active / pending + list)
+    // Returns: { success, active, pending, referrals: [{id,name,photo,ads_watched,referral_active}] }
     // ===============================
     if (type === "getReferrals") {
       const { userId } = data || {};
