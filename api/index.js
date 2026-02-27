@@ -3,7 +3,7 @@
 // ===============================
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || null;
+const BOT_TOKEN = process.env.BOT_TOKEN || null;
 
 // Minimum seconds required between rewarded ads (server-side enforcement)
 const MIN_AD_INTERVAL_SECONDS = 50;
@@ -92,6 +92,67 @@ async function checkTelegramMembership(chatIdentifier, userId) {
 }
 
 // ===============================
+// Helper: resolve internal user id
+// Many deployments use a UUID primary key for users while the client (Telegram WebApp)
+// may attach a numeric Telegram user id. To avoid "invalid input syntax for type uuid"
+// errors we attempt multiple strategies to resolve an internal user id for DB ops:
+// 1) Try direct id lookup (users?id=eq.<value>)
+// 2) If that fails due to uuid parse error or returns empty, try common alternative
+//    columns that may hold Telegram id: telegram_id, tg_id, external_id
+// Returns the internal user's id string (if found), or null.
+async function resolveInternalUserId(providedUserId) {
+  if (!providedUserId) return null;
+
+  // 1) Try direct id match (wrap in try/catch to catch uuid parse errors coming from Postgrest)
+  try {
+    const direct = await supabaseRequest(`users?id=eq.${encodeURIComponent(providedUserId)}&select=id`);
+    if (Array.isArray(direct) && direct.length > 0) {
+      return direct[0].id;
+    }
+  } catch (e) {
+    // If there's an error that looks like Postgres uuid parse issue, continue to fallback methods.
+    // Log for diagnostics but don't fail the whole request.
+    const errStr = String(e.message || e);
+    if (!errStr.includes("invalid input syntax for type uuid")) {
+      // If it's some other error, still continue to try fallback approaches.
+      // But keep a note in logs.
+      console.warn("resolveInternalUserId - direct lookup error (non-uuid):", e);
+    } else {
+      // silence expected uuid parse issues
+    }
+  }
+
+  // 2) Try common alternative columns (telegram_id, tg_id, external_id)
+  const altCols = ["telegram_id", "tg_id", "external_id"];
+  for (const col of altCols) {
+    try {
+      const q = `users?${col}=eq.${encodeURIComponent(providedUserId)}&select=id`;
+      const found = await supabaseRequest(q);
+      if (Array.isArray(found) && found.length > 0) {
+        return found[0].id;
+      }
+    } catch (e) {
+      // ignore and continue, maybe column doesn't exist
+    }
+  }
+
+  // 3) As a last resort try to match by id cast to text if PostgREST schema allows text comparison
+  // (This attempt may or may not work depending on PostgREST configuration; try safe select and filter on server side)
+  try {
+    const allUsers = await supabaseRequest(`users?select=id`);
+    if (Array.isArray(allUsers)) {
+      const str = String(providedUserId);
+      const matched = allUsers.find(u => String(u.id) === str);
+      if (matched) return matched.id;
+    }
+  } catch (e) {
+    // if this is heavy or failing, ignore
+  }
+
+  return null;
+}
+
+// ===============================
 // API Handler
 // ===============================
 export default async function handler(req, res) {
@@ -120,14 +181,17 @@ export default async function handler(req, res) {
       const today = new Date().toISOString().split("T")[0];
 
       // Check if user exists
-      const existing = await supabaseRequest(`users?id=eq.${id}&select=*`);
+      const existing = await supabaseRequest(`users?id=eq.${encodeURIComponent(id)}&select=*`);
 
       if (!existing || existing.length === 0) {
         // Create new user with initial values. Save referrer if provided.
         const created = await supabaseRequest("users", {
           method: "POST",
           body: JSON.stringify({
+            // Attempt to save both id and a telegram_id field when possible.
+            // If the DB has 'telegram_id' column this will be ignored if it doesn't exist.
             id,
+            telegram_id: id,
             name,
             photo,
             balance: 0,
@@ -149,7 +213,7 @@ export default async function handler(req, res) {
       // If user exists, but a referrerId is provided and the user doesn't already have a referrer, set it (prevent self-referral)
       const user = existing[0];
       if (referrerId && !user.referrer_id && String(user.id) !== String(referrerId)) {
-        await supabaseRequest(`users?id=eq.${id}`, {
+        await supabaseRequest(`users?id=eq.${encodeURIComponent(id)}`, {
           method: "PATCH",
           body: JSON.stringify({
             referrer_id: referrerId,
@@ -171,8 +235,14 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing userId" });
       }
 
+      // Resolve internal user id if necessary
+      const internalId = await resolveInternalUserId(userId);
+      if (!internalId) {
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
       const result = await supabaseRequest(
-        `users?id=eq.${userId}&select=balance,ads_watched,daily_ads,last_ad_date,last_ad_time,referrer_id,referral_active,last_box_time`
+        `users?id=eq.${encodeURIComponent(internalId)}&select=balance,ads_watched,daily_ads,last_ad_date,last_ad_time,referrer_id,referral_active,last_box_time`
       );
 
       if (!result || result.length === 0) {
@@ -208,7 +278,13 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing amount" });
       }
 
-      const result = await supabaseRequest(`users?id=eq.${userId}&select=*`);
+      // Resolve internal user id
+      const internalId = await resolveInternalUserId(userId);
+      if (!internalId) {
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
+      const result = await supabaseRequest(`users?id=eq.${encodeURIComponent(internalId)}&select=*`);
 
       if (!result || result.length === 0) {
         return res.status(404).json({ success: false, error: "User not found" });
@@ -238,7 +314,7 @@ export default async function handler(req, res) {
       const newBalance = (Number(user.balance) || 0) + parsedAmount;
 
       // Update only balance and last_box_time (no ad counters)
-      await supabaseRequest(`users?id=eq.${userId}`, {
+      await supabaseRequest(`users?id=eq.${encodeURIComponent(internalId)}`, {
         method: "PATCH",
         body: JSON.stringify({
           balance: newBalance,
@@ -269,8 +345,14 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing amount" });
       }
 
+      // Resolve internal user id
+      const internalId = await resolveInternalUserId(userId);
+      if (!internalId) {
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
       const result = await supabaseRequest(
-        `users?id=eq.${userId}&select=*`
+        `users?id=eq.${encodeURIComponent(internalId)}&select=*`
       );
 
       if (!result || result.length === 0) {
@@ -303,7 +385,7 @@ export default async function handler(req, res) {
         const newBalance = (Number(user.balance) || 0) + parsedAmount;
 
         // Update only balance and last_box_time
-        await supabaseRequest(`users?id=eq.${userId}`, {
+        await supabaseRequest(`users?id=eq.${encodeURIComponent(internalId)}`, {
           method: "PATCH",
           body: JSON.stringify({
             balance: newBalance,
@@ -358,7 +440,7 @@ export default async function handler(req, res) {
 
       // Update the user's balance and ad counters and last_ad_time
       const updatedUser = await supabaseRequest(
-        `users?id=eq.${userId}`,
+        `users?id=eq.${encodeURIComponent(internalId)}`,
         {
           method: "PATCH",
           body: JSON.stringify({
@@ -382,20 +464,20 @@ export default async function handler(req, res) {
           // Reward inviter with 100 coins
           try {
             // Fetch inviter current balance
-            const inviterRes = await supabaseRequest(`users?id=eq.${inviterId}&select=balance`);
+            const inviterRes = await supabaseRequest(`users?id=eq.${encodeURIComponent(inviterId)}&select=balance`);
             if (inviterRes && inviterRes.length > 0) {
               const inviter = inviterRes[0];
               const inviterBalance = Number(inviter.balance) || 0;
               const inviterNewBalance = inviterBalance + 100;
 
               // Update inviter balance
-              await supabaseRequest(`users?id=eq.${inviterId}`, {
+              await supabaseRequest(`users?id=eq.${encodeURIComponent(inviterId)}`, {
                 method: "PATCH",
                 body: JSON.stringify({ balance: inviterNewBalance })
               });
 
               // Mark referral as activated on the referred user
-              await supabaseRequest(`users?id=eq.${userId}`, {
+              await supabaseRequest(`users?id=eq.${encodeURIComponent(internalId)}`, {
                 method: "PATCH",
                 body: JSON.stringify({ referral_active: true })
               });
@@ -461,10 +543,14 @@ export default async function handler(req, res) {
       let filteredTasks = Array.isArray(tasks) ? tasks : [];
 
       if (userId) {
-        // Fetch completed task ids for this user and filter them out
-        const completed = await supabaseRequest(`user_tasks?user_id=eq.${userId}&select=task_id`);
-        const completedIds = Array.isArray(completed) ? completed.map(r => Number(r.task_id)) : [];
-        filteredTasks = filteredTasks.filter(t => !completedIds.includes(Number(t.id)));
+        // Resolve internal user id (if possible) before checking user_tasks
+        const internalId = await resolveInternalUserId(userId);
+        if (internalId) {
+          // Fetch completed task ids for this user and filter them out
+          const completed = await supabaseRequest(`user_tasks?user_id=eq.${encodeURIComponent(internalId)}&select=task_id`);
+          const completedIds = Array.isArray(completed) ? completed.map(r => Number(r.task_id) || r.task_id) : [];
+          filteredTasks = filteredTasks.filter(t => !completedIds.includes(Number(t.id) || t.id));
+        }
       }
 
       return res.status(200).json({
@@ -484,30 +570,36 @@ export default async function handler(req, res) {
     //  - If member: insert user_tasks row, increment user's balance by task.reward, return success with new balance
     // ===============================
     if (type === "completeTask") {
-      const { userId, taskId } = data || {};
+      const { userId: providedUserId, taskId } = data || {};
 
-      if (!userId) {
+      if (!providedUserId) {
         return res.status(400).json({ success: false, error: "Missing userId" });
       }
       if (!taskId) {
         return res.status(400).json({ success: false, error: "Missing taskId" });
       }
 
-      // Check if user exists
-      const users = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
+      // Resolve internal user id for DB operations (this may differ from Telegram numeric id)
+      const internalUserId = await resolveInternalUserId(providedUserId);
+      if (!internalUserId) {
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
+      // Check if user exists (fetch minimal for balance)
+      const users = await supabaseRequest(`users?id=eq.${encodeURIComponent(internalUserId)}&select=balance`);
       if (!users || users.length === 0) {
         return res.status(404).json({ success: false, error: "User not found" });
       }
 
       // Check if task exists
-      const tasks = await supabaseRequest(`tasks?id=eq.${taskId}&select=*`);
+      const tasks = await supabaseRequest(`tasks?id=eq.${encodeURIComponent(taskId)}&select=*`);
       if (!tasks || tasks.length === 0) {
         return res.status(404).json({ success: false, error: "Task not found" });
       }
       const task = tasks[0];
 
-      // Check if already completed
-      const existing = await supabaseRequest(`user_tasks?user_id=eq.${userId}&task_id=eq.${taskId}&select=*`);
+      // Check if already completed (use internal user id for user_tasks lookups)
+      const existing = await supabaseRequest(`user_tasks?user_id=eq.${encodeURIComponent(internalUserId)}&task_id=eq.${encodeURIComponent(taskId)}&select=*`);
       if (existing && existing.length > 0) {
         return res.status(400).json({ success: false, error: "Task already completed" });
       }
@@ -539,7 +631,8 @@ export default async function handler(req, res) {
       // Check membership via Telegram API
       let isMember = false;
       try {
-        isMember = await checkTelegramMembership(chatIdentifier, userId);
+        // For Telegram verification we must use the Telegram numeric user id (providedUserId)
+        isMember = await checkTelegramMembership(chatIdentifier, providedUserId);
       } catch (e) {
         // If verification failed due to bot missing token or other API error, surface clear error
         console.error("Telegram membership check error:", e);
@@ -550,12 +643,12 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "User is not a member of the channel" });
       }
 
-      // Record completion in user_tasks
+      // Record completion in user_tasks using internal user id
       const now = new Date().toISOString();
       await supabaseRequest("user_tasks", {
         method: "POST",
         body: JSON.stringify({
-          user_id: userId,
+          user_id: internalUserId,
           task_id: taskId,
           created_at: now
         })
@@ -567,7 +660,7 @@ export default async function handler(req, res) {
       const reward = Number(task.reward) || 0;
       const newBalance = currentBalance + reward;
 
-      await supabaseRequest(`users?id=eq.${userId}`, {
+      await supabaseRequest(`users?id=eq.${encodeURIComponent(internalUserId)}`, {
         method: "PATCH",
         body: JSON.stringify({ balance: newBalance })
       });
@@ -591,9 +684,14 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing userId" });
       }
 
+      const internalId = await resolveInternalUserId(userId);
+      if (!internalId) {
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
       // select useful fields
       const rows = await supabaseRequest(
-        `withdraw?user_id=eq.${userId}&select=id,amount,status,destination,created_at,processed_at&order=created_at.desc`
+        `withdraw?user_id=eq.${encodeURIComponent(internalId)}&select=id,amount,status,destination,created_at,processed_at&order=created_at.desc`
       );
 
       return res.status(200).json({
@@ -621,6 +719,11 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing amount" });
       }
 
+      const internalId = await resolveInternalUserId(userId);
+      if (!internalId) {
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
       const parsedAmount = Number(amount) || 0;
       const MIN_WITHDRAW = 300;
 
@@ -632,7 +735,7 @@ export default async function handler(req, res) {
       }
 
       // Fetch user to verify balance
-      const users = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
+      const users = await supabaseRequest(`users?id=eq.${encodeURIComponent(internalId)}&select=balance`);
       if (!users || users.length === 0) {
         return res.status(404).json({ success: false, error: "User not found" });
       }
@@ -648,7 +751,7 @@ export default async function handler(req, res) {
 
       // Create withdraw row
       const withdrawRow = {
-        user_id: userId,
+        user_id: internalId,
         amount: parsedAmount,
         destination: destination || null,
         status: "pending",
@@ -662,7 +765,7 @@ export default async function handler(req, res) {
 
       // Deduct user's balance (immediate hold)
       const newBalance = currentBalance - parsedAmount;
-      await supabaseRequest(`users?id=eq.${userId}`, {
+      await supabaseRequest(`users?id=eq.${encodeURIComponent(internalId)}`, {
         method: "PATCH",
         body: JSON.stringify({ balance: newBalance })
       });
@@ -685,8 +788,13 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing userId" });
       }
 
+      const internalId = await resolveInternalUserId(userId);
+      if (!internalId) {
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
       // Fetch referral rows with useful fields
-      const referrals = await supabaseRequest(`users?referrer_id=eq.${userId}&select=id,name,photo,ads_watched,referral_active`);
+      const referrals = await supabaseRequest(`users?referrer_id=eq.${encodeURIComponent(internalId)}&select=id,name,photo,ads_watched,referral_active`);
 
       if (!referrals) {
         return res.status(200).json({ success: true, active: 0, pending: 0, referrals: [] });
