@@ -3,6 +3,7 @@
 // ===============================
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || null;
 
 // Minimum seconds required between rewarded ads (server-side enforcement)
 const MIN_AD_INTERVAL_SECONDS = 50;
@@ -13,6 +14,11 @@ const BOX_MIN_INTERVAL_SECONDS = 5 * 60; // 5 minutes
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   // If these env vars are missing, throw early so developer notices
   console.error("Missing SUPABASE environment variables.");
+}
+
+// Warn if Telegram token missing (verification will fail)
+if (!TELEGRAM_BOT_TOKEN) {
+  console.warn("TELEGRAM_BOT_TOKEN not configured. Channel membership verification will not work.");
 }
 
 // ===============================
@@ -40,6 +46,35 @@ async function supabaseRequest(path, options = {}) {
   }
 
   return res.status === 204 ? null : res.json();
+}
+
+// Helper: call Telegram getChatMember to verify membership
+async function telegramIsUserMember(chatIdentifier, userId) {
+  if (!TELEGRAM_BOT_TOKEN) {
+    // cannot verify, return false
+    return { ok: false, error: "Telegram bot token not configured" };
+  }
+
+  try {
+    // chatIdentifier should be like "@channelusername" or numerical chat_id
+    const chatParam = encodeURIComponent(chatIdentifier);
+    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChatMember?chat_id=${chatParam}&user_id=${encodeURIComponent(userId)}`;
+
+    const resp = await fetch(url);
+    const json = await resp.json();
+
+    if (!json || !json.ok) {
+      return { ok: false, error: (json && json.description) ? json.description : "Telegram API error" };
+    }
+
+    const status = (json.result && json.result.status) ? json.result.status : null;
+    // statuses that indicate the user is a member
+    const okStatuses = ["creator", "administrator", "member"];
+    return { ok: okStatuses.includes(status), status, raw: json };
+  } catch (e) {
+    console.error("telegramIsUserMember error:", e);
+    return { ok: false, error: String(e) };
+  }
 }
 
 // ===============================
@@ -145,8 +180,6 @@ export default async function handler(req, res) {
 
     // ===============================
     // Reward Box (Open-Box) - server-side handler
-    // - Does NOT increment ad counters
-    // - Enforces a separate box cooldown (BOX_MIN_INTERVAL_SECONDS)
     // ===============================
     if (type === "rewardBox") {
       const { userId, amount } = data || {};
@@ -206,8 +239,6 @@ export default async function handler(req, res) {
 
     // ===============================
     // Reward User (Save Balance + Ads) and handle referral activation
-    // Server-side enforces a minimum interval between rewarded ads to mitigate automation.
-    // If data.isBox === true -> treat as box style reward (no ad counters) and enforce box cooldown.
     // ===============================
     if (type === "rewardUser") {
       const { userId, amount, isBox = false } = data || {};
@@ -401,93 +432,133 @@ export default async function handler(req, res) {
 
     // ===============================
     // Get Tasks
+    // - If userId provided, exclude tasks the user already completed (user_tasks table)
     // ===============================
     if (type === "getTasks") {
-      const tasks = await supabaseRequest(
-        `tasks?select=*`
-      );
+      const { userId } = data || {};
 
-      return res.status(200).json({
-        success: true,
-        tasks
-      });
+      // Fetch tasks list
+      const tasks = await supabaseRequest(`tasks?select=*`);
+
+      if (!Array.isArray(tasks)) {
+        return res.status(200).json({ success: true, tasks: [] });
+      }
+
+      // If userId provided, filter out tasks already completed by this user
+      if (userId) {
+        const completedRows = await supabaseRequest(`user_tasks?user_id=eq.${userId}&select=task_id`);
+        const completedTaskIds = Array.isArray(completedRows) ? completedRows.map(r => String(r.task_id)) : [];
+        const filtered = tasks.filter(t => !completedTaskIds.includes(String(t.id)));
+        return res.status(200).json({ success: true, tasks: filtered });
+      }
+
+      return res.status(200).json({ success: true, tasks });
     }
 
     // ===============================
-    // Create Withdraw (NEW)
-    // - Validates minimum amount (300)
-    // - Checks user balance
-    // - Inserts a row into withdraw table with status 'pending'
-    // - Deducts balance immediately (so user can't double-withdraw)
-    // Table name on server: withdraw
+    // Complete Task (verify join + reward + mark as done)
+    // - Expects: userId (auto-attached), taskId
+    // - Verifies membership using Telegram Bot API (requires TELEGRAM_BOT_TOKEN)
+    // - If verified and not already completed, credits user's balance by task.reward and inserts user_tasks entry
     // ===============================
-    if (type === "createWithdraw") {
-      const { userId, amount, destination = null } = data || {};
+    if (type === "completeTask") {
+      const { userId, taskId } = data || {};
 
       if (!userId) {
         return res.status(400).json({ success: false, error: "Missing userId" });
       }
-
-      if (typeof amount === "undefined") {
-        return res.status(400).json({ success: false, error: "Missing amount" });
+      if (!taskId) {
+        return res.status(400).json({ success: false, error: "Missing taskId" });
       }
 
-      const parsedAmount = Number(amount) || 0;
-      const MIN_WITHDRAW = 300;
+      // Fetch task
+      const taskRows = await supabaseRequest(`tasks?id=eq.${taskId}&select=*`);
+      if (!taskRows || taskRows.length === 0) {
+        return res.status(404).json({ success: false, error: "Task not found" });
+      }
+      const task = taskRows[0];
+      const reward = Number(task.reward) || 30;
+      const link = task.link || "";
 
-      if (parsedAmount < MIN_WITHDRAW) {
-        return res.status(400).json({
-          success: false,
-          error: `Minimum withdraw is ${MIN_WITHDRAW} coins`
-        });
+      // Check if user already completed this task
+      const existing = await supabaseRequest(`user_tasks?user_id=eq.${userId}&task_id=eq.${taskId}&select=*`);
+      if (existing && existing.length > 0) {
+        return res.status(400).json({ success: false, error: "Task already completed" });
       }
 
-      // Fetch user to verify balance
-      const users = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
-      if (!users || users.length === 0) {
-        return res.status(404).json({ success: false, error: "User not found" });
+      // Parse channel username from the link
+      // Accept patterns: https://t.me/username or https://t.me/joinchat/... (joinchat cannot be verified)
+      let channelIdentifier = null;
+      try {
+        const m = String(link).match(/t\.me\/(@?[A-Za-z0-9_]+)/i);
+        if (m && m[1]) {
+          channelIdentifier = m[1];
+          // normalize to @username
+          if (!channelIdentifier.startsWith('@')) channelIdentifier = '@' + channelIdentifier;
+        } else {
+          // try alt patterns
+          const m2 = String(link).match(/telegram\.me\/(@?[A-Za-z0-9_]+)/i);
+          if (m2 && m2[1]) {
+            channelIdentifier = m2[1];
+            if (!channelIdentifier.startsWith('@')) channelIdentifier = '@' + channelIdentifier;
+          } else {
+            // Could not parse username (invite link or other). Can't verify.
+            return res.status(400).json({ success: false, error: "Task link is not a public channel link. Verification requires a public channel username (t.me/username)." });
+          }
+        }
+      } catch (e) {
+        console.error("Failed to parse channel username:", e);
+        return res.status(400).json({ success: false, error: "Failed to parse task link" });
       }
 
-      const user = users[0];
-      const currentBalance = Number(user.balance) || 0;
-
-      if (currentBalance < parsedAmount) {
-        return res.status(400).json({ success: false, error: "Insufficient balance" });
+      // Verify membership using Telegram API
+      const verification = await telegramIsUserMember(channelIdentifier, userId);
+      if (!verification.ok) {
+        // If telegram check not possible or negative, return informative error
+        const msg = verification.error ? String(verification.error) : "User not a member";
+        return res.status(400).json({ success: false, error: `Verification failed: ${msg}` });
       }
 
+      // Passed verification: grant reward and mark as completed
+      // Start DB transaction-like sequence (multiple requests)
+      // 1) Insert into user_tasks
       const now = new Date().toISOString();
-
-      // Create withdraw row
-      const withdrawRow = {
-        user_id: userId,
-        amount: parsedAmount,
-        destination: destination || null,
-        status: "pending",
-        created_at: now
-      };
-
-      const created = await supabaseRequest("withdraw", {
+      const inserted = await supabaseRequest("user_tasks", {
         method: "POST",
-        body: JSON.stringify(withdrawRow)
+        body: JSON.stringify({
+          user_id: userId,
+          task_id: taskId,
+          reward: reward,
+          created_at: now
+        })
       });
 
-      // Deduct user's balance (immediate hold)
-      const newBalance = currentBalance - parsedAmount;
+      // 2) Update user's balance
+      // fetch current user
+      const users = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
+      if (!users || users.length === 0) {
+        // rollback insert maybe, but continue with error
+        return res.status(404).json({ success: false, error: "User not found when updating balance" });
+      }
+      const user = users[0];
+      const currentBalance = Number(user.balance) || 0;
+      const newBalance = currentBalance + reward;
+
       await supabaseRequest(`users?id=eq.${userId}`, {
         method: "PATCH",
         body: JSON.stringify({ balance: newBalance })
       });
 
+      // Return success with new balance and reward
       return res.status(200).json({
         success: true,
-        withdraw: Array.isArray(created) ? created[0] : created,
+        reward: reward,
         balance: newBalance
       });
     }
 
     // ===============================
     // Get Withdraws for a user (history)
-    // - Returns withdraw rows ordered by created_at desc
     // ===============================
     if (type === "getWithdraws") {
       const { userId } = data || {};
@@ -509,7 +580,6 @@ export default async function handler(req, res) {
 
     // ===============================
     // Get Referrals counts and details for inviter (active / pending + list)
-    // Returns: { success, active, pending, referrals: [{id,name,photo,ads_watched,referral_active}] }
     // ===============================
     if (type === "getReferrals") {
       const { userId } = data || {};
