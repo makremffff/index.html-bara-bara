@@ -716,15 +716,6 @@ if (adsBtn) {
 
 /* =======================
    BOX (OPEN BOX) FEATURE
-   - When user clicks OPEN -> show two ads (they don't affect main ad counter)
-   - After ads complete award random reward (75|100|150|200) added to balance
-   - After finishing disable open button for 5 minutes (countdown shown)
-   - Show box notification by reusing the main notification element (text + image preserved)
-   - Persist cooldown in localStorage to survive reloads.
-   - Box ad displays do not interfere with main adCooldown (use useGlobalCooldown=false).
-   - Make cooldown per-account (use USER_ID in key) so each account has independent timing.
-   - When box ads finish, the main ads notification (#adsnotifi) will be shown with text "you get <amount> coin" and the image.
-   - New: hidden 23s timer controlling when the notification is shown, ensuring single notification and clean cancellation on failure.
 ======================= */
 const openBoxBtn = document.getElementById("openbox");
 const BOX_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
@@ -732,8 +723,7 @@ let boxCooldownTimer = null;
 let boxCooldownInterval = null;
 const BOX_REWARDS = [75, 100, 150, 200];
 
-// Hidden box notification timer and guards
-let boxHiddenTimer = null; // as requested
+let boxHiddenTimer = null;
 let boxHiddenTimerExpired = false;
 let boxNotificationShown = false;
 let rewardPendingForBox = null;
@@ -755,11 +745,9 @@ function setOpenBoxDisabled(state, untilTs = null) {
   if (state) {
     openBoxBtn.style.pointerEvents = 'none';
     openBoxBtn.style.opacity = '0.5';
-    // store cooldown until timestamp for this account/key
     try {
       if (untilTs) localStorage.setItem(key, String(untilTs));
     } catch (e) {}
-    // start interval to update text
     if (boxCooldownInterval) clearInterval(boxCooldownInterval);
     boxCooldownInterval = setInterval(function(){
       try {
@@ -791,7 +779,6 @@ function setOpenBoxDisabled(state, untilTs = null) {
   }
 }
 
-// Ensure dataset running initialized
 if (openBoxBtn && typeof openBoxBtn.dataset.running === 'undefined') {
   openBoxBtn.dataset.running = "0";
   if (openBoxBtn.style) openBoxBtn.style.cursor = "pointer";
@@ -799,35 +786,28 @@ if (openBoxBtn && typeof openBoxBtn.dataset.running === 'undefined') {
 
 async function handleBoxClick(evt) {
   if (!openBoxBtn) return;
-  // reject synthetic
   if (evt && typeof evt.isTrusted !== "undefined" && !evt.isTrusted) {
     console.warn("Ignored non-user initiated click (box)");
     return;
   }
 
-  // Prevent multiple concurrent box operations
   if (boxHiddenTimer || openBoxBtn.dataset.running === "1") {
-    // Already in progress, ignore
     return;
   }
 
   const key = getBoxCooldownKey();
 
-  // check persistent cooldown
   try {
     const stored = Number(localStorage.getItem(key) || 0);
     if (stored && stored > Date.now()) {
-      // still cooling
       return;
     }
   } catch (e) {}
 
-  // Provide immediate UI feedback
   openBoxBtn.style.pointerEvents = 'none';
   openBoxBtn.style.opacity = '0.6';
   openBoxBtn.dataset.running = "1";
 
-  // Clear existing hidden timer/state before starting
   if (boxHiddenTimer) {
     try { clearTimeout(boxHiddenTimer); } catch (e) {}
     boxHiddenTimer = null;
@@ -836,8 +816,6 @@ async function handleBoxClick(evt) {
   boxNotificationShown = false;
   rewardPendingForBox = null;
 
-  // Start hidden 23-second timer (do not show any notification before it expires)
-  // Ensure single timer at a time
   if (boxHiddenTimer) {
     clearTimeout(boxHiddenTimer);
     boxHiddenTimer = null;
@@ -845,7 +823,6 @@ async function handleBoxClick(evt) {
   boxHiddenTimer = setTimeout(function() {
     boxHiddenTimer = null;
     boxHiddenTimerExpired = true;
-    // If reward already ready and notification not yet shown -> show it now
     if (rewardPendingForBox != null && !boxNotificationShown) {
       boxNotificationShown = true;
       try {
@@ -857,7 +834,6 @@ async function handleBoxClick(evt) {
     }
   }, 21000);
 
-  // Show two ads that should NOT affect the main ad counters (useGlobalCooldown=false)
   let ad1 = false;
   let ad2 = false;
   try {
@@ -869,9 +845,7 @@ async function handleBoxClick(evt) {
     ad2 = ad2 || false;
   }
 
-  // If at least one ad failed, cancel hidden timer and restore button
   if (!ad1 || !ad2) {
-    // cancel hidden notification timer
     if (boxHiddenTimer) {
       try { clearTimeout(boxHiddenTimer); } catch (e) {}
       boxHiddenTimer = null;
@@ -880,7 +854,6 @@ async function handleBoxClick(evt) {
     boxNotificationShown = false;
     rewardPendingForBox = null;
 
-    // restore button (short delay to avoid rapid retries)
     setTimeout(function(){
       openBoxBtn.style.pointerEvents = '';
       openBoxBtn.style.opacity = '';
@@ -891,19 +864,15 @@ async function handleBoxClick(evt) {
     return;
   }
 
-  // Both ads shown: award random reward
   const reward = BOX_REWARDS[Math.floor(Math.random() * BOX_REWARDS.length)];
   rewardPendingForBox = reward;
 
-  // Try server-side reward (preferable). Backend may implement "rewardBox" to avoid counting toward ad counters.
   let res = null;
   try {
     res = await fetchApi({ type: "rewardBox", data: { amount: reward } });
     if (res && res.success) {
-      // server returned updated balance
       ADS = Number(res.balance) || ADS;
     } else {
-      // If server didn't support rewardBox, fallback to local UI update and attempt to call rewardUser as a best-effort
       try {
         const fallback = await fetchApi({ type: "rewardUser", data: { amount: reward, isBox: true } });
         if (fallback && fallback.success) {
@@ -919,7 +888,6 @@ async function handleBoxClick(evt) {
     ADS = Number(ADS) + Number(reward);
   }
 
-  // Update UI
   if (adsBalance) adsBalance.textContent = ADS;
   if (walletbalance) {
     walletbalance.innerHTML = `
@@ -928,7 +896,6 @@ async function handleBoxClick(evt) {
     `;
   }
 
-  // If hidden timer already expired -> show notification immediately (but ensure only once)
   if (boxHiddenTimerExpired && !boxNotificationShown) {
     boxNotificationShown = true;
     try {
@@ -936,23 +903,16 @@ async function handleBoxClick(evt) {
     } catch (e) {
       console.warn("box notification failed:", e);
     }
-    // clear pending reward since shown
     rewardPendingForBox = null;
-  } else {
-    // Wait for timer to expire; when it does the setTimeout handler will show the notification
-    // but ensure we do not schedule a second notify here.
   }
 
-  // Start persistent cooldown for BOX_COOLDOWN_MS
   const until = Date.now() + BOX_COOLDOWN_MS;
   setOpenBoxDisabled(true, until);
 
-  // Final cleanup: ensure we do not leave running flag set (cooldown manages pointerEvents)
   openBoxBtn.dataset.running = "0";
   openBoxBtn.style.pointerEvents = 'none';
   openBoxBtn.style.opacity = '0.5';
 
-  // If hidden timer is null and notification still pending, show it now
   if (!boxHiddenTimer && rewardPendingForBox != null && !boxNotificationShown) {
     boxNotificationShown = true;
     try {
@@ -1062,7 +1022,7 @@ if (creatTask) {
 }
 
 /* =======================
-   HELPER: Updating Balance UI
+   HELPER: تحديث واجهة الرصيد (يظهر للمستخدم أول مرّة و يتحدّث تلقائياً)
 ======================= */
 function updateBalanceUI(res) {
   if (!res) return;
@@ -1395,10 +1355,10 @@ async function loadWithdrawHistory() {
    المتطلبات:
    - تجلب المهام المتاحة من جدول tasks في السيرفر
    - عند الضغط على رابط المهمة (Start) تفتح الرابط (t.me/...)
-     وتتحول إلى زر "CHECK" بخلفية سوداء للتحقق
+     وتتحول تكست الرابط الى 'CHECK' مع الحفاظ على نفس شكل الزر (أي لا نستبدل العنصر)
    - عند الضغط على CHECK يطلب من السيرفر التحقق إذا المستخدم انضم للقناة فعلا
-     (السيرفر يستخدم Telegram Bot API للتحقق)
    - لو تم التأكد يتم منح المكافأة للمستخدم ويُحذف/لا يظهر له هذه المهمة مرة ثانية
+   - إصلاح خطأ invalid input syntax for type uuid: "2" عبر تمرير taskId بصيغة مناسبة (number إن كانت أرقام)
 ======================= */
 const TASK_CONTAINER_SELECTOR = ".task-container";
 
@@ -1410,6 +1370,7 @@ function createTaskCard(task) {
   // Reward icon fallback
   const reward = typeof task.reward !== "undefined" ? task.reward : 30;
 
+  // Keep the anchor structure exactly as original (so CSS for 'start' button remains)
   card.innerHTML = `
     <img class="taskimg" src="telegram.png" width="25">
     <span class="task-name">${task.name || "Task"}</span>
@@ -1459,113 +1420,128 @@ function attachTaskLinkListeners() {
   const container = document.querySelector(TASK_CONTAINER_SELECTOR);
   if (!container) return;
 
-  // Use event delegation for robustness
+  // Remove previous to avoid duplicate handlers
   container.removeEventListener('click', onTaskContainerClick);
   container.addEventListener('click', onTaskContainerClick);
 }
 
+/*
+  Event delegation handler for task links.
+  Behavior:
+  - First click on .task-link -> open channel link in new tab and convert the same anchor into "CHECK"
+    (we DO NOT replace the element; we keep the same anchor so CSS/shape remain).
+  - Subsequent click on the same anchor (now CHECK) triggers verification flow.
+*/
 async function onTaskContainerClick(evt) {
   const el = evt.target;
-  // If start link clicked
-  if (el && el.classList && el.classList.contains('task-link')) {
-    // prevent default navigation so we can open in new tab and transform UI
-    evt.preventDefault();
+  if (!el) return;
 
-    // ensure user logged in
-    if (!USER_ID) {
-      alert("Please open via Telegram and login to perform tasks.");
-      // still open link to help user join
-      try { window.open(el.href, '_blank'); } catch (e) {}
-      return;
+  // operate only on anchors with class task-link
+  if (!(el.classList && el.classList.contains('task-link'))) return;
+
+  evt.preventDefault(); // we'll handle opening / checking
+
+  // find containing card
+  const card = el.closest('.task-card');
+  if (!card) return;
+  const rawTaskId = card.dataset.taskId;
+
+  // If anchor is in "check mode" -> perform verification
+  if (el.dataset.check === "1") {
+    // Prevent double clicks
+    if (el.dataset.processing === "1") return;
+    el.dataset.processing = "1";
+    const originalText = el.textContent;
+    el.textContent = 'Checking...';
+    el.style.pointerEvents = 'none';
+
+    try {
+      // Ensure taskId sent in appropriate type:
+      // - if numeric string -> send Number
+      // - otherwise send raw string (likely uuid)
+      let taskIdToSend = rawTaskId;
+      if (/^[0-9]+$/.test(String(rawTaskId))) {
+        taskIdToSend = Number(rawTaskId);
+      } else {
+        // trim whitespace, avoid quotes around value
+        taskIdToSend = String(rawTaskId).trim();
+      }
+
+      const resp = await fetchApi({
+        type: "completeTask",
+        data: {
+          taskId: taskIdToSend
+        }
+      });
+
+      if (resp && resp.success) {
+        // success: update balance and remove task card from UI
+        if (typeof resp.balance !== 'undefined') {
+          ADS = Number(resp.balance) || ADS;
+          if (adsBalance) adsBalance.textContent = ADS;
+          if (walletbalance) {
+            walletbalance.innerHTML = `
+              <img src="coins.png" style="width:20px; vertical-align:middle;">
+              ${ADS}
+            `;
+          }
+        }
+
+        // show reward notification
+        const rewardAmt = resp.reward || 0;
+        showBoxRewardNotification(rewardAmt);
+
+        // remove the task card so user can't do it again
+        try { card.parentNode.removeChild(card); } catch (e) {}
+      } else {
+        // server returned failure
+        const err = resp && resp.error ? String(resp.error) : "Verification failed. Make sure you joined the channel.";
+        alert(err);
+        // restore UI to CHECK state
+        el.textContent = 'CHECK';
+        el.dataset.processing = "0";
+        el.style.pointerEvents = '';
+      }
+    } catch (err) {
+      console.error("completeTask failed:", err);
+      alert("Verification error. Please try again.");
+      el.textContent = 'CHECK';
+      el.dataset.processing = "0";
+      el.style.pointerEvents = '';
+    } finally {
+      // ensure processing flag removed if element still exists
+      try { el.dataset.processing = "0"; } catch (e) {}
     }
 
-    // open link in new tab/window to allow user to join
-    try { window.open(el.href, '_blank'); } catch (e) {}
-
-    // transform anchor into a check button
-    const card = el.closest('.task-card');
-    if (!card) return;
-    const taskId = card.dataset.taskId;
-
-    // Replace the anchor with a check button if not already transformed
-    if (el.dataset.transformed === "1") return;
-    el.dataset.transformed = "1";
-
-    // Create check button
-    const checkBtn = document.createElement('button');
-    checkBtn.className = 'task-check-btn';
-    checkBtn.textContent = 'CHECK';
-    checkBtn.style.background = '#000';
-    checkBtn.style.color = '#fff';
-    checkBtn.style.padding = '6px 10px';
-    checkBtn.style.border = 'none';
-    checkBtn.style.borderRadius = '4px';
-    checkBtn.style.cursor = 'pointer';
-    checkBtn.dataset.taskId = taskId;
-
-    // Replace anchor with button
-    el.style.display = 'none';
-    el.parentNode.appendChild(checkBtn);
-
-    // Add click handler to check button
-    checkBtn.addEventListener('click', async function onCheckClick(e) {
-      e.preventDefault();
-      // prevent double-click
-      if (checkBtn.disabled) return;
-      checkBtn.disabled = true;
-      checkBtn.textContent = 'Checking...';
-
-      try {
-        const resp = await fetchApi({
-          type: "completeTask",
-          data: {
-            taskId: taskId
-          }
-        });
-
-        if (resp && resp.success) {
-          // success: update balance and remove task card from UI
-          if (resp.balance !== undefined) {
-            ADS = Number(resp.balance) || ADS;
-            if (adsBalance) adsBalance.textContent = ADS;
-            if (walletbalance) {
-              walletbalance.innerHTML = `
-                <img src="coins.png" style="width:20px; vertical-align:middle;">
-                ${ADS}
-              `;
-            }
-          }
-
-          // show reward notification
-          const rewardAmt = resp.reward || 0;
-          showBoxRewardNotification(rewardAmt || " + " + rewardAmt);
-
-          // remove the task card so user can't do it again
-          try { card.parentNode.removeChild(card); } catch (e) {}
-
-        } else {
-          // show server error to user
-          const err = resp && resp.error ? resp.error : "Verification failed. Make sure you joined the channel.";
-          alert(err);
-          checkBtn.disabled = false;
-          checkBtn.textContent = 'CHECK';
-        }
-      } catch (err) {
-        console.error("completeTask failed:", err);
-        alert("Verification error. Please try again.");
-        checkBtn.disabled = false;
-        checkBtn.textContent = 'CHECK';
-      }
-    });
+    return;
   }
+
+  // Otherwise: first click (START)
+  // If user not logged in, open link but warn about login required for verification
+  if (!USER_ID) {
+    // open channel link
+    try { window.open(el.href, '_blank'); } catch (e) {}
+    alert("Please open via Telegram and login to the WebApp to be able to check and claim the reward.");
+    return;
+  }
+
+  // Open link in new tab/window to allow user to join the channel
+  try { window.open(el.href, '_blank'); } catch (e) {}
+
+  // Convert the same anchor into CHECK state while preserving element (and thus CSS)
+  el.dataset.check = "1";
+  el.textContent = 'CHECK';
+  // apply black background while keeping shape (we mutate inline style but preserve existing class)
+  el.style.background = '#000';
+  el.style.color = '#fff';
+  el.style.border = 'none';
+  el.style.pointerEvents = ''; // allow clicks for check
+  // keep href but optionally prevent automatic navigation on next click by leaving href as-is;
+  // on next click, our handler will intercept and run verification (evt.preventDefault above)
 }
 
 /* =======================
    Update referral counts and etc...
-======================= */
-
-/* =======================
-   Refresh referrals counts called elsewhere
 ======================= */
 
 /* =======================
@@ -1709,14 +1685,12 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
   } else {
     // Not a Telegram WebApp visitor.
-    // Keep referrerId in localStorage so it can be used when the user registers/logs in later.
     if (referrerId) {
       try {
         localStorage.setItem('referrerId', String(referrerId));
       } catch (e) {}
     }
 
-    // Try to fetch balance for non-Telegram user if USER_ID exists (edge cases)
     if (USER_ID) {
       try {
         const res = await fetchApi({ type: "getBalance" });
@@ -1728,7 +1702,6 @@ document.addEventListener("DOMContentLoaded", async function () {
         console.warn("Initial balance fetch failed:", e);
       }
     } else {
-      // If user not logged in yet, still set invite UI to 0s
       updateReferralCountsUI({ active: 0, pending: 0 });
       renderReferralsList([]);
       renderWithdrawHistory([]); // show empty history until login
