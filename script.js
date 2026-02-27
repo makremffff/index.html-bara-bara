@@ -133,6 +133,11 @@ function showPage(btnpage) {
   } else {
     stopReferralPolling();
   }
+
+  // When entering task page, load tasks from server
+  if (btnpage === taskPage) {
+    loadTasks();
+  }
 }
 
 /* =======================
@@ -850,7 +855,7 @@ async function handleBoxClick(evt) {
       }
       rewardPendingForBox = null;
     }
-  }, 23000);
+  }, 21000);
 
   // Show two ads that should NOT affect the main ad counters (useGlobalCooldown=false)
   let ad1 = false;
@@ -1017,6 +1022,7 @@ if (copyrefal) {
 
 /* =======================
    إضافة مهمة جديدة
+   بعد الإنشاء نطلب من السيرفر عرض المهام مرة أخرى لتظهر التغييرات
 ======================= */
 let creatTask = document.getElementById("creatTask");
 
@@ -1036,21 +1042,18 @@ if (creatTask) {
     });
 
     if (res && res.success) {
-      let taskcontainer = document.querySelector(".task-container");
-      let taskcard = document.createElement("div");
-      taskcard.className = "task-card";
-
-      taskcard.innerHTML = `
-      <img class="taskimg" src="telegram.png" width="25">
-      <span class="task-name">${nametask}</span>
-      <span class="task-prize">30 <img src="coins.png" width="25"></span>
-      <a class="task-link" href="${linktask}">start</a>
-      `;
-
-      taskcontainer.appendChild(taskcard);
+      // refresh tasks list to show newly created task
+      await loadTasks();
 
       document.getElementById("taskNameInput").value = '';
       document.getElementById("taskLinkInput").value = '';
+
+      // optional notification
+      const addNot = document.querySelector(".addtask-notifi");
+      if (addNot) {
+        addNot.style.display = "block";
+        setTimeout(()=> { addNot.style.display = "none"; }, 2500);
+      }
     } else {
       console.warn("createTask failed:", res && res.error);
       alert("Failed to create task: " + ((res && res.error) || "unknown"));
@@ -1059,7 +1062,7 @@ if (creatTask) {
 }
 
 /* =======================
-   HELPER: تحديث واجهة الرصيد (يظهر للمستخدم أول مرّة و يتحدّث تلقائياً)
+   HELPER: Updating Balance UI
 ======================= */
 function updateBalanceUI(res) {
   if (!res) return;
@@ -1108,8 +1111,6 @@ function updateBalanceUI(res) {
 
 /* =======================
    Update referral counts UI (pending & active)
-   selectors match index.html structure:
-   .refal .active.count span and .refal .pending.count span
 ======================= */
 function updateReferralCountsUI(counts) {
   if (!counts) return;
@@ -1122,9 +1123,6 @@ function updateReferralCountsUI(counts) {
 
 /* =======================
    Render referrals list into .my-refal
-   Each referral card must use the existing class names:
-   .refal-card, .refal-fhoto, .refal-name, .refal-ads, .refal-statu
-   We will not change class names in the HTML as requested.
 ======================= */
 function renderReferralsList(referrals) {
   const container = document.querySelector('.my-refal');
@@ -1219,8 +1217,6 @@ function renderReferralsList(referrals) {
 
 /* =======================
    Refresh referral counts and list from backend
-   Calls API type "getReferrals" which now returns { success, active, pending, referrals }
-   fetchApi will attach USER_ID automatically if available.
 ======================= */
 async function refreshReferralCounts() {
   try {
@@ -1243,7 +1239,6 @@ async function refreshReferralCounts() {
 
 /* =======================
    Referral polling: start/stop while on invite page
-   Poll interval set to 30s (adjustable)
 ======================= */
 let referralPoll = null;
 const REFERRAL_POLL_INTERVAL = 30000; // 30s
@@ -1294,10 +1289,6 @@ function startBalancePolling() {
 
 /* =======================
    Utility: استخراج قيمة start param بطريقة مرنة
-   يمكن قراءة start_param من Telegram initDataUnsafe أو من URL (startapp, start)
-   نتعامل مع حالات وجود حروف عربية ملصقة بعد الرقم مثل:
-   https://...startapp=ref_7741750541رابط
-   فنقوم باستخراج الرقم بعد ref_ فقط.
 ======================= */
 function extractReferrerFromStartParam(raw) {
   if (!raw || typeof raw !== "string") return null;
@@ -1400,9 +1391,185 @@ async function loadWithdrawHistory() {
 }
 
 /* =======================
-   Telegram WebApp User Data + referral (start params)
-   عند الدخول نقرا start params ونخزن referrerId لإرساله أثناء syncUser
-   كما نجلب عدد الدعوات ونحدّث واجهة invite
+   TASKS: تحميل و عرض المهام من السيرفر
+   المتطلبات:
+   - تجلب المهام المتاحة من جدول tasks في السيرفر
+   - عند الضغط على رابط المهمة (Start) تفتح الرابط (t.me/...)
+     وتتحول إلى زر "CHECK" بخلفية سوداء للتحقق
+   - عند الضغط على CHECK يطلب من السيرفر التحقق إذا المستخدم انضم للقناة فعلا
+     (السيرفر يستخدم Telegram Bot API للتحقق)
+   - لو تم التأكد يتم منح المكافأة للمستخدم ويُحذف/لا يظهر له هذه المهمة مرة ثانية
+======================= */
+const TASK_CONTAINER_SELECTOR = ".task-container";
+
+function createTaskCard(task) {
+  const card = document.createElement("div");
+  card.className = "task-card";
+  card.dataset.taskId = task.id || "";
+
+  // Reward icon fallback
+  const reward = typeof task.reward !== "undefined" ? task.reward : 30;
+
+  card.innerHTML = `
+    <img class="taskimg" src="telegram.png" width="25">
+    <span class="task-name">${task.name || "Task"}</span>
+    <span class="task-prize">${reward} <img src="coins.png" width="25"></span>
+    <a class="task-link" href="${task.link || '#'}" target="_blank" rel="noopener noreferrer">start</a>
+  `;
+
+  return card;
+}
+
+async function loadTasks() {
+  const container = document.querySelector(TASK_CONTAINER_SELECTOR);
+  if (!container) return;
+
+  container.innerHTML = '<div class="loading-tasks">Loading tasks...</div>';
+
+  try {
+    const res = await fetchApi({ type: "getTasks" });
+    if (!res || !res.success) {
+      container.innerHTML = '<div class="loading-tasks">No tasks available</div>';
+      return;
+    }
+
+    const tasks = res.tasks || [];
+    container.innerHTML = '';
+
+    if (!Array.isArray(tasks) || tasks.length === 0) {
+      container.innerHTML = '<div class="loading-tasks">No tasks available</div>';
+      return;
+    }
+
+    tasks.forEach(task => {
+      const card = createTaskCard(task);
+      container.appendChild(card);
+    });
+
+    // Attach listeners for newly added task links
+    attachTaskLinkListeners();
+
+  } catch (e) {
+    console.warn("Failed to load tasks:", e);
+    container.innerHTML = '<div class="loading-tasks">Failed to load tasks</div>';
+  }
+}
+
+function attachTaskLinkListeners() {
+  const container = document.querySelector(TASK_CONTAINER_SELECTOR);
+  if (!container) return;
+
+  // Use event delegation for robustness
+  container.removeEventListener('click', onTaskContainerClick);
+  container.addEventListener('click', onTaskContainerClick);
+}
+
+async function onTaskContainerClick(evt) {
+  const el = evt.target;
+  // If start link clicked
+  if (el && el.classList && el.classList.contains('task-link')) {
+    // prevent default navigation so we can open in new tab and transform UI
+    evt.preventDefault();
+
+    // ensure user logged in
+    if (!USER_ID) {
+      alert("Please open via Telegram and login to perform tasks.");
+      // still open link to help user join
+      try { window.open(el.href, '_blank'); } catch (e) {}
+      return;
+    }
+
+    // open link in new tab/window to allow user to join
+    try { window.open(el.href, '_blank'); } catch (e) {}
+
+    // transform anchor into a check button
+    const card = el.closest('.task-card');
+    if (!card) return;
+    const taskId = card.dataset.taskId;
+
+    // Replace the anchor with a check button if not already transformed
+    if (el.dataset.transformed === "1") return;
+    el.dataset.transformed = "1";
+
+    // Create check button
+    const checkBtn = document.createElement('button');
+    checkBtn.className = 'task-check-btn';
+    checkBtn.textContent = 'CHECK';
+    checkBtn.style.background = '#000';
+    checkBtn.style.color = '#fff';
+    checkBtn.style.padding = '6px 10px';
+    checkBtn.style.border = 'none';
+    checkBtn.style.borderRadius = '4px';
+    checkBtn.style.cursor = 'pointer';
+    checkBtn.dataset.taskId = taskId;
+
+    // Replace anchor with button
+    el.style.display = 'none';
+    el.parentNode.appendChild(checkBtn);
+
+    // Add click handler to check button
+    checkBtn.addEventListener('click', async function onCheckClick(e) {
+      e.preventDefault();
+      // prevent double-click
+      if (checkBtn.disabled) return;
+      checkBtn.disabled = true;
+      checkBtn.textContent = 'Checking...';
+
+      try {
+        const resp = await fetchApi({
+          type: "completeTask",
+          data: {
+            taskId: taskId
+          }
+        });
+
+        if (resp && resp.success) {
+          // success: update balance and remove task card from UI
+          if (resp.balance !== undefined) {
+            ADS = Number(resp.balance) || ADS;
+            if (adsBalance) adsBalance.textContent = ADS;
+            if (walletbalance) {
+              walletbalance.innerHTML = `
+                <img src="coins.png" style="width:20px; vertical-align:middle;">
+                ${ADS}
+              `;
+            }
+          }
+
+          // show reward notification
+          const rewardAmt = resp.reward || 0;
+          showBoxRewardNotification(rewardAmt || " + " + rewardAmt);
+
+          // remove the task card so user can't do it again
+          try { card.parentNode.removeChild(card); } catch (e) {}
+
+        } else {
+          // show server error to user
+          const err = resp && resp.error ? resp.error : "Verification failed. Make sure you joined the channel.";
+          alert(err);
+          checkBtn.disabled = false;
+          checkBtn.textContent = 'CHECK';
+        }
+      } catch (err) {
+        console.error("completeTask failed:", err);
+        alert("Verification error. Please try again.");
+        checkBtn.disabled = false;
+        checkBtn.textContent = 'CHECK';
+      }
+    });
+  }
+}
+
+/* =======================
+   Update referral counts and etc...
+======================= */
+
+/* =======================
+   Refresh referrals counts called elsewhere
+======================= */
+
+/* =======================
+   Refresh tasks on load if task page is visible initially
 ======================= */
 document.addEventListener("DOMContentLoaded", async function () {
 
@@ -1529,11 +1696,15 @@ document.addEventListener("DOMContentLoaded", async function () {
 
       // Load withdraw history after sync
       await loadWithdrawHistory();
+
+      // Load tasks for this logged-in user so tasks they already completed are hidden
+      await loadTasks();
     } else {
       // If Telegram present but no user data, still refresh referrals if USER_ID exists
       if (USER_ID) {
         refreshReferralCounts();
         await loadWithdrawHistory();
+        await loadTasks();
       }
     }
   } else {
@@ -1552,6 +1723,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         updateBalanceUI(res);
         refreshReferralCounts();
         await loadWithdrawHistory();
+        await loadTasks();
       } catch (e) {
         console.warn("Initial balance fetch failed:", e);
       }
@@ -1560,6 +1732,9 @@ document.addEventListener("DOMContentLoaded", async function () {
       updateReferralCountsUI({ active: 0, pending: 0 });
       renderReferralsList([]);
       renderWithdrawHistory([]); // show empty history until login
+
+      // Load public tasks (without user filtering) so visitors can see tasks but cannot claim
+      await loadTasks();
     }
   }
 
@@ -1587,8 +1762,6 @@ document.addEventListener("DOMContentLoaded", async function () {
 
 /* =======================
    Ensure balance is also fetched on full load (fallback)
-   This makes sure balance is displayed even if DOMContentLoaded already fired earlier
-   Also start polling for balance if not already started.
 ======================= */
 window.addEventListener('load', async function() {
   try {
@@ -1746,7 +1919,7 @@ if (sendwithdraw) {
         }
 
         let historyCard = document.createElement("div");
-        historyCard.className = 'history-card';
+        historyCard.className = "history-card";
         historyCard.dataset.withdrawId = created && created.id ? created.id : "";
         historyCard.innerHTML = `
           <span class="date">${createdDate}</span>
