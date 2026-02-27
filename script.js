@@ -46,6 +46,7 @@ let lastApiCallTimestamp = 0;
 async function fetchApi({ type, data = {} }) {
   try {
     // attach userId automatically when available and not explicitly provided
+    // NOTE: keep attaching the Telegram numeric id, but server now resolves to internal id.
     if (USER_ID && (!data.userId) && !data.id) {
       data.userId = USER_ID;
     }
@@ -112,7 +113,7 @@ function showPage(btnpage) {
 
   setTimeout(function(){
     barbtn.style.display = 'block';
-  }, 2000);
+  }, 2002);
 
   if (soundbtn) {
     try {
@@ -1399,13 +1400,31 @@ async function loadWithdrawHistory() {
    - On CHECK click, call completeTask API which verifies Telegram membership via bot and rewards the user on success.
    - On success remove the task from the UI (so user can't perform again).
    - Do not modify HTML file; only manipulate DOM.
+   - Fixes:
+     * Preserve any header node inside .task-container (do not remove the task header).
+     * Instead of replacing the anchor element, modify its textContent and background so the "start" element visually changes to "CHECK" (as requested).
+     * Ensure we attach the taskId reliably from dataset attributes and send as string to server.
 ======================= */
 async function loadTasks() {
   const container = document.querySelector(".task-container");
   if (!container) return;
 
-  // Show a loader or placeholder while fetching
+  // Preserve potential header element inside container (e.g., .task-header)
+  let preservedHeader = null;
+  const headerSelector = '.task-header';
+  try {
+    const hdr = container.querySelector(headerSelector);
+    if (hdr) {
+      preservedHeader = hdr.cloneNode(true);
+    }
+  } catch (e) {}
+
+  // Show a loader or placeholder while fetching - but keep header visible if present
   container.innerHTML = `<div class="task-loading">Loading tasks...</div>`;
+  if (preservedHeader) {
+    // Insert header at top
+    container.insertBefore(preservedHeader.cloneNode(true), container.firstChild);
+  }
 
   let res;
   try {
@@ -1417,13 +1436,15 @@ async function loadTasks() {
 
   if (!res || !res.success) {
     container.innerHTML = `<div class="task-error">Failed to load tasks</div>`;
+    if (preservedHeader) container.insertBefore(preservedHeader.cloneNode(true), container.firstChild);
     return;
   }
 
   const tasks = Array.isArray(res.tasks) ? res.tasks : [];
 
-  // Clear container
+  // Clear container but keep header
   container.innerHTML = '';
+  if (preservedHeader) container.appendChild(preservedHeader.cloneNode(true));
 
   if (tasks.length === 0) {
     // keep a placeholder or message
@@ -1461,7 +1482,7 @@ async function loadTasks() {
     if (a) {
       a.addEventListener('click', function(evt) {
         // Allow navigation to t.me link in a new tab/window
-        // Immediately transform to CHECK button for verification step
+        // Immediately transform to CHECK visual appearance for verification step
         evt.preventDefault();
         try {
           window.open(linkHref, "_blank");
@@ -1470,31 +1491,35 @@ async function loadTasks() {
           window.location.href = linkHref;
         }
 
-        // Replace anchor with a check button
-        const checkBtn = document.createElement('button');
-        checkBtn.className = 'task-check-btn';
-        checkBtn.textContent = 'CHECK';
-        checkBtn.style.background = 'black';
-        checkBtn.style.color = 'white';
-        checkBtn.style.padding = '6px 10px';
-        checkBtn.style.border = 'none';
-        checkBtn.style.borderRadius = '4px';
-        checkBtn.style.cursor = 'pointer';
-        checkBtn.dataset.taskId = task.id;
+        // Instead of replacing the anchor node, adjust its appearance/text to become the CHECK control
+        a.textContent = 'CHECK';
+        a.style.background = 'black';
+        a.style.color = 'white';
+        a.style.padding = '6px 10px';
+        a.style.borderRadius = '4px';
+        a.style.border = 'none';
+        a.style.cursor = 'pointer';
+        a.dataset.taskId = task.id;
 
-        // Replace anchor element in DOM
-        a.parentNode.replaceChild(checkBtn, a);
+        // Attach handler for verification on the same anchor (now visually a button)
+        const checkElement = a;
+        let checking = false;
 
-        // Attach handler for verification
-        checkBtn.addEventListener('click', async function () {
-          // prevent double clicks
-          if (checkBtn.disabled) return;
-          checkBtn.disabled = true;
-          const originalText = checkBtn.textContent;
-          checkBtn.textContent = 'Checking...';
+        checkElement.addEventListener('click', async function (innerEvt) {
+          // Prevent double clicks
+          innerEvt.preventDefault();
+          if (checking) return;
+          checking = true;
+          const originalText = checkElement.textContent;
+          checkElement.textContent = 'Checking...';
+          checkElement.style.pointerEvents = 'none';
+          checkElement.style.opacity = '0.6';
 
           try {
-            const completeRes = await fetchApi({ type: "completeTask", data: { taskId: task.id } });
+            // Ensure we send taskId as string (some schemas expect UUID strings)
+            const payload = { taskId: String(task.id) };
+
+            const completeRes = await fetchApi({ type: "completeTask", data: payload });
 
             if (completeRes && completeRes.success) {
               // Update balance UI if returned
@@ -1531,17 +1556,27 @@ async function loadTasks() {
               // Not successful: show error to user
               const err = (completeRes && completeRes.error) ? completeRes.error : 'Failed to verify join';
               alert(typeof err === 'string' ? err : JSON.stringify(err));
-              // revert button
-              checkBtn.disabled = false;
-              checkBtn.textContent = originalText;
+              // revert element back to interactive state
+              checkElement.disabled = false;
+              checkElement.textContent = originalText;
+              checkElement.style.pointerEvents = '';
+              checkElement.style.opacity = '';
+              checkElement.style.background = '';
+              checkElement.style.color = '';
             }
           } catch (e) {
             console.error("completeTask failed:", e);
             alert("Verification failed. Please try again later.");
-            checkBtn.disabled = false;
-            checkBtn.textContent = originalText;
+            checkElement.disabled = false;
+            checkElement.textContent = originalText;
+            checkElement.style.pointerEvents = '';
+            checkElement.style.opacity = '';
+            checkElement.style.background = '';
+            checkElement.style.color = '';
+          } finally {
+            checking = false;
           }
-        });
+        }, { once: false });
       });
     }
   });
