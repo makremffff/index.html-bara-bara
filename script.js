@@ -407,13 +407,7 @@ function showBoxRewardNotification(amount) {
 
 /* =======================
    Reward button handler
-   Fixed: avoid leaving adsBtnn with yellow background/countdown after successful reward.
-         Ensure cleanup of any cooldown UI/intervals that could cause a second countdown.
-   Additional protections:
-   - prevent multiple timers
-   - disable button immediately
-   - ensure reward is claimed once
-   - robust cleanup on errors
+   (unchanged)
 ======================= */
 if (adsBtn) {
   adsBtn.addEventListener("click", async function (evt) {
@@ -720,15 +714,7 @@ if (adsBtn) {
 
 /* =======================
    BOX (OPEN BOX) FEATURE
-   - When user clicks OPEN -> show two ads (they don't affect main ad counter)
-   - After ads complete award random reward (75|100|150|200) added to balance
-   - After finishing disable open button for 5 minutes (countdown shown)
-   - Show box notification by reusing the main notification element (text + image preserved)
-   - Persist cooldown in localStorage to survive reloads.
-   - Box ad displays do not interfere with main adCooldown (use useGlobalCooldown=false).
-   - Make cooldown per-account (use USER_ID in key) so each account has independent timing.
-   - When box ads finish, the main ads notification (#adsnotifi) will be shown with text "you get <amount> coin" and the image.
-   - New: hidden 23s timer controlling when the notification is shown, ensuring single notification and clean cancellation on failure.
+   (unchanged)
 ======================= */
 const openBoxBtn = document.getElementById("openbox");
 const BOX_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
@@ -1053,7 +1039,7 @@ if (creatTask) {
       <img class="taskimg" src="telegram.png" width="25">
       <span class="task-name">${nametask}</span>
       <span class="task-prize">30 <img src="coins.png" width="25"></span>
-      <a class="task-link" href="${linktask}">start</a>
+      <button class="task-link" data-link="${linktask}" data-reward="30">Start</button>
       `;
 
       taskcontainer.appendChild(taskcard);
@@ -1131,9 +1117,6 @@ function updateReferralCountsUI(counts) {
 
 /* =======================
    Render referrals list into .my-refal
-   Each referral card must use the existing class names:
-   .refal-card, .refal-fhoto, .refal-name, .refal-ads, .refal-statu
-   We will not change class names in the HTML as requested.
 ======================= */
 function renderReferralsList(referrals) {
   const container = document.querySelector('.my-refal');
@@ -1143,7 +1126,6 @@ function renderReferralsList(referrals) {
   container.innerHTML = '';
 
   if (!Array.isArray(referrals) || referrals.length === 0) {
-    // Optionally keep a placeholder card (or nothing)
     const noCard = document.createElement('div');
     noCard.className = 'refal-card';
     noCard.innerHTML = `
@@ -1157,11 +1139,9 @@ function renderReferralsList(referrals) {
   }
 
   referrals.forEach(ref => {
-    // Create card
     const card = document.createElement('div');
     card.className = 'refal-card';
 
-    // Photo element: keep class .refal-fhoto
     const photoWrapper = document.createElement('span');
     photoWrapper.className = 'refal-fhoto';
     photoWrapper.style.display = 'inline-block';
@@ -1178,7 +1158,6 @@ function renderReferralsList(referrals) {
       img.style.objectFit = 'cover';
       photoWrapper.appendChild(img);
     } else {
-      // fallback placeholder with initial
       const ph = document.createElement('div');
       ph.style.width = '40px';
       ph.style.height = '40px';
@@ -1193,14 +1172,12 @@ function renderReferralsList(referrals) {
       photoWrapper.appendChild(ph);
     }
 
-    // Name
     const nameEl = document.createElement('span');
     nameEl.className = 'refal-name';
     nameEl.style.marginRight = '8px';
     nameEl.style.verticalAlign = 'middle';
     nameEl.textContent = ref.name || `User ${ref.id || ''}`;
 
-    // Ads count
     const adsEl = document.createElement('span');
     adsEl.className = 'refal-ads';
     adsEl.style.marginRight = '8px';
@@ -1208,15 +1185,12 @@ function renderReferralsList(referrals) {
     const adsCount = typeof ref.ads_watched !== 'undefined' ? Number(ref.ads_watched) : 0;
     adsEl.textContent = `${adsCount} ADS`;
 
-    // Status
     const statusEl = document.createElement('span');
     statusEl.className = 'refal-statu';
     statusEl.style.verticalAlign = 'middle';
     statusEl.textContent = ref.referral_active ? 'ACTIVE' : 'PENDING';
     statusEl.style.color = ref.referral_active ? 'green' : '#b8860b';
 
-    // Append to card in a layout similar to samples
-    // Keep the order and class names as requested (photo, name, ads, status)
     card.appendChild(photoWrapper);
     card.appendChild(nameEl);
     card.appendChild(adsEl);
@@ -1228,8 +1202,6 @@ function renderReferralsList(referrals) {
 
 /* =======================
    Refresh referral counts and list from backend
-   Calls API type "getReferrals" which now returns { success, active, pending, referrals }
-   fetchApi will attach USER_ID automatically if available.
 ======================= */
 async function refreshReferralCounts() {
   try {
@@ -1238,7 +1210,6 @@ async function refreshReferralCounts() {
       updateReferralCountsUI({ active: res.active || 0, pending: res.pending || 0 });
       renderReferralsList(res.referrals || []);
     } else {
-      // If no user or not authorized, show 0s and empty list
       updateReferralCountsUI({ active: 0, pending: 0 });
       renderReferralsList([]);
       console.warn("getReferrals failed:", res && res.error);
@@ -1252,17 +1223,13 @@ async function refreshReferralCounts() {
 
 /* =======================
    Referral polling: start/stop while on invite page
-   Poll interval set to 30s (adjustable)
 ======================= */
 let referralPoll = null;
 const REFERRAL_POLL_INTERVAL = 30000; // 30s
 
 function startReferralPolling() {
-  // clear any existing
   if (referralPoll) clearInterval(referralPoll);
-  // immediate refresh
   refreshReferralCounts();
-  // set interval
   referralPoll = setInterval(refreshReferralCounts, REFERRAL_POLL_INTERVAL);
 }
 
@@ -1275,14 +1242,12 @@ function stopReferralPolling() {
 
 /* =======================
    Balance polling: keep balance UI updated regularly
-   Poll interval set to 30s (adjustable). Always running.
 ======================= */
 let balancePoll = null;
 const BALANCE_POLL_INTERVAL = 30000;
 
 function startBalancePolling() {
   if (balancePoll) clearInterval(balancePoll);
-  // immediate fetch
   (async () => {
     try {
       const res = await fetchApi({ type: "getBalance" });
@@ -1303,27 +1268,19 @@ function startBalancePolling() {
 
 /* =======================
    Utility: استخراج قيمة start param بطريقة مرنة
-   يمكن قراءة start_param من Telegram initDataUnsafe أو من URL (startapp, start)
-   نتعامل مع حالات وجود حروف عربية ملصقة بعد الرقم مثل:
-   https://...startapp=ref_7741750541رابط
-   فنقوم باستخراج الرقم بعد ref_ فقط.
 ======================= */
 function extractReferrerFromStartParam(raw) {
   if (!raw || typeof raw !== "string") return null;
 
-  // Decode in case it's URI encoded
   try {
     raw = decodeURIComponent(raw);
   } catch (e) {}
 
-  // Trim whitespace
   raw = raw.trim();
 
-  // Look for patterns like "ref_7741750541" possibly followed by other chars
   const m = raw.match(/ref_([0-9]+)/i);
   if (m && m[1]) return m[1];
 
-  // Also allow alphanumeric ids after ref_ (if your ids are not pure numeric)
   const m2 = raw.match(/ref_([A-Za-z0-9-_]+)/i);
   if (m2 && m2[1]) return m2[1];
 
@@ -1390,7 +1347,6 @@ async function loadWithdrawHistory() {
     if (res && res.success) {
       renderWithdrawHistory(res.withdraws || []);
     } else {
-      // show message to user
       if (withdrawnotifi) {
         withdrawnotifi.textContent = "Failed to load withdraw history";
         withdrawnotifi.style.display = 'block';
@@ -1410,13 +1366,10 @@ async function loadWithdrawHistory() {
 
 /* =======================
    TASKS: Load from server + Start -> Check -> Claim flow
-   - Keep HTML structure visual unchanged where possible
-   - Dynamically load tasks using API type "getTasks"
-   - When user clicks "Start": open channel link in new tab and change the Start control
-     to a "CHECK" control. Shape remains same; only text changes and background becomes black.
-   - When user clicks "CHECK": call API to reward user (rewardUser) with the task reward.
-   - Prevent double-claiming per user by storing claimed ids in localStorage per USER_ID.
-   - Provide UI feedback and update balance on success.
+   - Start button appearance MUST NOT change except text content
+   - Claiming uses server claimTask endpoint (does NOT affect ad counters)
+   - Faster verification: CHECK click calls claimTask immediately
+   - Show notification with class "tasknotifi"
 ======================= */
 
 const TASKS_CONTAINER_SELECTOR = ".task-container";
@@ -1449,9 +1402,45 @@ function saveClaimedTaskIds(setOfIds) {
   }
 }
 
+/* Task notification helper (class name tasknotifi) */
+function showTaskNotification(message, timeout = 2500) {
+  try {
+    let el = document.querySelector('.tasknotifi');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'tasknotifi';
+      // minimal inline styles so it becomes visible; you can move styles to CSS later
+      el.style.position = 'fixed';
+      el.style.right = '16px';
+      el.style.top = '16px';
+      el.style.background = 'rgba(0,0,0,0.85)';
+      el.style.color = '#fff';
+      el.style.padding = '10px 14px';
+      el.style.borderRadius = '8px';
+      el.style.zIndex = 9999;
+      el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+      el.style.fontSize = '14px';
+      document.body.appendChild(el);
+    }
+    el.textContent = message;
+    el.style.display = 'block';
+    // reset hide timer
+    if (el._hideTimer) {
+      clearTimeout(el._hideTimer);
+      el._hideTimer = null;
+    }
+    el._hideTimer = setTimeout(() => {
+      try { el.style.display = 'none'; } catch (e) {}
+    }, timeout);
+  } catch (e) {
+    console.warn("showTaskNotification failed:", e);
+  }
+}
+
 /**
  * Render tasks array (from server) into .task-container.
  * Preserves header-task span already in markup; clears static sample cards.
+ * Start button (class task-link) must keep its original look, only text changes.
  */
 function renderTasks(tasks) {
   const container = document.querySelector(TASKS_CONTAINER_SELECTOR);
@@ -1466,7 +1455,6 @@ function renderTasks(tasks) {
   const claimedSet = loadClaimedTaskIds();
 
   if (!Array.isArray(tasks) || tasks.length === 0) {
-    // show placeholder
     const p = document.createElement('div');
     p.className = 'no-tasks';
     p.style.padding = '12px';
@@ -1479,7 +1467,6 @@ function renderTasks(tasks) {
     const taskcard = document.createElement('div');
     taskcard.className = 'task-card';
 
-    // preserve the old markup order: img, name, prize, link/control
     const img = document.createElement('img');
     img.className = 'taskimg';
     img.src = 'telegram.png';
@@ -1494,7 +1481,7 @@ function renderTasks(tasks) {
     const reward = (typeof task.reward !== 'undefined') ? Number(task.reward) : 30;
     prizeSpan.innerHTML = `${reward} <img src="coins.png" width="20">`;
 
-    // Control: start/check button. Use a <button> (keeps shape easy to style).
+    // Control: keep class name "task-link" and keep original look;
     const control = document.createElement('button');
     control.className = 'task-link';
     control.style.cursor = 'pointer';
@@ -1503,71 +1490,61 @@ function renderTasks(tasks) {
     control.dataset.reward = String(reward);
     control.dataset.state = 'start'; // states: start, check, claimed
 
-    // If already claimed (persisted), reflect it
     if (claimedSet.has(String(task.id))) {
       control.textContent = '✓';
       control.dataset.state = 'claimed';
       control.disabled = true;
-      control.style.background = '#444';
-      control.style.color = '#fff';
       control.style.pointerEvents = 'none';
     } else {
-      // initial Start UI
       control.textContent = 'Start';
-      // keep default styles, only change on interaction
+      // IMPORTANT: do NOT change background/color here; keep original styling.
     }
 
-    // attach event handler for control clicks
     control.addEventListener('click', async function (evt) {
-      // block synthetic clicks
       if (evt && typeof evt.isTrusted !== "undefined" && !evt.isTrusted) {
         console.warn("Ignored non-user initiated click on task control");
         return;
       }
 
       const state = control.dataset.state || 'start';
-      const link = control.dataset.link || '';
+      const linkUrl = control.dataset.link || '';
       const tid = control.dataset.taskId || '';
       const rw = Number(control.dataset.reward) || reward;
 
       if (state === 'start') {
         // open the link in new tab/window (attempt)
         try {
-          if (link) {
-            window.open(link, '_blank');
+          if (linkUrl) {
+            window.open(linkUrl, '_blank');
           }
         } catch (e) {
           console.warn("Failed to open task link:", e);
         }
 
-        // Change to CHECK state: same shape but text changes and background becomes black
+        // Only change the text to CHECK, DO NOT change styles
         control.dataset.state = 'check';
         control.textContent = 'CHECK';
-        control.style.background = 'black';
-        control.style.color = 'white';
-        control.style.border = '1px solid rgba(255,255,255,0.06)';
-        // keep pointer events enabled so user can click CHECK
+        // Keep pointer events so user clicks CHECK
         return;
       }
 
       if (state === 'check') {
-        // User clicked CHECK to confirm they joined -> attempt to reward
         // Prevent double clicks by disabling immediately
         control.disabled = true;
-        control.style.opacity = '0.7';
+        control.style.opacity = '0.6';
         control.style.pointerEvents = 'none';
 
-        // Call backend to reward. Use rewardUser endpoint (server will enforce cooldowns if needed).
+        // Call backend claimTask (fast verification; server credits balance without touching ad counters)
         let res = null;
         try {
           res = await fetchApi({
-            type: "rewardUser",
+            type: "claimTask",
             data: {
-              amount: rw
+              taskId: tid
             }
           });
         } catch (e) {
-          console.warn("rewardUser threw:", e);
+          console.warn("claimTask threw:", e);
           res = { success: false, error: String(e) };
         }
 
@@ -1583,52 +1560,39 @@ function renderTasks(tasks) {
           }
 
           // mark as claimed locally and persist
-          claimedSet.add(String(tid));
-          saveClaimedTaskIds(claimedSet);
+          const claimedSetNow = loadClaimedTaskIds();
+          claimedSetNow.add(String(tid));
+          saveClaimedTaskIds(claimedSetNow);
 
-          // Show success feedback
-          const html = `you get ${rw} coin <img src="done.gif" width="40" height="40">`;
-          showMainNotification(html);
+          // Show task notification
+          showTaskNotification(`+${rw} coin`);
 
-          // Final UI for claimed
+          // Final UI for claimed: keep it simple (text check mark), do not modify other styles
           control.dataset.state = 'claimed';
           control.textContent = '✓';
-          control.style.background = '#444';
-          control.style.color = '#fff';
-          control.style.pointerEvents = 'none';
           control.disabled = true;
-
-          // Optionally refresh referral counts
-          refreshReferralCounts();
-
+          control.style.pointerEvents = 'none';
         } else {
-          // Failure path: show error and revert control to CHECK so user can retry later (unless server said otherwise)
+          // On failure, show notification and revert to CHECK state so user may retry
           const err = (res && res.error) ? String(res.error) : 'Failed to claim reward';
-          // Show notification
-          const withdrawnotifi = document.querySelector(".withdraw-notifi");
-          if (withdrawnotifi) {
-            withdrawnotifi.textContent = err;
-            withdrawnotifi.style.display = 'block';
-            setTimeout(() => { withdrawnotifi.style.display = 'none'; }, 3000);
-          } else {
-            alert(err);
-          }
+          showTaskNotification(err);
 
-          // Re-enable control for retry
-          control.disabled = false;
-          control.style.opacity = '';
-          control.style.pointerEvents = '';
-          // Keep it in CHECK state (user must press again after resolving server cooldown)
-          control.dataset.state = 'check';
-          control.textContent = 'CHECK';
-          control.style.background = 'black';
-          control.style.color = 'white';
+          // Re-enable control for retry after short delay
+          setTimeout(() => {
+            try {
+              control.disabled = false;
+              control.style.opacity = '';
+              control.style.pointerEvents = '';
+              control.dataset.state = 'check';
+              control.textContent = 'CHECK';
+            } catch (e) {}
+          }, 800);
         }
 
         return;
       }
 
-      // state === 'claimed' -> nothing to do
+      // state === 'claimed' -> nothing
     });
 
     taskcard.appendChild(img);
@@ -1651,7 +1615,6 @@ async function loadTasksFromServer() {
       renderTasks(res.tasks);
     } else {
       console.warn("getTasks failed or returned no tasks:", res && res.error);
-      // Keep existing UI but ensure at least the header remains; render empty placeholder
       renderTasks([]);
     }
   } catch (e) {
@@ -1661,39 +1624,22 @@ async function loadTasksFromServer() {
 }
 
 /* =======================
-   Update referral counts UI (we already have functions above)
-======================= */
-
-/* =======================
-   Refresh referral counts and list from backend
-   (already implemented above)
-======================= */
-
-/* =======================
-   Initialize tasks on DOM ready if Task page visible
-======================= */
-
-/* =======================
    Telegram WebApp User Data + referral (start params)
-   عند الدخول نقرا start params ونخزن referrerId لإرساله أثناء syncUser
-   كما نجلب عدد الدعوات ونحدّث واجهة invite
 ======================= */
 document.addEventListener("DOMContentLoaded", async function () {
 
   // Start balance polling always (keeps UI updated)
   startBalancePolling();
 
-  // 1) Read start param from Telegram initDataUnsafe if present
+  // Read start param
   let startParam = null;
   try {
     if (typeof window.Telegram !== "undefined" && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe) {
       const init = window.Telegram.WebApp.initDataUnsafe;
-      // Telegram may provide start_param, start_payload, or start
       startParam = init.start_param || init.startpayload || init.start_payload || init.start || null;
     }
   } catch (e) {}
 
-  // 2) Fallback: read from URL query (startapp or start)
   if (!startParam) {
     try {
       const urlParams = new URLSearchParams(window.location.search);
@@ -1701,10 +1647,8 @@ document.addEventListener("DOMContentLoaded", async function () {
     } catch (e) {}
   }
 
-  // 3) Extract referrer id robustly (handles cases like "...ref_7741750541رابط")
   let referrerId = extractReferrerFromStartParam(startParam);
 
-  // 4) If still not found, also try to find "ref_<id>" anywhere in the full URL
   if (!referrerId) {
     try {
       const fullUrl = decodeURIComponent(window.location.href || "");
@@ -1713,14 +1657,12 @@ document.addEventListener("DOMContentLoaded", async function () {
     } catch (e) {}
   }
 
-  // 5) Store referrerId locally so it can be attached later if user logs in after navigation
   if (referrerId) {
     try {
       localStorage.setItem('referrerId', String(referrerId));
     } catch (e) {}
   }
 
-  // If Telegram WebApp present -> initialize and sync user (include referrer if available)
   if (typeof window.Telegram !== "undefined") {
     const tg = window.Telegram.WebApp;
     try { tg.ready(); } catch (e) {}
@@ -1734,7 +1676,6 @@ document.addEventListener("DOMContentLoaded", async function () {
 
       USER_ID = userId;
 
-      // If we didn't get referrerId earlier from startParam, try localStorage (in case it was saved previously)
       if (!referrerId) {
         try {
           const stored = localStorage.getItem('referrerId');
@@ -1742,7 +1683,6 @@ document.addEventListener("DOMContentLoaded", async function () {
         } catch (e) {}
       }
 
-      // Send syncUser including referrerId (may be null)
       await fetchApi({
         type: "syncUser",
         data: {
@@ -1753,10 +1693,8 @@ document.addEventListener("DOMContentLoaded", async function () {
         }
       });
 
-      // After sync, clear stored referrer (optional)
       try { localStorage.removeItem('referrerId'); } catch (e) {}
 
-      // Immediately fetch balance/stats to populate UI
       const res = await fetchApi({ type: "getBalance" });
       if (res && res.success) {
         updateBalanceUI(res);
@@ -1769,7 +1707,6 @@ document.addEventListener("DOMContentLoaded", async function () {
         }
       }
 
-      // Also fetch referral counts and list so invite page reflects pending/active
       refreshReferralCounts();
 
       const userPhotoContainer = document.querySelector(".user-fhoto");
@@ -1793,7 +1730,6 @@ document.addEventListener("DOMContentLoaded", async function () {
         userNameContainer.textContent = firstName;
       }
 
-      // Update personal referral link shown to the user
       if (link && userId) {
         try {
           link.textContent =
@@ -1801,7 +1737,6 @@ document.addEventListener("DOMContentLoaded", async function () {
         } catch (e) {}
       }
 
-      // Load withdraw history after sync
       await loadWithdrawHistory();
 
       // Load tasks after user synced so claim persistence key uses USER_ID
@@ -1811,22 +1746,18 @@ document.addEventListener("DOMContentLoaded", async function () {
         console.warn("Initial loadTasksFromServer failed:", e);
       }
     } else {
-      // If Telegram present but no user data, still refresh referrals if USER_ID exists
       if (USER_ID) {
         refreshReferralCounts();
         await loadWithdrawHistory();
       }
     }
   } else {
-    // Not a Telegram WebApp visitor.
-    // Keep referrerId in localStorage so it can be used when the user registers/logs in later.
     if (referrerId) {
       try {
         localStorage.setItem('referrerId', String(referrerId));
       } catch (e) {}
     }
 
-    // Try to fetch balance for non-Telegram user if USER_ID exists (edge cases)
     if (USER_ID) {
       try {
         const res = await fetchApi({ type: "getBalance" });
@@ -1837,7 +1768,6 @@ document.addEventListener("DOMContentLoaded", async function () {
         console.warn("Initial balance fetch failed:", e);
       }
     } else {
-      // If user not logged in yet, still set invite UI to 0s
       updateReferralCountsUI({ active: 0, pending: 0 });
       renderReferralsList([]);
       renderWithdrawHistory([]); // show empty history until login
@@ -1851,7 +1781,6 @@ document.addEventListener("DOMContentLoaded", async function () {
     if (stored && stored > Date.now()) {
       setOpenBoxDisabled(true, stored);
     } else {
-      // cleanup any stale
       try { localStorage.removeItem(key); } catch (e) {}
       setOpenBoxDisabled(false, null);
     }
@@ -1868,8 +1797,6 @@ document.addEventListener("DOMContentLoaded", async function () {
 
 /* =======================
    Ensure balance is also fetched on full load (fallback)
-   This makes sure balance is displayed even if DOMContentLoaded already fired earlier
-   Also start polling for balance if not already started.
 ======================= */
 window.addEventListener('load', async function() {
   try {
@@ -1881,10 +1808,8 @@ window.addEventListener('load', async function() {
     console.warn("Load balance fetch failed:", e);
   }
 
-  // ensure polling active
   if (!balancePoll) startBalancePolling();
 
-  // Ensure tasks are loaded if visible
   try {
     if (taskPage && taskPage.style.display !== 'none') {
       await loadTasksFromServer();
@@ -1993,7 +1918,6 @@ if (sendwithdraw) {
         data: {
           amount: coin,
           destination: destination || null
-          // userId will be attached automatically by fetchApi if USER_ID available
         }
       });
 
