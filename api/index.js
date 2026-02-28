@@ -3,8 +3,6 @@
 // ===============================
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-// Service role key - must only be available on the server (do NOT expose to clients)
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || null;
 
 // Minimum seconds required between rewarded ads (server-side enforcement)
 const MIN_AD_INTERVAL_SECONDS = 50;
@@ -12,30 +10,24 @@ const MIN_AD_INTERVAL_SECONDS = 50;
 // Box (open-box) minimum seconds between box rewards (server-side enforcement)
 const BOX_MIN_INTERVAL_SECONDS = 5 * 60; // 5 minutes
 
-if (!SUPABASE_URL || (!SUPABASE_ANON_KEY && !SUPABASE_SERVICE_ROLE_KEY)) {
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   // If these env vars are missing, throw early so developer notices
   console.error("Missing SUPABASE environment variables.");
 }
 
 // ===============================
 // Helper: Supabase REST Request
-// - useServiceRole option chooses which key to use (service role preferred on server)
 // ===============================
-async function supabaseRequest(path, options = {}, { useServiceRole = true } = {}) {
+async function supabaseRequest(path, options = {}) {
   if (!SUPABASE_URL) {
     throw new Error("Supabase URL not configured");
-  }
-
-  const key = (useServiceRole && SUPABASE_SERVICE_ROLE_KEY) ? SUPABASE_SERVICE_ROLE_KEY : SUPABASE_ANON_KEY;
-  if (!key) {
-    throw new Error("No valid Supabase key available for request");
   }
 
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...options,
     headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
       "Content-Type": "application/json",
       Prefer: "return=representation",
       ...(options.headers || {})
@@ -44,7 +36,6 @@ async function supabaseRequest(path, options = {}, { useServiceRole = true } = {
 
   if (!res.ok) {
     const errorText = await res.text();
-    console.error(`Supabase request failed: ${path} -> ${res.status} ${res.statusText} : ${errorText}`);
     throw new Error(errorText || `Request failed with status ${res.status}`);
   }
 
@@ -80,7 +71,7 @@ export default async function handler(req, res) {
       const today = new Date().toISOString().split("T")[0];
 
       // Check if user exists
-      const existing = await supabaseRequest(`users?id=eq.${id}&select=*`, {}, { useServiceRole: true });
+      const existing = await supabaseRequest(`users?id=eq.${id}&select=*`);
 
       if (!existing || existing.length === 0) {
         // Create new user with initial values. Save referrer if provided.
@@ -94,12 +85,14 @@ export default async function handler(req, res) {
             ads_watched: 0,
             daily_ads: 0,
             last_ad_date: today,
+            // last_ad_time stores ISO timestamp of the last rewarded ad (for server-side anti-abuse)
             last_ad_time: null,
+            // last_box_time stores ISO timestamp of last box reward (server-side anti-abuse)
             last_box_time: null,
             referrer_id: referrerId || null,
             referral_active: false
           })
-        }, { useServiceRole: true });
+        });
 
         return res.status(200).json({ success: true, created: Array.isArray(created) ? created[0] : created });
       }
@@ -113,7 +106,7 @@ export default async function handler(req, res) {
             referrer_id: referrerId,
             referral_active: false
           })
-        }, { useServiceRole: true });
+        });
       }
 
       return res.status(200).json({ success: true });
@@ -130,9 +123,7 @@ export default async function handler(req, res) {
       }
 
       const result = await supabaseRequest(
-        `users?id=eq.${userId}&select=balance,ads_watched,daily_ads,last_ad_date,last_ad_time,referrer_id,referral_active,last_box_time`,
-        {},
-        { useServiceRole: true }
+        `users?id=eq.${userId}&select=balance,ads_watched,daily_ads,last_ad_date,last_ad_time,referrer_id,referral_active,last_box_time`
       );
 
       if (!result || result.length === 0) {
@@ -153,7 +144,129 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // Reward Box (Open-Box)
+    // Get Tasks (fetch tasks from tasks table)
+    // ===============================
+    if (type === "getTasks") {
+      // Return tasks with columns: id, name, link, reward
+      const tasks = await supabaseRequest(`tasks?select=id,name,link,reward&order=id.asc`);
+      return res.status(200).json({
+        success: true,
+        tasks: Array.isArray(tasks) ? tasks : []
+      });
+    }
+
+    // ===============================
+    // Get Completed Tasks for a user
+    // - Returns array of task_id completed by the user
+    // ===============================
+    if (type === "getCompletedTasks") {
+      const { userId } = data || {};
+      if (!userId) {
+        return res.status(400).json({ success: false, error: "Missing userId" });
+      }
+
+      // Ensure table name matches what we insert to below: task_completions
+      const rows = await supabaseRequest(`task_completions?user_id=eq.${userId}&select=task_id`);
+      const completed = Array.isArray(rows) ? rows.map(r => r.task_id) : [];
+      return res.status(200).json({ success: true, completed });
+    }
+
+    // ===============================
+    // Complete Task (user claims task reward)
+    // - Server verifies task exists
+    // - Server verifies user has not already completed the task
+    // - If ok: insert a row in task_completions and credit user's balance
+    // - Returns new balance
+    // ===============================
+    if (type === "completeTask") {
+      const { userId, taskId } = data || {};
+
+      if (!userId) {
+        return res.status(400).json({ success: false, error: "Missing userId" });
+      }
+
+      if (!taskId) {
+        return res.status(400).json({ success: false, error: "Missing taskId" });
+      }
+
+      // Validate task exists
+      const tasks = await supabaseRequest(`tasks?id=eq.${taskId}&select=id,name,link,reward`);
+      if (!tasks || tasks.length === 0) {
+        return res.status(404).json({ success: false, error: "Task not found" });
+      }
+      const task = tasks[0];
+      const reward = Number(task.reward) || 0;
+
+      // Check if user already completed this task
+      const existing = await supabaseRequest(`task_completions?user_id=eq.${userId}&task_id=eq.${taskId}&select=*`);
+      if (existing && existing.length > 0) {
+        return res.status(400).json({ success: false, error: "Task already completed" });
+      }
+
+      // Insert completion row
+      const now = new Date().toISOString();
+      const completionRow = {
+        user_id: userId,
+        task_id: taskId,
+        reward: reward,
+        created_at: now
+      };
+
+      try {
+        await supabaseRequest("task_completions", {
+          method: "POST",
+          body: JSON.stringify(completionRow)
+        });
+      } catch (e) {
+        console.error("Failed to insert task completion:", e);
+        // If insertion fails, avoid crediting user.
+        return res.status(500).json({ success: false, error: "Failed to record task completion" });
+      }
+
+      // Credit user's balance (deduct safe check first)
+      const users = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
+      if (!users || users.length === 0) {
+        // Rollback: try to remove inserted completion to keep DB consistent
+        try {
+          await supabaseRequest(`task_completions?user_id=eq.${userId}&task_id=eq.${taskId}`, { method: "DELETE" });
+        } catch (e) {
+          console.error("Rollback failed:", e);
+        }
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
+      const user = users[0];
+      const currentBalance = Number(user.balance) || 0;
+      const newBalance = currentBalance + reward;
+
+      try {
+        await supabaseRequest(`users?id=eq.${userId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ balance: newBalance })
+        });
+      } catch (e) {
+        console.error("Failed to update user balance:", e);
+        // Try to rollback the completion row (best-effort)
+        try {
+          await supabaseRequest(`task_completions?user_id=eq.${userId}&task_id=eq.${taskId}`, { method: "DELETE" });
+        } catch (e2) {
+          console.error("Rollback of completion failed:", e2);
+        }
+        return res.status(500).json({ success: false, error: "Failed to credit user balance" });
+      }
+
+      return res.status(200).json({
+        success: true,
+        balance: newBalance,
+        taskCompleted: true,
+        taskId
+      });
+    }
+
+    // ===============================
+    // Reward Box (Open-Box) - server-side handler
+    // - Does NOT increment ad counters
+    // - Enforces a separate box cooldown (BOX_MIN_INTERVAL_SECONDS)
     // ===============================
     if (type === "rewardBox") {
       const { userId, amount } = data || {};
@@ -166,7 +279,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: "Missing amount" });
       }
 
-      const result = await supabaseRequest(`users?id=eq.${userId}&select=*`, {}, { useServiceRole: true });
+      const result = await supabaseRequest(`users?id=eq.${userId}&select=*`);
 
       if (!result || result.length === 0) {
         return res.status(404).json({ success: false, error: "User not found" });
@@ -202,7 +315,7 @@ export default async function handler(req, res) {
           balance: newBalance,
           last_box_time: now.toISOString()
         })
-      }, { useServiceRole: true });
+      });
 
       return res.status(200).json({
         success: true,
@@ -212,7 +325,9 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // Reward User (Ads)
+    // Reward User (Save Balance + Ads) and handle referral activation
+    // Server-side enforces a minimum interval between rewarded ads to mitigate automation.
+    // If data.isBox === true -> treat as box style reward (no ad counters) and enforce box cooldown.
     // ===============================
     if (type === "rewardUser") {
       const { userId, amount, isBox = false } = data || {};
@@ -226,9 +341,7 @@ export default async function handler(req, res) {
       }
 
       const result = await supabaseRequest(
-        `users?id=eq.${userId}&select=*`,
-        {},
-        { useServiceRole: true }
+        `users?id=eq.${userId}&select=*`
       );
 
       if (!result || result.length === 0) {
@@ -267,7 +380,7 @@ export default async function handler(req, res) {
             balance: newBalance,
             last_box_time: now.toISOString()
           })
-        }, { useServiceRole: true });
+        });
 
         return res.status(200).json({
           success: true,
@@ -315,7 +428,7 @@ export default async function handler(req, res) {
       const newDailyAds = dailyAds + 1;
 
       // Update the user's balance and ad counters and last_ad_time
-      await supabaseRequest(
+      const updatedUser = await supabaseRequest(
         `users?id=eq.${userId}`,
         {
           method: "PATCH",
@@ -326,8 +439,7 @@ export default async function handler(req, res) {
             last_ad_date: today,
             last_ad_time: now.toISOString()
           })
-        },
-        { useServiceRole: true }
+        }
       );
 
       // Check referral activation: if the user was referred and not already activated, and has reached 10 watched ads
@@ -336,33 +448,40 @@ export default async function handler(req, res) {
       let inviterId = user.referrer_id || null;
 
       if (inviterId && !user.referral_active) {
+        // Determine total ads watched after increment (we used newAdsWatched)
         if (newAdsWatched >= 10) {
+          // Reward inviter with 100 coins
           try {
-            const inviterRes = await supabaseRequest(`users?id=eq.${inviterId}&select=balance`, {}, { useServiceRole: true });
+            // Fetch inviter current balance
+            const inviterRes = await supabaseRequest(`users?id=eq.${inviterId}&select=balance`);
             if (inviterRes && inviterRes.length > 0) {
               const inviter = inviterRes[0];
               const inviterBalance = Number(inviter.balance) || 0;
               const inviterNewBalance = inviterBalance + 100;
 
+              // Update inviter balance
               await supabaseRequest(`users?id=eq.${inviterId}`, {
                 method: "PATCH",
                 body: JSON.stringify({ balance: inviterNewBalance })
-              }, { useServiceRole: true });
+              });
 
+              // Mark referral as activated on the referred user
               await supabaseRequest(`users?id=eq.${userId}`, {
                 method: "PATCH",
                 body: JSON.stringify({ referral_active: true })
-              }, { useServiceRole: true });
+              });
 
               referralActivated = true;
               inviterRewarded = true;
             }
           } catch (e) {
+            // If inviter update failed, log but continue
             console.error("Failed to reward inviter:", e);
           }
         }
       }
 
+      // return updated state
       return res.status(200).json({
         success: true,
         balance: newBalance,
@@ -392,7 +511,7 @@ export default async function handler(req, res) {
           link,
           reward: 30
         })
-      }, { useServiceRole: true });
+      });
 
       return res.status(200).json({
         success: true,
@@ -403,108 +522,15 @@ export default async function handler(req, res) {
     // ===============================
     // Get Tasks
     // ===============================
-    if (type === "getTasks") {
-      const { userId } = data || {};
-
-      const tasks = await supabaseRequest(
-        `tasks?select=*`,
-        {},
-        { useServiceRole: true }
-      );
-
-      // If userId provided, fetch completed tasks for this user to mark Done in UI
-      let completedTaskIds = [];
-      if (userId) {
-        try {
-          const completed = await supabaseRequest(`user_tasks?user_id=eq.${userId}&select=task_id`, {}, { useServiceRole: true });
-          if (Array.isArray(completed)) {
-            completedTaskIds = completed.map(r => r.task_id);
-          }
-        } catch (e) {
-          console.warn("Failed to fetch user_tasks:", e);
-        }
-      }
-
-      return res.status(200).json({
-        success: true,
-        tasks,
-        completedTaskIds
-      });
-    }
-
-    // ===============================
-    // Complete Task (NEW)
-    // - Accepts userId and taskId
-    // - Server verifies and prevents double-claim via user_tasks unique constraint
-    // ===============================
-    if (type === "completeTask") {
-      const { userId, taskId } = data || {};
-
-      if (!userId) {
-        return res.status(400).json({ success: false, error: "Missing userId" });
-      }
-      if (typeof taskId === "undefined" || taskId === null) {
-        return res.status(400).json({ success: false, error: "Missing taskId" });
-      }
-
-      try {
-        // Verify user exists
-        const users = await supabaseRequest(`users?id=eq.${userId}&select=balance,ads_watched,daily_ads,referrer_id,referral_active`, {}, { useServiceRole: true });
-        if (!users || users.length === 0) {
-          return res.status(404).json({ success: false, error: "User not found" });
-        }
-        const user = users[0];
-
-        // Verify task exists
-        const tasks = await supabaseRequest(`tasks?id=eq.${taskId}&select=*`, {}, { useServiceRole: true });
-        if (!tasks || tasks.length === 0) {
-          return res.status(404).json({ success: false, error: "Task not found" });
-        }
-        const task = tasks[0];
-        const reward = Number(task.reward) || 0;
-
-        // Check if user already completed this task
-        const existing = await supabaseRequest(`user_tasks?user_id=eq.${userId}&task_id=eq.${taskId}&select=*`, {}, { useServiceRole: true });
-        if (existing && existing.length > 0) {
-          // Already recorded -> prevent double reward
-          return res.status(400).json({ success: false, error: "Task already claimed" });
-        }
-
-        // Record completion and update user balance
-        const nowIso = new Date().toISOString();
-
-        // Insert into user_tasks
-        const created = await supabaseRequest("user_tasks", {
-          method: "POST",
-          body: JSON.stringify({
-            user_id: userId,
-            task_id: taskId,
-            reward: reward,
-            created_at: nowIso
-          })
-        }, { useServiceRole: true });
-
-        // Update user's balance
-        const newBalance = (Number(user.balance) || 0) + reward;
-        await supabaseRequest(`users?id=eq.${userId}`, {
-          method: "PATCH",
-          body: JSON.stringify({ balance: newBalance })
-        }, { useServiceRole: true });
-
-        return res.status(200).json({
-          success: true,
-          balance: newBalance,
-          taskId: taskId
-        });
-      } catch (err) {
-        console.error("completeTask error:", err && err.message ? err.message : err);
-        // do not expose internal DB details in production; return generic message
-        return res.status(500).json({ success: false, error: "Server error verifying task completion" });
-      }
-    }
+    // (handled above)
 
     // ===============================
     // Create Withdraw (NEW)
+    // - Validates minimum amount (300)
+    // - Checks user balance
+    // - Inserts a row into withdraw table with status 'pending'
+    // - Deducts balance immediately (so user can't double-withdraw)
+    // Table name on server: withdraw
     // ===============================
     if (type === "createWithdraw") {
       const { userId, amount, destination = null } = data || {};
@@ -528,7 +554,7 @@ export default async function handler(req, res) {
       }
 
       // Fetch user to verify balance
-      const users = await supabaseRequest(`users?id=eq.${userId}&select=balance`, {}, { useServiceRole: true });
+      const users = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
       if (!users || users.length === 0) {
         return res.status(404).json({ success: false, error: "User not found" });
       }
@@ -554,14 +580,14 @@ export default async function handler(req, res) {
       const created = await supabaseRequest("withdraw", {
         method: "POST",
         body: JSON.stringify(withdrawRow)
-      }, { useServiceRole: true });
+      });
 
       // Deduct user's balance (immediate hold)
       const newBalance = currentBalance - parsedAmount;
       await supabaseRequest(`users?id=eq.${userId}`, {
         method: "PATCH",
         body: JSON.stringify({ balance: newBalance })
-      }, { useServiceRole: true });
+      });
 
       return res.status(200).json({
         success: true,
@@ -572,6 +598,7 @@ export default async function handler(req, res) {
 
     // ===============================
     // Get Withdraws for a user (history)
+    // - Returns withdraw rows ordered by created_at desc
     // ===============================
     if (type === "getWithdraws") {
       const { userId } = data || {};
@@ -582,9 +609,7 @@ export default async function handler(req, res) {
 
       // select useful fields
       const rows = await supabaseRequest(
-        `withdraw?user_id=eq.${userId}&select=id,amount,status,destination,created_at,processed_at&order=created_at.desc`,
-        {},
-        { useServiceRole: true }
+        `withdraw?user_id=eq.${userId}&select=id,amount,status,destination,created_at,processed_at&order=created_at.desc`
       );
 
       return res.status(200).json({
@@ -595,6 +620,7 @@ export default async function handler(req, res) {
 
     // ===============================
     // Get Referrals counts and details for inviter (active / pending + list)
+    // Returns: { success, active, pending, referrals: [{id,name,photo,ads_watched,referral_active}] }
     // ===============================
     if (type === "getReferrals") {
       const { userId } = data || {};
@@ -604,7 +630,7 @@ export default async function handler(req, res) {
       }
 
       // Fetch referral rows with useful fields
-      const referrals = await supabaseRequest(`users?referrer_id=eq.${userId}&select=id,name,photo,ads_watched,referral_active`, {}, { useServiceRole: true });
+      const referrals = await supabaseRequest(`users?referrer_id=eq.${userId}&select=id,name,photo,ads_watched,referral_active`);
 
       if (!referrals) {
         return res.status(200).json({ success: true, active: 0, pending: 0, referrals: [] });
@@ -643,3 +669,39 @@ export default async function handler(req, res) {
     });
   }
 }
+
+/*
+SQL Helper Script (run on the database side to prepare tasks and completions tables)
+- This script will create the 'tasks' table (if you don't have it) and the 'task_completions' table.
+- It will also (optionally) remove existing rows from tasks and insert sample tasks.
+- Run carefully in your SQL editor connected to Supabase/Postgres.
+
+-- CREATE tasks table (if not exists)
+CREATE TABLE IF NOT EXISTS public.tasks (
+  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  name text NOT NULL,
+  link text NOT NULL,
+  reward integer NOT NULL DEFAULT 30
+);
+
+-- CREATE task_completions table (if not exists)
+CREATE TABLE IF NOT EXISTS public.task_completions (
+  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  user_id text NOT NULL,
+  task_id bigint NOT NULL REFERENCES public.tasks(id) ON DELETE CASCADE,
+  reward integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- OPTIONAL: clear old tasks and insert new sample tasks
+-- CAUTION: This will delete rows in tasks table. Remove the DELETE if you don't want that.
+DELETE FROM public.tasks;
+
+INSERT INTO public.tasks (name, link, reward) VALUES
+('Join our Telegram channel', 'https://t.me/example_channel', 30),
+('Follow on X', 'https://x.com/example', 25),
+('Watch a short video', 'https://example.com/video', 40),
+('Install partner app', 'https://play.google.com/store/apps/details?id=example', 100);
+
+-- Note: Do NOT run the DELETE if you rely on existing tasks. Adjust as needed.
+*/
