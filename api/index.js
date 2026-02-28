@@ -145,8 +145,6 @@ export default async function handler(req, res) {
 
     // ===============================
     // Reward Box (Open-Box) - server-side handler
-    // - Does NOT increment ad counters
-    // - Enforces a separate box cooldown (BOX_MIN_INTERVAL_SECONDS)
     // ===============================
     if (type === "rewardBox") {
       const { userId, amount } = data || {};
@@ -206,8 +204,6 @@ export default async function handler(req, res) {
 
     // ===============================
     // Reward User (Save Balance + Ads) and handle referral activation
-    // Server-side enforces a minimum interval between rewarded ads to mitigate automation.
-    // If data.isBox === true -> treat as box style reward (no ad counters) and enforce box cooldown.
     // ===============================
     if (type === "rewardUser") {
       const { userId, amount, isBox = false } = data || {};
@@ -378,7 +374,7 @@ export default async function handler(req, res) {
     // Create Task
     // ===============================
     if (type === "createTask") {
-      const { name, link, reward = 30 } = data || {};
+      const { name, link } = data || {};
 
       if (!name || !link) {
         return res.status(400).json({ success: false, error: "Missing name or link" });
@@ -389,7 +385,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           name,
           link,
-          reward: reward
+          reward: 30
         })
       });
 
@@ -414,110 +410,97 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // Claim Task (NEW)
-    // - Endpoint: claimTask
-    // - Data: { userId, taskId }
-    // - Behavior:
-    //   - Validate user and task exist
-    //   - Prevent double-claiming by checking claimed_tasks table
-    //   - Insert a claimed_tasks row (status: claimed) and immediately credit user's balance with task.reward
-    //   - Return updated balance and claim record
-    // Notes:
-    // - This implementation assumes a table `claimed_tasks` exists with at least:
-    //   id (serial), user_id (text or integer), task_id (integer), reward (numeric), status (text), created_at (timestamp)
-    // - If your Supabase schema differs, adjust table/column names accordingly.
+    // Complete Task (NEW)
+    // - Validates inputs
+    // - Ensures task exists
+    // - Ensures user hasn't already completed the task (server-side check)
+    // - Inserts a completion row into task_completions (if your schema uses a different table name,
+    //   adapt accordingly). We expect a unique constraint (user_id, task_id) ideally to avoid races.
+    // - Adds reward to user's balance and returns the updated balance.
     // ===============================
-    if (type === "claimTask") {
+    if (type === "completeTask") {
       const { userId, taskId } = data || {};
 
       if (!userId) {
         return res.status(400).json({ success: false, error: "Missing userId" });
       }
-      if (!taskId && taskId !== 0) {
+
+      if (!taskId) {
         return res.status(400).json({ success: false, error: "Missing taskId" });
       }
 
-      // 1) Verify user exists
-      const users = await supabaseRequest(`users?id=eq.${userId}&select=id,balance`);
-      if (!users || users.length === 0) {
-        return res.status(404).json({ success: false, error: "User not found" });
-      }
-
-      // 2) Verify task exists and read reward
-      const tasks = await supabaseRequest(`tasks?id=eq.${taskId}&select=*`);
+      // 1) Verify task exists and get its reward
+      const tasks = await supabaseRequest(`tasks?id=eq.${taskId}&select=id,name,reward`);
       if (!tasks || tasks.length === 0) {
         return res.status(404).json({ success: false, error: "Task not found" });
       }
       const task = tasks[0];
       const reward = Number(task.reward) || 0;
 
-      // 3) Check if user already claimed this task
-      // Note: adapt column names if different. We expect claimed_tasks with user_id and task_id.
-      const existingClaims = await supabaseRequest(`claimed_tasks?user_id=eq.${userId}&task_id=eq.${taskId}&select=*`);
-      if (existingClaims && existingClaims.length > 0) {
-        return res.status(400).json({ success: false, error: "Task already claimed by this user" });
+      // 2) Check if user already completed this task
+      // Table assumed: task_completions with columns: id, user_id, task_id, reward, created_at
+      // If your schema uses a different table name/columns, adjust accordingly.
+      const existing = await supabaseRequest(
+        `task_completions?user_id=eq.${userId}&task_id=eq.${taskId}&select=id,created_at`
+      );
+
+      if (existing && existing.length > 0) {
+        return res.status(400).json({ success: false, error: "Task already completed" });
       }
 
-      const nowIso = new Date().toISOString();
+      const now = new Date().toISOString();
 
-      // 4) Insert claimed_tasks row
-      // We'll set status to 'claimed' and store the reward value for audit.
-      let createdClaim = null;
+      // 3) Insert completion row
+      // If your DB has a unique constraint on (user_id, task_id), this will fail on duplicate attempts.
+      let createdCompletion = null;
       try {
-        const created = await supabaseRequest("claimed_tasks", {
+        createdCompletion = await supabaseRequest("task_completions", {
           method: "POST",
           body: JSON.stringify({
             user_id: userId,
             task_id: taskId,
             reward: reward,
-            status: "claimed",
-            created_at: nowIso
+            created_at: now
           })
         });
-        createdClaim = Array.isArray(created) ? created[0] : created;
       } catch (e) {
-        console.error("Failed to insert claimed_tasks:", e);
-        return res.status(500).json({ success: false, error: "Failed to record claim" });
+        // If insert fails (e.g., due to unique constraint), return a duplicate error
+        console.error("Failed to insert task_completions:", e);
+        return res.status(400).json({ success: false, error: "Failed to record completion (possibly already completed)" });
       }
 
-      // 5) Update user's balance (credit reward)
-      const currentBalance = Number(users[0].balance) || 0;
+      // 4) Update user's balance (safe pattern: fetch, compute, patch)
+      const users = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
+      if (!users || users.length === 0) {
+        // rollback: try to remove created completion if user missing
+        try {
+          await supabaseRequest(`task_completions?id=eq.${Array.isArray(createdCompletion) ? createdCompletion[0].id : (createdCompletion && createdCompletion.id)}`, {
+            method: "DELETE"
+          });
+        } catch (e) {}
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
+      const user = users[0];
+      const currentBalance = Number(user.balance) || 0;
       const newBalance = currentBalance + reward;
 
-      try {
-        await supabaseRequest(`users?id=eq.${userId}`, {
-          method: "PATCH",
-          body: JSON.stringify({ balance: newBalance })
-        });
-      } catch (e) {
-        console.error("Failed to update user balance after claim:", e);
-        // Attempt to rollback claim entry (best-effort)
-        try {
-          if (createdClaim && createdClaim.id) {
-            await supabaseRequest(`claimed_tasks?id=eq.${createdClaim.id}`, {
-              method: "DELETE"
-            });
-          }
-        } catch (delErr) {
-          console.error("Rollback failed:", delErr);
-        }
-        return res.status(500).json({ success: false, error: "Failed to credit reward" });
-      }
+      await supabaseRequest(`users?id=eq.${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ balance: newBalance })
+      });
 
       return res.status(200).json({
         success: true,
-        claim: createdClaim,
-        balance: newBalance
+        taskId,
+        reward,
+        balance: newBalance,
+        completion: Array.isArray(createdCompletion) ? createdCompletion[0] : createdCompletion
       });
     }
 
     // ===============================
     // Create Withdraw (NEW)
-    // - Validates minimum amount (300)
-    // - Checks user balance
-    // - Inserts a row into withdraw table with status 'pending'
-    // - Deducts balance immediately (so user can't double-withdraw)
-    // Table name on server: withdraw
     // ===============================
     if (type === "createWithdraw") {
       const { userId, amount, destination = null } = data || {};
@@ -585,7 +568,6 @@ export default async function handler(req, res) {
 
     // ===============================
     // Get Withdraws for a user (history)
-    // - Returns withdraw rows ordered by created_at desc
     // ===============================
     if (type === "getWithdraws") {
       const { userId } = data || {};
@@ -607,7 +589,6 @@ export default async function handler(req, res) {
 
     // ===============================
     // Get Referrals counts and details for inviter (active / pending + list)
-    // Returns: { success, active, pending, referrals: [{id,name,photo,ads_watched,referral_active}] }
     // ===============================
     if (type === "getReferrals") {
       const { userId } = data || {};
