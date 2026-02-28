@@ -34,10 +34,11 @@ let soundads  = document.getElementById("soundads");
 
 /* =======================
    API CENTRAL HANDLER
+   NOTE: This client sends Telegram user IDs as STRING (text) in request bodies.
 ======================= */
 const API_ENDPOINT = "/api";
 
-let USER_ID = null; // store Telegram user id after sync
+let USER_ID = null; // store Telegram user id after sync (use string when sent to server)
 
 // Client-side global API call throttling: minimum 5 seconds between any fetchApi calls
 const MIN_API_INTERVAL_MS = 5000;
@@ -47,7 +48,8 @@ async function fetchApi({ type, data = {} }) {
   try {
     // attach userId automatically when available and not explicitly provided
     if (USER_ID && (!data.userId) && !data.id) {
-      data.userId = USER_ID;
+      // IMPORTANT: send userId as string to server to avoid uuid/number casting issues
+      data.userId = String(USER_ID);
     }
 
     // Enforce client-side minimum interval between API calls (throttle)
@@ -1094,7 +1096,7 @@ function updateBalanceUI(res) {
     const withdrawnotifi = document.querySelector(".withdraw-notifi");
     if (withdrawnotifi) {
       withdrawnotifi.textContent = "Failed to update balance";
-      withdrawnotifi.style.display = 'block';
+      withdrawnotifi.style.display = "block";
       setTimeout(() => { withdrawnotifi.style.display = 'none'; }, 2500);
     }
   }
@@ -1490,7 +1492,7 @@ function attachTaskLinkHandlers(linkEl, task) {
           type: "completeTask",
           data: {
             taskId: taskId
-            // userId will be attached by fetchApi
+            // userId will be attached by fetchApi as STRING
           }
         });
 
@@ -1729,7 +1731,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       await fetchApi({
         type: "syncUser",
         data: {
-          id: userId,
+          id: String(userId),
           name: firstName,
           photo: photoUrl,
           referrerId: referrerId || null
@@ -1780,7 +1782,7 @@ document.addEventListener("DOMContentLoaded", async function () {
       if (link && userId) {
         try {
           link.textContent =
-            "https://t.me/Bot_ad_watchbot/earn?startapp=ref_" + userId;
+            "https://t.me/Bot_ad_watchbot/earn?startapp=ref_" + String(userId);
         } catch (e) {}
       }
 
@@ -1979,7 +1981,7 @@ if (sendwithdraw) {
         data: {
           amount: coin,
           destination: destination || null
-          // userId will be attached automatically by fetchApi if USER_ID available
+          // userId will be attached automatically by fetchApi as STRING if available
         }
       });
 
