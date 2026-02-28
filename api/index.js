@@ -144,126 +144,6 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // Get Tasks (fetch tasks from tasks table)
-    // ===============================
-    if (type === "getTasks") {
-      // Return tasks with columns: id, name, link, reward
-      const tasks = await supabaseRequest(`tasks?select=id,name,link,reward&order=id.asc`);
-      return res.status(200).json({
-        success: true,
-        tasks: Array.isArray(tasks) ? tasks : []
-      });
-    }
-
-    // ===============================
-    // Get Completed Tasks for a user
-    // - Returns array of task_id completed by the user
-    // ===============================
-    if (type === "getCompletedTasks") {
-      const { userId } = data || {};
-      if (!userId) {
-        return res.status(400).json({ success: false, error: "Missing userId" });
-      }
-
-      // Ensure table name matches what we insert to below: task_completions
-      const rows = await supabaseRequest(`task_completions?user_id=eq.${userId}&select=task_id`);
-      const completed = Array.isArray(rows) ? rows.map(r => r.task_id) : [];
-      return res.status(200).json({ success: true, completed });
-    }
-
-    // ===============================
-    // Complete Task (user claims task reward)
-    // - Server verifies task exists
-    // - Server verifies user has not already completed the task
-    // - If ok: insert a row in task_completions and credit user's balance
-    // - Returns new balance
-    // ===============================
-    if (type === "completeTask") {
-      const { userId, taskId } = data || {};
-
-      if (!userId) {
-        return res.status(400).json({ success: false, error: "Missing userId" });
-      }
-
-      if (!taskId) {
-        return res.status(400).json({ success: false, error: "Missing taskId" });
-      }
-
-      // Validate task exists
-      const tasks = await supabaseRequest(`tasks?id=eq.${taskId}&select=id,name,link,reward`);
-      if (!tasks || tasks.length === 0) {
-        return res.status(404).json({ success: false, error: "Task not found" });
-      }
-      const task = tasks[0];
-      const reward = Number(task.reward) || 0;
-
-      // Check if user already completed this task
-      const existing = await supabaseRequest(`task_completions?user_id=eq.${userId}&task_id=eq.${taskId}&select=*`);
-      if (existing && existing.length > 0) {
-        return res.status(400).json({ success: false, error: "Task already completed" });
-      }
-
-      // Insert completion row
-      const now = new Date().toISOString();
-      const completionRow = {
-        user_id: userId,
-        task_id: taskId,
-        reward: reward,
-        created_at: now
-      };
-
-      try {
-        await supabaseRequest("task_completions", {
-          method: "POST",
-          body: JSON.stringify(completionRow)
-        });
-      } catch (e) {
-        console.error("Failed to insert task completion:", e);
-        // If insertion fails, avoid crediting user.
-        return res.status(500).json({ success: false, error: "Failed to record task completion" });
-      }
-
-      // Credit user's balance (deduct safe check first)
-      const users = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
-      if (!users || users.length === 0) {
-        // Rollback: try to remove inserted completion to keep DB consistent
-        try {
-          await supabaseRequest(`task_completions?user_id=eq.${userId}&task_id=eq.${taskId}`, { method: "DELETE" });
-        } catch (e) {
-          console.error("Rollback failed:", e);
-        }
-        return res.status(404).json({ success: false, error: "User not found" });
-      }
-
-      const user = users[0];
-      const currentBalance = Number(user.balance) || 0;
-      const newBalance = currentBalance + reward;
-
-      try {
-        await supabaseRequest(`users?id=eq.${userId}`, {
-          method: "PATCH",
-          body: JSON.stringify({ balance: newBalance })
-        });
-      } catch (e) {
-        console.error("Failed to update user balance:", e);
-        // Try to rollback the completion row (best-effort)
-        try {
-          await supabaseRequest(`task_completions?user_id=eq.${userId}&task_id=eq.${taskId}`, { method: "DELETE" });
-        } catch (e2) {
-          console.error("Rollback of completion failed:", e2);
-        }
-        return res.status(500).json({ success: false, error: "Failed to credit user balance" });
-      }
-
-      return res.status(200).json({
-        success: true,
-        balance: newBalance,
-        taskCompleted: true,
-        taskId
-      });
-    }
-
-    // ===============================
     // Reward Box (Open-Box) - server-side handler
     // - Does NOT increment ad counters
     // - Enforces a separate box cooldown (BOX_MIN_INTERVAL_SECONDS)
@@ -495,21 +375,24 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // Create Task
+    // Create Task (inserts into task_faucet)
+    // - Keep existing UI behavior possible, but tasks now live in task_faucet table
+    // - reward defaults to 30 if not provided
     // ===============================
     if (type === "createTask") {
-      const { name, link } = data || {};
+      const { name, link, reward = 30 } = data || {};
 
       if (!name || !link) {
         return res.status(400).json({ success: false, error: "Missing name or link" });
       }
 
-      const created = await supabaseRequest("tasks", {
+      // Insert into task_faucet table
+      const created = await supabaseRequest("task_faucet", {
         method: "POST",
         body: JSON.stringify({
           name,
           link,
-          reward: 30
+          reward: Number(reward)
         })
       });
 
@@ -520,9 +403,99 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // Get Tasks
+    // Get Tasks (reads from task_faucet)
+    // - Returns tasks: [{id,name,link,reward}]
     // ===============================
-    // (handled above)
+    if (type === "getTasks") {
+      const tasks = await supabaseRequest(
+        `task_faucet?select=id,name,link,reward,created_at`
+      );
+
+      return res.status(200).json({
+        success: true,
+        tasks: Array.isArray(tasks) ? tasks : []
+      });
+    }
+
+    // ===============================
+    // Complete Task
+    // - data: { userId, taskId }
+    // - Server verifies user and task exist, ensures the user hasn't completed the task,
+    //   records completion in task_faucet_progress, adds reward to user's balance, returns new balance.
+    // - Protection against double awarding via UNIQUE(user_id, task_id) on task_faucet_progress.
+    // ===============================
+    if (type === "completeTask") {
+      const { userId, taskId } = data || {};
+
+      if (!userId) {
+        return res.status(400).json({ success: false, error: "Missing userId" });
+      }
+
+      if (!taskId) {
+        return res.status(400).json({ success: false, error: "Missing taskId" });
+      }
+
+      // Verify user exists
+      const users = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
+      if (!users || users.length === 0) {
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+
+      // Verify task exists and get reward
+      const tasks = await supabaseRequest(`task_faucet?id=eq.${taskId}&select=id,name,link,reward`);
+      if (!tasks || tasks.length === 0) {
+        return res.status(404).json({ success: false, error: "Task not found" });
+      }
+      const task = tasks[0];
+      const reward = Number(task.reward) || 0;
+
+      const now = new Date().toISOString();
+
+      // Attempt to insert progress record. If unique constraint violation occurs, treat as already completed.
+      try {
+        const inserted = await supabaseRequest("task_faucet_progress", {
+          method: "POST",
+          body: JSON.stringify({
+            user_id: userId,
+            task_id: taskId,
+            completed: true,
+            completed_at: now
+          })
+        });
+
+        // If inserted, proceed to update user's balance
+        // Fetch current user balance again (fresh)
+        const fresh = await supabaseRequest(`users?id=eq.${userId}&select=balance`);
+        const currentBalance = (fresh && fresh.length > 0) ? Number(fresh[0].balance) || 0 : 0;
+        const newBalance = currentBalance + reward;
+
+        // Update user's balance
+        await supabaseRequest(`users?id=eq.${userId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            balance: newBalance
+          })
+        });
+
+        return res.status(200).json({
+          success: true,
+          message: "Task completed",
+          taskId,
+          reward,
+          balance: newBalance
+        });
+
+      } catch (e) {
+        // Inspect error message to determine if it's a unique violation (already completed)
+        const errMsg = (e && e.message) ? e.message.toLowerCase() : String(e).toLowerCase();
+        if (errMsg.includes("duplicate") || errMsg.includes("unique") || errMsg.includes("already exists") || errMsg.includes("duplicate key")) {
+          return res.status(400).json({ success: false, error: "Task already completed" });
+        }
+
+        console.error("Failed to record task progress or update balance:", e);
+        return res.status(500).json({ success: false, error: "Failed to complete task" });
+      }
+    }
 
     // ===============================
     // Create Withdraw (NEW)
@@ -669,39 +642,3 @@ export default async function handler(req, res) {
     });
   }
 }
-
-/*
-SQL Helper Script (run on the database side to prepare tasks and completions tables)
-- This script will create the 'tasks' table (if you don't have it) and the 'task_completions' table.
-- It will also (optionally) remove existing rows from tasks and insert sample tasks.
-- Run carefully in your SQL editor connected to Supabase/Postgres.
-
--- CREATE tasks table (if not exists)
-CREATE TABLE IF NOT EXISTS public.tasks (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  name text NOT NULL,
-  link text NOT NULL,
-  reward integer NOT NULL DEFAULT 30
-);
-
--- CREATE task_completions table (if not exists)
-CREATE TABLE IF NOT EXISTS public.task_completions (
-  id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-  user_id text NOT NULL,
-  task_id bigint NOT NULL REFERENCES public.tasks(id) ON DELETE CASCADE,
-  reward integer NOT NULL DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
--- OPTIONAL: clear old tasks and insert new sample tasks
--- CAUTION: This will delete rows in tasks table. Remove the DELETE if you don't want that.
-DELETE FROM public.tasks;
-
-INSERT INTO public.tasks (name, link, reward) VALUES
-('Join our Telegram channel', 'https://t.me/example_channel', 30),
-('Follow on X', 'https://x.com/example', 25),
-('Watch a short video', 'https://example.com/video', 40),
-('Install partner app', 'https://play.google.com/store/apps/details?id=example', 100);
-
--- Note: Do NOT run the DELETE if you rely on existing tasks. Adjust as needed.
-*/
