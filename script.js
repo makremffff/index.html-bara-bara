@@ -134,9 +134,9 @@ function showPage(btnpage) {
     stopReferralPolling();
   }
 
-  // If opened tasks page -> load tasks from server
+  // Load tasks when showing task page
   if (btnpage === taskPage) {
-    loadTasks().catch(e => console.warn("loadTasks failed:", e));
+    loadTasks();
   }
 }
 
@@ -1022,7 +1022,8 @@ if (copyrefal) {
 
 /* =======================
    إضافة مهمة جديدة
-   (يبقى كما هو — واجهة إنشاء المهام تبعث للسيرفر)
+   NOTE: We will keep server-side createTask API usage, but we will NOT create DOM tasks locally here.
+   Instead, after a successful createTask we will refresh the tasks list from server to maintain single-source-of-truth.
 ======================= */
 let creatTask = document.getElementById("creatTask");
 
@@ -1042,8 +1043,9 @@ if (creatTask) {
     });
 
     if (res && res.success) {
-      // Reload tasks from server instead of inserting locally
-      try { await loadTasks(); } catch (e) { console.warn("reload tasks after create failed:", e); }
+      // refresh tasks from server (do NOT manually append)
+      await loadTasks();
+
       document.getElementById("taskNameInput").value = '';
       document.getElementById("taskLinkInput").value = '';
     } else {
@@ -1090,9 +1092,6 @@ function updateBalanceUI(res) {
         }
       } catch (e) {}
     }
-
-    // Also if res.balance provided, ensure local ADS updated
-    if (typeof res.balance !== 'undefined') ADS = Number(res.balance) || ADS;
   } else {
     // show error in withdraw-notifi element
     const withdrawnotifi = document.querySelector(".withdraw-notifi");
@@ -1216,214 +1215,7 @@ function renderReferralsList(referrals) {
 }
 
 /* =======================
-   Render tasks dynamically (requirements):
-   - Fetch tasks from server (getTasks)
-   - Do NOT create tasks manually in code
-   - Use same classes as existing card (.task-card, .taskimg, .task-name, .task-prize, .task-link)
-   - Button is the existing .task-link anchor
-   - Clicking start opens link in new tab, marks started in localStorage and turns button to "check" with black background
-   - Clicking check sends completeTask to server; server enforces idempotency and returns new balance
-   - Upon successful claim, update balance in UI and set button to Done/disabled
-======================= */
-function getTaskStartedKey(taskId) {
-  return USER_ID ? `taskStarted_${USER_ID}_${taskId}` : `taskStarted_guest_${taskId}`;
-}
-function getTaskCompletedKey(taskId) {
-  return USER_ID ? `taskCompleted_${USER_ID}_${taskId}` : `taskCompleted_guest_${taskId}`;
-}
-
-function createTaskCard(task, completedIds = []) {
-  const card = document.createElement('div');
-  card.className = 'task-card';
-
-  const img = document.createElement('img');
-  img.className = 'taskimg';
-  img.src = 'telegram.png';
-  img.width = 25;
-
-  const nameSpan = document.createElement('span');
-  nameSpan.className = 'task-name';
-  nameSpan.textContent = task.name || '';
-
-  const prizeSpan = document.createElement('span');
-  prizeSpan.className = 'task-prize';
-  prizeSpan.innerHTML = `${task.reward || 0} <img src="coins.png" width="25">`;
-
-  const linkA = document.createElement('a');
-  linkA.className = 'task-link';
-  linkA.href = task.link || '#';
-  linkA.target = '_blank';
-  linkA.rel = 'noopener noreferrer';
-  linkA.style.cursor = 'pointer';
-
-  // Determine initial state: completed (server) or started (local)
-  const completedKey = getTaskCompletedKey(task.id);
-  const startedKey = getTaskStartedKey(task.id);
-
-  const isCompletedServer = Array.isArray(completedIds) && completedIds.indexOf(task.id) !== -1;
-  const isCompletedLocal = localStorage.getItem(completedKey) === '1';
-  const isStartedLocal = localStorage.getItem(startedKey) === '1';
-
-  if (isCompletedServer || isCompletedLocal) {
-    linkA.textContent = 'Done';
-    // visually disabled: but keep class and element; ensure no navigation and no click
-    linkA.style.pointerEvents = 'none';
-    linkA.style.opacity = '0.6';
-  } else if (isStartedLocal) {
-    linkA.textContent = 'check';
-    linkA.style.background = 'black';
-    // keep clickable for check action
-  } else {
-    linkA.textContent = 'start';
-  }
-
-  // Click handler: respects the "start" -> open tab & mark started; "check" -> call server; "Done" -> noop
-  linkA.addEventListener('click', async function (e) {
-    const txt = (linkA.textContent || '').trim().toLowerCase();
-
-    if (txt === 'start') {
-      // allow default link opening in a new tab
-      try {
-        // mark started before navigation to ensure persisted state
-        localStorage.setItem(startedKey, '1');
-      } catch (err) {}
-      // change UI to check immediately
-      linkA.textContent = 'check';
-      linkA.style.background = 'black';
-      // Let the anchor open in new tab (target=_blank)
-      return;
-    }
-
-    if (txt === 'check') {
-      // prevent navigating the href
-      e.preventDefault();
-      // Disable multiple clicks
-      linkA.style.pointerEvents = 'none';
-      linkA.style.opacity = '0.7';
-
-      try {
-        const res = await fetchApi({
-          type: "completeTask",
-          data: { taskId: task.id }
-        });
-
-        if (res && res.success) {
-          // mark completed locally
-          try { localStorage.setItem(completedKey, '1'); } catch (err) {}
-          // update balance UI if provided
-          if (typeof res.balance !== 'undefined') {
-            ADS = Number(res.balance) || ADS;
-            if (adsBalance) adsBalance.textContent = ADS;
-            if (walletbalance) {
-              walletbalance.innerHTML = `
-                <img src="coins.png" style="width:20px; vertical-align:middle;">
-                ${ADS}
-              `;
-            }
-          }
-          // show success state
-          linkA.textContent = 'Done';
-          linkA.style.background = '';
-          linkA.style.pointerEvents = 'none';
-          linkA.style.opacity = '0.6';
-        } else {
-          // if server indicates already claimed, mark done
-          const err = res && res.error ? String(res.error).toLowerCase() : '';
-          if (err.includes('already') || err.includes('claimed') || err.includes('completed')) {
-            try { localStorage.setItem(completedKey, '1'); } catch (err) {}
-            linkA.textContent = 'Done';
-            linkA.style.pointerEvents = 'none';
-            linkA.style.opacity = '0.6';
-          } else {
-            // show error feedback and restore clickable state
-            alert("Failed to complete task: " + ((res && res.error) || "Unknown error"));
-            linkA.style.pointerEvents = '';
-            linkA.style.opacity = '';
-          }
-        }
-      } catch (e) {
-        console.warn("completeTask call failed:", e);
-        alert("Network error while verifying task. Please try again.");
-        linkA.style.pointerEvents = '';
-        linkA.style.opacity = '';
-      }
-      return;
-    }
-
-    // If text is 'done' or others -> prevent default and do nothing
-    if (txt === 'done') {
-      e.preventDefault();
-      return;
-    }
-  });
-
-  card.appendChild(img);
-  card.appendChild(nameSpan);
-  card.appendChild(prizeSpan);
-  card.appendChild(linkA);
-
-  return card;
-}
-
-async function loadTasks() {
-  const container = document.querySelector('.task-container');
-  if (!container) return;
-
-  // Show simple loading placeholder (do not alter HTML structure)
-  container.innerHTML = `<div class="task-card"><span class="task-name">Loading tasks...</span></div>`;
-
-  try {
-    const res = await fetchApi({ type: "getTasks", data: {} });
-    // When user is logged in, fetchApi attaches USER_ID automatically
-
-    if (res && res.success) {
-      // server may return tasks and optionally completedTaskIds
-      const tasks = Array.isArray(res.tasks) ? res.tasks : [];
-      const completedIds = Array.isArray(res.completedTaskIds) ? res.completedTaskIds : [];
-
-      // Clear container
-      container.innerHTML = '';
-
-      if (tasks.length === 0) {
-        // keep a placeholder card indicating no tasks
-        const noCard = document.createElement('div');
-        noCard.className = 'task-card';
-        noCard.innerHTML = `
-          <img class="taskimg" src="telegram.png" width="25">
-          <span class="task-name">No tasks available</span>
-          <span class="task-prize">0 <img src="coins.png" width="25"></span>
-          <a class="task-link" href="#" style="pointer-events:none;opacity:0.6">start</a>
-        `;
-        container.appendChild(noCard);
-        return;
-      }
-
-      // Render tasks preserving classes and layout
-      tasks.forEach(t => {
-        // ensure required fields exist
-        const task = {
-          id: t.id,
-          name: t.name,
-          link: t.link,
-          reward: t.reward
-        };
-        const card = createTaskCard(task, completedIds);
-        container.appendChild(card);
-      });
-
-    } else {
-      // On failure show message and keep container empty or placeholder
-      container.innerHTML = `<div class="task-card"><span class="task-name">Failed to load tasks</span></div>`;
-      console.warn("getTasks failed:", res && res.error);
-    }
-  } catch (e) {
-    console.warn("loadTasks error:", e);
-    container.innerHTML = `<div class="task-card"><span class="task-name">Failed to load tasks</span></div>`;
-  }
-}
-
-/* =======================
-   Update referral counts and list from backend
+   Refresh referral counts and list from backend
    Calls API type "getReferrals" which now returns { success, active, pending, referrals }
    fetchApi will attach USER_ID automatically if available.
 ======================= */
@@ -1605,9 +1397,284 @@ async function loadWithdrawHistory() {
 }
 
 /* =======================
-   Telegram WebApp User Data + referral (start params)
-   عند الدخول نقرا start params ونخزن referrerId لإرساله أثناء syncUser
-   كما نجلب عدد الدعوات ونحدّث واجهة invite
+   Tasks: load from server and render into .task-container
+   - Each task must use the same classes used in the original card:
+     .task-card, .taskimg, .task-name, .task-prize, .task-link
+   - No HTML changes required.
+   - Button flow:
+     start -> opens link in new tab, mark started locally, change same element text to 'check' and background to black (don't change class)
+     check -> call API completeTask -> server-side verification and credit -> if success set to 'Done' and disable
+   - Prevent duplicate rewards by relying on server verification.
+======================= */
+const TASK_CONTAINER_SELECTOR = ".task-container";
+const STARTED_TASKS_KEY_PREFIX = "startedTasks_"; // per-user key
+
+function getStartedTasksKey() {
+  return USER_ID ? STARTED_TASKS_KEY_PREFIX + USER_ID : STARTED_TASKS_KEY_PREFIX + "anon";
+}
+
+function loadStartedTasksFromStorage() {
+  try {
+    const key = getStartedTasksKey();
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+    return [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveStartedTasksToStorage(arr) {
+  try {
+    const key = getStartedTasksKey();
+    localStorage.setItem(key, JSON.stringify(arr || []));
+  } catch (e) {}
+}
+
+async function loadTasks() {
+  const container = document.querySelector(TASK_CONTAINER_SELECTOR);
+  if (!container) return;
+
+  // Clear existing tasks quickly while loading
+  container.innerHTML = '<div style="padding:12px;">Loading tasks...</div>';
+
+  try {
+    const tasksRes = await fetchApi({ type: "getTasks" });
+    if (!tasksRes || !tasksRes.success) {
+      container.innerHTML = '<div style="padding:12px;">Failed to load tasks</div>';
+      return;
+    }
+    const tasks = Array.isArray(tasksRes.tasks) ? tasksRes.tasks : [];
+
+    // Fetch completed tasks for the user so we can mark Done
+    let completedIds = [];
+    if (USER_ID) {
+      try {
+        const compRes = await fetchApi({ type: "getCompletedTasks" });
+        if (compRes && compRes.success && Array.isArray(compRes.completed)) {
+          completedIds = compRes.completed.map(id => String(id));
+        }
+      } catch (e) {
+        console.warn("Failed to fetch completed tasks:", e);
+      }
+    }
+
+    // Load started tasks from localStorage (per-user)
+    const started = loadStartedTasksFromStorage().map(String);
+
+    // Render tasks dynamically
+    container.innerHTML = ""; // clear
+
+    if (!tasks || tasks.length === 0) {
+      const no = document.createElement('div');
+      no.className = 'task-empty';
+      no.textContent = "No tasks available";
+      container.appendChild(no);
+      return;
+    }
+
+    tasks.forEach(task => {
+      const id = String(task.id);
+      const name = task.name || '';
+      const linkUrl = task.link || '#';
+      const reward = task.reward || 0;
+
+      let taskcard = document.createElement("div");
+      taskcard.className = "task-card";
+
+      // Build inner HTML preserving classes used in design
+      // Note: Use an <a class="task-link"> element as the clickable control (matches previous code)
+      taskcard.innerHTML = `
+      <img class="taskimg" src="telegram.png" width="25">
+      <span class="task-name">${escapeHtml(name)}</span>
+      <span class="task-prize">${escapeHtml(String(reward))} <img src="coins.png" width="25"></span>
+      <a class="task-link" href="${escapeAttr(linkUrl)}" data-task-id="${escapeAttr(id)}">start</a>
+      `;
+
+      // Post-process the link text based on state
+      const linkEl = taskcard.querySelector(".task-link");
+      if (linkEl) {
+        // If server shows completed -> Done
+        if (completedIds.includes(id)) {
+          linkEl.textContent = "Done";
+          // disable interaction while keeping class/appearance mostly intact
+          linkEl.style.pointerEvents = 'none';
+          linkEl.style.opacity = '0.6';
+        } else if (started.includes(id)) {
+          // previously started -> show 'check' with black background
+          linkEl.textContent = "check";
+          linkEl.style.background = 'black';
+          linkEl.style.color = '#fff';
+        } else {
+          // default start state
+          linkEl.textContent = "start";
+        }
+      }
+
+      container.appendChild(taskcard);
+    });
+
+  } catch (e) {
+    console.error("loadTasks failed:", e);
+    const container = document.querySelector(TASK_CONTAINER_SELECTOR);
+    if (container) container.innerHTML = '<div style="padding:12px;">Failed to load tasks</div>';
+  }
+}
+
+// Utility: basic escaping for HTML content inserted above
+function escapeHtml(str) {
+  if (typeof str !== 'string') return str;
+  return str.replace(/[&<>"']/g, function(m) {
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m];
+  });
+}
+function escapeAttr(str) {
+  if (typeof str !== 'string') return str;
+  return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/* =======================
+   Task click handling (delegation)
+   - Handle start and check with same element .task-link
+   - Do not change class names
+======================= */
+document.addEventListener('click', async function (evt) {
+  try {
+    const el = evt.target.closest && evt.target.closest('.task-link');
+    if (!el) return;
+
+    // Prevent default link navigation; we'll handle opening when needed.
+    evt.preventDefault();
+
+    // Reject synthetic programmatic clicks
+    if (evt && typeof evt.isTrusted !== "undefined" && !evt.isTrusted) {
+      console.warn("Ignored non-user initiated task click");
+      return;
+    }
+
+    const taskId = el.dataset && el.dataset.taskId ? String(el.dataset.taskId) : null;
+    const href = el.getAttribute('href') || '#';
+    if (!taskId) {
+      console.warn("Task click without taskId");
+      return;
+    }
+
+    const text = (el.textContent || '').trim().toLowerCase();
+
+    // If user not logged in, prompt (server-side requires userId)
+    if (!USER_ID) {
+      alert("Please open the app via Telegram and sign in to claim task rewards.");
+      return;
+    }
+
+    if (text === 'start') {
+      // Open link in a new tab
+      try {
+        window.open(href, '_blank', 'noopener');
+      } catch (e) {
+        // fallback
+        const a = document.createElement('a');
+        a.href = href;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+
+      // Mark started in localStorage
+      try {
+        const arr = loadStartedTasksFromStorage();
+        if (!arr.map(String).includes(taskId)) {
+          arr.push(taskId);
+          saveStartedTasksToStorage(arr);
+        }
+      } catch (e) {
+        console.warn("Failed to save started task:", e);
+      }
+
+      // Change same element to "check" and set background black, keep class unchanged
+      try {
+        el.textContent = 'check';
+        el.style.background = 'black';
+        el.style.color = '#fff';
+      } catch (e) {}
+
+      return;
+    }
+
+    if (text === 'check') {
+      // Prevent double clicks visually
+      if (el.dataset.processing === '1') return;
+      el.dataset.processing = '1';
+
+      // Call server to complete task
+      try {
+        const res = await fetchApi({
+          type: "completeTask",
+          data: {
+            taskId: taskId
+            // userId will be attached automatically by fetchApi
+          }
+        });
+
+        if (res && res.success) {
+          // Update balance in UI
+          if (typeof res.balance !== 'undefined') {
+            ADS = Number(res.balance) || ADS;
+            if (adsBalance) adsBalance.textContent = ADS;
+            if (walletbalance) {
+              walletbalance.innerHTML = `
+                <img src="coins.png" style="width:20px; vertical-align:middle;">
+                ${ADS}
+              `;
+            }
+          }
+
+          // Mark as completed in the UI: set text to Done and disable interaction (do not remove class)
+          el.textContent = 'Done';
+          el.style.pointerEvents = 'none';
+          el.style.opacity = '0.6';
+
+          // Remove from started list if present
+          try {
+            let arr = loadStartedTasksFromStorage().map(String);
+            arr = arr.filter(i => i !== taskId);
+            saveStartedTasksToStorage(arr);
+          } catch (e) {}
+
+          // Optionally show notification
+          showMainNotification(`<img src="done.gif" width="40" height="40">`);
+        } else {
+          // Server returned an error (e.g., already completed)
+          const err = res && res.error ? res.error : 'Failed to complete task';
+          alert(String(err));
+          // If server says already completed, reflect it
+          if (err && String(err).toLowerCase().includes('already completed')) {
+            el.textContent = 'Done';
+            el.style.pointerEvents = 'none';
+            el.style.opacity = '0.6';
+          }
+        }
+      } catch (e) {
+        console.error("completeTask failed:", e);
+        alert("Failed to complete task. Please try again.");
+      } finally {
+        el.dataset.processing = '0';
+      }
+      return;
+    }
+
+    // If it's "Done" or other state -> ignore
+  } catch (e) {
+    console.error("Task click handler error:", e);
+  }
+});
+
+/* =======================
+   Initialize OPEN BOX cooldown state from localStorage (if present)
 ======================= */
 document.addEventListener("DOMContentLoaded", async function () {
 
@@ -1734,6 +1801,13 @@ document.addEventListener("DOMContentLoaded", async function () {
 
       // Load withdraw history after sync
       await loadWithdrawHistory();
+
+      // Initialize tasks state after user is known
+      // If we are currently on tasks page, load tasks
+      if (taskPage && taskPage.style.display !== 'none') {
+        await loadTasks();
+      }
+
     } else {
       // If Telegram present but no user data, still refresh referrals if USER_ID exists
       if (USER_ID) {
