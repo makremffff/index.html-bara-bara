@@ -134,9 +134,9 @@ function showPage(btnpage) {
     stopReferralPolling();
   }
 
-  // Load tasks when showing task page
+  // If opening task page, load tasks dynamically from server
   if (btnpage === taskPage) {
-    loadTasks();
+    loadTasks().catch(e => console.warn("Failed to load tasks:", e));
   }
 }
 
@@ -1022,8 +1022,7 @@ if (copyrefal) {
 
 /* =======================
    إضافة مهمة جديدة
-   NOTE: We will keep server-side createTask API usage, but we will NOT create DOM tasks locally here.
-   Instead, after a successful createTask we will refresh the tasks list from server to maintain single-source-of-truth.
+   - After creating a task via API, reload tasks from server to respect canonical source.
 ======================= */
 let creatTask = document.getElementById("creatTask");
 
@@ -1043,7 +1042,7 @@ if (creatTask) {
     });
 
     if (res && res.success) {
-      // refresh tasks from server (do NOT manually append)
+      // Refresh tasks from server to show canonical data (and id)
       await loadTasks();
 
       document.getElementById("taskNameInput").value = '';
@@ -1097,7 +1096,7 @@ function updateBalanceUI(res) {
     const withdrawnotifi = document.querySelector(".withdraw-notifi");
     if (withdrawnotifi) {
       withdrawnotifi.textContent = "Failed to update balance";
-      withdrawnotifi.style.display = 'block';
+      withdrawnotifi.style.display = "block";
       setTimeout(() => { withdrawnotifi.style.display = 'none'; }, 2500);
     }
   }
@@ -1397,231 +1396,166 @@ async function loadWithdrawHistory() {
 }
 
 /* =======================
-   Tasks: load from server and render into .task-container
-   - Each task must use the same classes used in the original card:
-     .task-card, .taskimg, .task-name, .task-prize, .task-link
-   - No HTML changes required.
-   - Button flow:
-     start -> opens link in new tab, mark started locally, change same element text to 'check' and background to black (don't change class)
-     check -> call API completeTask -> server-side verification and credit -> if success set to 'Done' and disable
-   - Prevent duplicate rewards by relying on server verification.
+   TASKS: load, render and handle Start/Check logic
+   - Tasks are fetched from server (task_faucet)
+   - Each card uses the same classes and structure as before
+   - Button is kept as an <a class="task-link"> element; we intercept clicks to implement
+     Start -> opens new tab, marks started; Check -> calls completeTask on server
+   - State persisted per-account in localStorage using USER_ID when available.
 ======================= */
-const TASK_CONTAINER_SELECTOR = ".task-container";
-const STARTED_TASKS_KEY_PREFIX = "startedTasks_"; // per-user key
 
-function getStartedTasksKey() {
-  return USER_ID ? STARTED_TASKS_KEY_PREFIX + USER_ID : STARTED_TASKS_KEY_PREFIX + "anon";
+function taskStartedKey(taskId) {
+  return `task_started_${USER_ID ? USER_ID : 'anon'}_${taskId}`;
 }
-
-function loadStartedTasksFromStorage() {
-  try {
-    const key = getStartedTasksKey();
-    const raw = localStorage.getItem(key);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed;
-    return [];
-  } catch (e) {
-    return [];
-  }
-}
-
-function saveStartedTasksToStorage(arr) {
-  try {
-    const key = getStartedTasksKey();
-    localStorage.setItem(key, JSON.stringify(arr || []));
-  } catch (e) {}
+function taskCompletedKey(taskId) {
+  return `task_completed_${USER_ID ? USER_ID : 'anon'}_${taskId}`;
 }
 
 async function loadTasks() {
-  const container = document.querySelector(TASK_CONTAINER_SELECTOR);
+  const container = document.querySelector(".task-container");
   if (!container) return;
 
-  // Clear existing tasks quickly while loading
-  container.innerHTML = '<div style="padding:12px;">Loading tasks...</div>';
+  // Show a loading placeholder (non-intrusive)
+  container.innerHTML = `<div style="padding:10px;">Loading tasks...</div>`;
 
   try {
-    const tasksRes = await fetchApi({ type: "getTasks" });
-    if (!tasksRes || !tasksRes.success) {
-      container.innerHTML = '<div style="padding:12px;">Failed to load tasks</div>';
-      return;
-    }
-    const tasks = Array.isArray(tasksRes.tasks) ? tasksRes.tasks : [];
-
-    // Fetch completed tasks for the user so we can mark Done
-    let completedIds = [];
-    if (USER_ID) {
-      try {
-        const compRes = await fetchApi({ type: "getCompletedTasks" });
-        if (compRes && compRes.success && Array.isArray(compRes.completed)) {
-          completedIds = compRes.completed.map(id => String(id));
-        }
-      } catch (e) {
-        console.warn("Failed to fetch completed tasks:", e);
-      }
-    }
-
-    // Load started tasks from localStorage (per-user)
-    const started = loadStartedTasksFromStorage().map(String);
-
-    // Render tasks dynamically
-    container.innerHTML = ""; // clear
-
-    if (!tasks || tasks.length === 0) {
-      const no = document.createElement('div');
-      no.className = 'task-empty';
-      no.textContent = "No tasks available";
-      container.appendChild(no);
+    const res = await fetchApi({ type: "getTasks" });
+    if (!res || !res.success) {
+      container.innerHTML = `<div style="padding:10px;">Failed to load tasks</div>`;
       return;
     }
 
-    tasks.forEach(task => {
-      const id = String(task.id);
-      const name = task.name || '';
-      const linkUrl = task.link || '#';
-      const reward = task.reward || 0;
-
-      let taskcard = document.createElement("div");
-      taskcard.className = "task-card";
-
-      // Build inner HTML preserving classes used in design
-      // Note: Use an <a class="task-link"> element as the clickable control (matches previous code)
-      taskcard.innerHTML = `
-      <img class="taskimg" src="telegram.png" width="25">
-      <span class="task-name">${escapeHtml(name)}</span>
-      <span class="task-prize">${escapeHtml(String(reward))} <img src="coins.png" width="25"></span>
-      <a class="task-link" href="${escapeAttr(linkUrl)}" data-task-id="${escapeAttr(id)}">start</a>
-      `;
-
-      // Post-process the link text based on state
-      const linkEl = taskcard.querySelector(".task-link");
-      if (linkEl) {
-        // If server shows completed -> Done
-        if (completedIds.includes(id)) {
-          linkEl.textContent = "Done";
-          // disable interaction while keeping class/appearance mostly intact
-          linkEl.style.pointerEvents = 'none';
-          linkEl.style.opacity = '0.6';
-        } else if (started.includes(id)) {
-          // previously started -> show 'check' with black background
-          linkEl.textContent = "check";
-          linkEl.style.background = 'black';
-          linkEl.style.color = '#fff';
-        } else {
-          // default start state
-          linkEl.textContent = "start";
-        }
-      }
-
-      container.appendChild(taskcard);
-    });
-
+    const tasks = res.tasks || [];
+    renderTaskList(tasks || []);
   } catch (e) {
-    console.error("loadTasks failed:", e);
-    const container = document.querySelector(TASK_CONTAINER_SELECTOR);
-    if (container) container.innerHTML = '<div style="padding:12px;">Failed to load tasks</div>';
+    console.warn("loadTasks failed:", e);
+    container.innerHTML = `<div style="padding:10px;">Failed to load tasks</div>`;
   }
 }
 
-// Utility: basic escaping for HTML content inserted above
+function renderTaskList(tasks) {
+  const container = document.querySelector(".task-container");
+  if (!container) return;
+
+  container.innerHTML = '';
+
+  if (!Array.isArray(tasks) || tasks.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = "task-card";
+    empty.style.padding = '10px';
+    empty.textContent = 'No tasks available';
+    container.appendChild(empty);
+    return;
+  }
+
+  tasks.forEach(t => {
+    const taskcard = document.createElement("div");
+    taskcard.className = "task-card";
+
+    // Build inner HTML preserving classes used by the rest of the app
+    // Keep same structure used previously
+    taskcard.innerHTML = `
+      <img class="taskimg" src="telegram.png" width="25">
+      <span class="task-name">${escapeHtml(t.name)}</span>
+      <span class="task-prize">${Number(t.reward) || 0} <img src="coins.png" width="25"></span>
+      <a class="task-link" href="${escapeHtml(t.link)}" data-task-id="${t.id}">start</a>
+    `;
+
+    container.appendChild(taskcard);
+  });
+}
+
+/* Utility: simple HTML escape for inserted values */
 function escapeHtml(str) {
   if (typeof str !== 'string') return str;
   return str.replace(/[&<>"']/g, function(m) {
-    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m];
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[m]);
   });
 }
-function escapeAttr(str) {
-  if (typeof str !== 'string') return str;
-  return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
 
-/* =======================
-   Task click handling (delegation)
-   - Handle start and check with same element .task-link
-   - Do not change class names
-======================= */
+/* Delegate click handling for task links to support Start / Check logic */
 document.addEventListener('click', async function (evt) {
-  try {
-    const el = evt.target.closest && evt.target.closest('.task-link');
-    if (!el) return;
+  const el = evt.target;
+  if (!el) return;
 
-    // Prevent default link navigation; we'll handle opening when needed.
+  // handle clicks on anchors with class task-link
+  if (el.matches && el.matches('a.task-link')) {
     evt.preventDefault();
 
-    // Reject synthetic programmatic clicks
-    if (evt && typeof evt.isTrusted !== "undefined" && !evt.isTrusted) {
-      console.warn("Ignored non-user initiated task click");
-      return;
-    }
-
-    const taskId = el.dataset && el.dataset.taskId ? String(el.dataset.taskId) : null;
-    const href = el.getAttribute('href') || '#';
-    if (!taskId) {
-      console.warn("Task click without taskId");
-      return;
-    }
+    // Get task id and href
+    const taskId = el.dataset.taskId;
+    const href = el.getAttribute('href');
 
     const text = (el.textContent || '').trim().toLowerCase();
 
-    // If user not logged in, prompt (server-side requires userId)
-    if (!USER_ID) {
-      alert("Please open the app via Telegram and sign in to claim task rewards.");
+    // Keys
+    const startedKey = taskStartedKey(taskId);
+    const completedKey = taskCompletedKey(taskId);
+
+    // If already completed according to local state, make it readonly
+    if (localStorage.getItem(completedKey)) {
+      // update UI to "Done" and disable interaction visually
+      el.textContent = 'Done';
+      el.style.pointerEvents = 'none';
+      el.style.opacity = '0.7';
+      el.style.background = '';
       return;
     }
 
+    // If it's start -> open link in new tab and mark started
     if (text === 'start') {
-      // Open link in a new tab
       try {
-        window.open(href, '_blank', 'noopener');
-      } catch (e) {
-        // fallback
-        const a = document.createElement('a');
-        a.href = href;
-        a.target = '_blank';
-        a.rel = 'noopener';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      }
-
-      // Mark started in localStorage
-      try {
-        const arr = loadStartedTasksFromStorage();
-        if (!arr.map(String).includes(taskId)) {
-          arr.push(taskId);
-          saveStartedTasksToStorage(arr);
+        if (href) {
+          window.open(href, '_blank');
         }
       } catch (e) {
-        console.warn("Failed to save started task:", e);
+        // fallback to setting location (will navigate away)
+        try { window.open(href, '_blank'); } catch (e2) {}
       }
 
-      // Change same element to "check" and set background black, keep class unchanged
+      // mark started in localStorage
       try {
-        el.textContent = 'check';
-        el.style.background = 'black';
-        el.style.color = '#fff';
+        localStorage.setItem(startedKey, String(Date.now()));
       } catch (e) {}
 
+      // change to "check" and make background black as requested (do not change class)
+      el.textContent = 'check';
+      el.style.background = 'black';
+      el.style.color = '#fff';
       return;
     }
 
+    // If it's check -> attempt to complete task on server
     if (text === 'check') {
-      // Prevent double clicks visually
-      if (el.dataset.processing === '1') return;
-      el.dataset.processing = '1';
+      // Disable immediate clicks to avoid double submits
+      el.style.pointerEvents = 'none';
+      const prevText = el.textContent;
+      el.textContent = '...';
 
-      // Call server to complete task
       try {
         const res = await fetchApi({
           type: "completeTask",
           data: {
             taskId: taskId
-            // userId will be attached automatically by fetchApi
+            // userId will be attached automatically by fetchApi if USER_ID present
           }
         });
 
         if (res && res.success) {
-          // Update balance in UI
+          // mark as completed locally
+          try {
+            localStorage.setItem(completedKey, String(Date.now()));
+            // optionally remove started flag
+            localStorage.removeItem(startedKey);
+          } catch (e) {}
+
+          // update UI: Done and disable
+          el.textContent = 'Done';
+          el.style.pointerEvents = 'none';
+          el.style.opacity = '0.7';
+          el.style.background = '';
+
+          // Update displayed balances from server response if provided
           if (typeof res.balance !== 'undefined') {
             ADS = Number(res.balance) || ADS;
             if (adsBalance) adsBalance.textContent = ADS;
@@ -1633,45 +1567,89 @@ document.addEventListener('click', async function (evt) {
             }
           }
 
-          // Mark as completed in the UI: set text to Done and disable interaction (do not remove class)
-          el.textContent = 'Done';
-          el.style.pointerEvents = 'none';
-          el.style.opacity = '0.6';
-
-          // Remove from started list if present
-          try {
-            let arr = loadStartedTasksFromStorage().map(String);
-            arr = arr.filter(i => i !== taskId);
-            saveStartedTasksToStorage(arr);
-          } catch (e) {}
-
-          // Optionally show notification
-          showMainNotification(`<img src="done.gif" width="40" height="40">`);
+          // Show notification
+          showMainNotification(`you get ${Number(res.reward) || 0} coin <img src="done.gif" width="40" height="40">`);
         } else {
-          // Server returned an error (e.g., already completed)
-          const err = res && res.error ? res.error : 'Failed to complete task';
-          alert(String(err));
-          // If server says already completed, reflect it
-          if (err && String(err).toLowerCase().includes('already completed')) {
+          // Failure: maybe already completed server-side or other problem
+          const err = (res && res.error) ? String(res.error) : 'Failed to complete task';
+          if (err.toLowerCase().includes('already')) {
+            // mark locally as completed to reflect server state
+            try { localStorage.setItem(completedKey, String(Date.now())); } catch (e) {}
             el.textContent = 'Done';
             el.style.pointerEvents = 'none';
-            el.style.opacity = '0.6';
+            el.style.opacity = '0.7';
+            el.style.background = '';
+            showMainNotification(`Already completed <img src="done.gif" width="40" height="40">`);
+          } else {
+            // restore button state to allow retry
+            el.textContent = prevText || 'check';
+            el.style.pointerEvents = '';
+            // keep background black for check state
+            el.style.background = 'black';
+            el.style.color = '#fff';
+
+            alert("Failed to verify task: " + err);
           }
         }
       } catch (e) {
-        console.error("completeTask failed:", e);
-        alert("Failed to complete task. Please try again.");
-      } finally {
-        el.dataset.processing = '0';
+        console.error("completeTask call error:", e);
+        el.textContent = prevText || 'check';
+        el.style.pointerEvents = '';
+        el.style.background = 'black';
+        el.style.color = '#fff';
+        alert("Network error while completing task");
       }
+
       return;
     }
 
-    // If it's "Done" or other state -> ignore
-  } catch (e) {
-    console.error("Task click handler error:", e);
+    // If anchor shows other text (e.g., 'done'), default action blocked; do nothing
   }
 });
+
+/* =======================
+   Initialize task UI state on load:
+   - When tasks are rendered (loadTasks), we need to update each task-link to reflect started/completed state.
+   - We'll use a MutationObserver on .task-container so when loadTasks inserts cards we can adjust buttons.
+======================= */
+const taskContainer = document.querySelector('.task-container');
+if (taskContainer) {
+  const mo = new MutationObserver(function(mutations) {
+    for (const m of mutations) {
+      if (m.addedNodes && m.addedNodes.length > 0) {
+        // Update buttons for newly added nodes
+        const links = taskContainer.querySelectorAll('a.task-link');
+        links.forEach(link => {
+          const taskId = link.dataset.taskId;
+          const completedKey = taskCompletedKey(taskId);
+          const startedKey = taskStartedKey(taskId);
+
+          if (localStorage.getItem(completedKey)) {
+            link.textContent = 'Done';
+            link.style.pointerEvents = 'none';
+            link.style.opacity = '0.7';
+            link.style.background = '';
+          } else if (localStorage.getItem(startedKey)) {
+            link.textContent = 'check';
+            link.style.background = 'black';
+            link.style.color = '#fff';
+            link.style.pointerEvents = '';
+            link.style.opacity = '';
+          } else {
+            // default start state
+            link.textContent = 'start';
+            link.style.background = '';
+            link.style.color = '';
+            link.style.pointerEvents = '';
+            link.style.opacity = '';
+          }
+        });
+      }
+    }
+  });
+
+  mo.observe(taskContainer, { childList: true, subtree: true });
+}
 
 /* =======================
    Initialize OPEN BOX cooldown state from localStorage (if present)
@@ -1802,18 +1780,16 @@ document.addEventListener("DOMContentLoaded", async function () {
       // Load withdraw history after sync
       await loadWithdrawHistory();
 
-      // Initialize tasks state after user is known
-      // If we are currently on tasks page, load tasks
-      if (taskPage && taskPage.style.display !== 'none') {
-        await loadTasks();
-      }
-
+      // Load tasks after sync so per-account localStorage keys are correct
+      await loadTasks();
     } else {
       // If Telegram present but no user data, still refresh referrals if USER_ID exists
       if (USER_ID) {
         refreshReferralCounts();
         await loadWithdrawHistory();
       }
+      // Load tasks (anonymous view)
+      await loadTasks();
     }
   } else {
     // Not a Telegram WebApp visitor.
@@ -1840,6 +1816,9 @@ document.addEventListener("DOMContentLoaded", async function () {
       renderReferralsList([]);
       renderWithdrawHistory([]); // show empty history until login
     }
+
+    // Load tasks for anonymous user
+    await loadTasks();
   }
 
   // Initialize OPEN BOX cooldown state from localStorage (if present)
