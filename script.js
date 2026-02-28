@@ -1022,6 +1022,7 @@ if (copyrefal) {
 
 /* =======================
    إضافة مهمة جديدة
+   (يبقى كما هو — واجهة إنشاء المهام تبعث للسيرفر)
 ======================= */
 let creatTask = document.getElementById("creatTask");
 
@@ -1041,19 +1042,8 @@ if (creatTask) {
     });
 
     if (res && res.success) {
-      let taskcontainer = document.querySelector(".task-container");
-      let taskcard = document.createElement("div");
-      taskcard.className = "task-card";
-
-      taskcard.innerHTML = `
-      <img class="taskimg" src="telegram.png" width="25">
-      <span class="task-name">${nametask}</span>
-      <span class="task-prize">30 <img src="coins.png" width="25"></span>
-      <a class="task-link" href="${linktask}">start</a>
-      `;
-
-      taskcontainer.appendChild(taskcard);
-
+      // Reload tasks from server instead of inserting locally
+      try { await loadTasks(); } catch (e) { console.warn("reload tasks after create failed:", e); }
       document.getElementById("taskNameInput").value = '';
       document.getElementById("taskLinkInput").value = '';
     } else {
