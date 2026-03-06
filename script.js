@@ -131,7 +131,9 @@ taskcard.innerHTML = `
 <img class="task-img" src="asesst/telegram.png" width="25">
 <span class="task-name">${taskname}</span>
 <span class="task-prize">500 <img src="asesst/pepe.png" width="25" height="28"></span>
-<a class="task-link" href="${tasklink}" target="_blank">Join</a>
+  <div class='task-link'>
+  <a  href="${tasklink}">Join</a>
+</div>
 `;
 
 let taskContainer = document.getElementById("task");
@@ -162,21 +164,21 @@ btnsound.play();
 
 
 // زر join
-document.addEventListener("click", function(e){
+let joinbtn = document.querySelector(".task-link");
+joinbtn.addEventListener("click",function(){
+  joinbtn.innerHTML = `<span>Check</span>`
+ 
 
-if(e.target.classList.contains("task-link")){
-
-e.target.textContent = 'Check';
-
-setTimeout(function(){
-
-e.target.innerHTML = `<img src="asesst/check.gif" width="23">`;
-
-},2000);
-
-}
-
+joinbtn.addEventListener("click",function(){
+  joinbtn.innerHTML = `
+  <img src='asesst/check.gif' width='23'>`
+})
+  
+  
 });
+
+
+
 
 
 // نسخ رابط الاحالة
