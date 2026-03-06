@@ -251,4 +251,4 @@ document.querySelector(".notifi").style.display = "none";
 console.log("Ad skipped");
 });
 
-}}
+}
