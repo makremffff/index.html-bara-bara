@@ -2,11 +2,11 @@
 let tg = window.Telegram.WebApp;
 tg.expand();
 
-// بيانات المستخدم
 let user = tg.initDataUnsafe.user;
 
 let userBalance = 0;
 
+// بيانات المستخدم
 if (user) {
 
 let userid = user.id;
@@ -15,7 +15,6 @@ let lastname = user.last_name || "";
 let fullname = firstname + " " + lastname;
 let photo = user.photo_url || "";
 
-// صورة المستخدم
 let userPhoto = document.querySelector(".user-fhoto");
 
 if(photo){
@@ -24,7 +23,6 @@ userPhoto.innerHTML = `<img src="${photo}">`;
 userPhoto.innerHTML = `<img src="asesst/user.png">`;
 }
 
-// الاسم
 let usernameBox = document.querySelector(".user-name");
 
 usernameBox.innerHTML = `
@@ -32,7 +30,6 @@ usernameBox.innerHTML = `
 <span>${fullname}</span>
 `;
 
-// رابط الإحالة
 let refLink = `https://t.me/Bot_ad_watchbot/earn?startapp=ref_${userid}`;
 
 let refBox = document.querySelector(".refal-link span");
@@ -64,7 +61,7 @@ page.style.display = 'block';
 }
 
 
-// صور الاعلانات
+// صور الإعلانات
 let boximg = document.querySelector(".box-ads");
 
 let images = [
@@ -93,68 +90,7 @@ boximg.innerHTML = `<img src="${images[i]}" width="250">`;
 },10000);
 
 
-// تغيير لون topup
-let topup = document.querySelector(".top-up");
-let taskadd = document.getElementById("taskadd");
-
-taskadd.addEventListener("change", function () {
-
-if (taskadd.checked) {
-topup.style.color = "blue";
-} else {
-topup.style.color = "";
-}
-
-});
-
-
-// إنشاء مهمة
-let creatTaskbtn = document.getElementById("createtask");
-
-creatTaskbtn.addEventListener("click",function(){
-
-let taskname = document.getElementById("taskname").value;
-let tasklink = document.getElementById("tasklink").value;
-
-let taskcard = document.createElement("div");
-taskcard.classList = 'task-card';
-
-taskcard.innerHTML = `
-<img class="task-img" src="asesst/telegram.png" width="25">
-<span class="task-name">${taskname}</span>
-<span class="task-prize">500 <img src="asesst/pepe.png" width="25" height="28"></span>
-  <div class='task-link'>
-  <a  href="${tasklink}">Join</a>
-</div>
-`;
-
-let taskContainer = document.getElementById("task");
-
-taskContainer.appendChild(taskcard);
-
-document.getElementById("taskname").value = '';
-document.getElementById("tasklink").value = '';
-
-});
-
-
-// الصوت
-const audio = document.getElementById("audio");
-
-document.addEventListener("click", () => {
-audio.play();
-});
-
-let btnsound = document.getElementById("clicksound");
-
-let btns = document.querySelector(".btn-bar");
-
-btns.addEventListener("click",function(){
-btnsound.play();
-});
-
-
-// دالة الإشعارات
+// إشعارات
 function showNotification(text, img){
 
 let notif = document.querySelector(".notifi");
@@ -175,32 +111,54 @@ notif.style.display = "none";
 // نظام المهام
 document.addEventListener("click", function(e){
 
-if(e.target.classList.contains("task-link")){
+if(e.target.closest(".task-link a")){
 
-let taskCard = e.target.closest(".task-card");
+e.preventDefault();
+
+let linkBtn = e.target;
+
+let taskCard = linkBtn.closest(".task-card");
+
 let taskName = taskCard.querySelector(".task-name").innerText;
 
 let completedTasks = JSON.parse(localStorage.getItem("tasks_done")) || [];
 
 if(completedTasks.includes(taskName)){
-e.target.innerHTML = `<img src="asesst/check.gif" width="23"> Done`;
+linkBtn.innerHTML = `<img src="asesst/check.gif" width="23"> Done`;
 return;
 }
 
-// Join
-if(!e.target.dataset.state){
 
-e.target.dataset.state = "check";
-e.target.textContent = "Check";
+// Join
+if(!linkBtn.dataset.state){
+
+linkBtn.dataset.state = "check";
+
+window.open(linkBtn.href,"_blank");
+
+linkBtn.textContent = "Check";
 
 }
 
+
 // Check
-else if(e.target.dataset.state === "check"){
+else if(linkBtn.dataset.state === "check"){
 
-e.target.textContent = "Checking";
+let count = 3;
 
-setTimeout(()=>{
+linkBtn.textContent = count;
+
+let countdown = setInterval(()=>{
+
+count--;
+
+if(count > 0){
+
+linkBtn.textContent = count;
+
+}else{
+
+clearInterval(countdown);
 
 userBalance += 500;
 
@@ -208,15 +166,18 @@ document.querySelector(".user-balance span").innerHTML =
 userBalance + `<img src="asesst/pepe.png" width="23" height="30">`;
 
 completedTasks.push(taskName);
+
 localStorage.setItem("tasks_done", JSON.stringify(completedTasks));
 
 showNotification("Task Complete","asesst/check.gif");
 
-e.target.innerHTML = `<img src="asesst/check.gif" width="23"> Done`;
+linkBtn.innerHTML = `<img src="asesst/check.gif" width="23"> Done`;
 
-e.target.dataset.state = "done";
+linkBtn.dataset.state = "done";
 
-},2000);
+}
+
+},1000);
 
 }
 
@@ -247,7 +208,7 @@ copyBtn.innerHTML = `<img src="asesst/copy.png" width="26">`;
 }
 
 
-// نظام AdsGram
+// AdsGram
 let watchBtn = document.getElementById("watch");
 
 let adsWatched = 0;
@@ -269,7 +230,7 @@ blockId: "int-20679",
 debug: true
 });
 
-adController.show().then(() => {
+adController.show().then(()=>{
 
 adsWatched++;
 
