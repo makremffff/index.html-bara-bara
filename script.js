@@ -2,8 +2,10 @@
 let tg = window.Telegram.WebApp;
 tg.expand();
 
-// جلب بيانات المستخدم
+// بيانات المستخدم
 let user = tg.initDataUnsafe.user;
+
+let userBalance = 0;
 
 if (user) {
 
@@ -17,21 +19,17 @@ let photo = user.photo_url || "";
 let userPhoto = document.querySelector(".user-fhoto");
 
 if(photo){
-userPhoto.innerHTML = `
-<img src="${photo}" >
-`;
+userPhoto.innerHTML = `<img src="${photo}">`;
 }else{
-userPhoto.innerHTML = `
-<img src="asesst/user.png" >
-`;
+userPhoto.innerHTML = `<img src="asesst/user.png">`;
 }
 
-// الاسم + welcome كل واحد span
+// اسم المستخدم
 let usernameBox = document.querySelector(".user-name");
 
 usernameBox.innerHTML = `
 <span style="color:#ffeedd;font-size:20px;">♪WellCome♫</span>
-<span> ${fullname}</span>
+<span>${fullname}</span>
 `;
 
 // رابط الإحالة
@@ -46,13 +44,6 @@ refBox.innerHTML = refLink;
 }
 
 
-// ازرار الصفحات
-let mainbtn = document.getElementById("mainbtn");
-let taskbtn = document.getElementById("taskbtn");
-let walletbtn = document.getElementById("walletbtn");
-let gamebtn = document.getElementById("gamebtn");
-let refalbtn = document.getElementById("refalbtn");
-
 // الصفحات
 let mainpage = document.getElementById("main");
 let taskpage = document.getElementById("task");
@@ -62,13 +53,15 @@ let refalpage = document.getElementById("refal");
 
 // اظهار الصفحات
 function showpage(page){
+
 mainpage.style.display = 'none';
 taskpage.style.display = 'none';
+walletpage.style.display = 'none';
 gamepage.style.display = 'none';
 refalpage.style.display = 'none';
-walletpage.style.display = 'none';
 
 page.style.display = 'block';
+
 }
 
 
@@ -81,7 +74,7 @@ let images = [
 "asesst/104.png",
 "asesst/130.png",
 "asesst/711.png",
-"asesst/719.png",
+"asesst/719.png"
 ];
 
 let i = 0;
@@ -116,7 +109,7 @@ topup.style.color = "";
 });
 
 
-// انشاء مهمة
+// إنشاء مهمة
 let creatTaskbtn = document.getElementById("createtask");
 
 creatTaskbtn.addEventListener("click",function(){
@@ -151,7 +144,6 @@ document.addEventListener("click", () => {
 audio.play();
 });
 
-
 let btnsound = document.getElementById("clicksound");
 
 let btns = document.querySelector(".btn-bar");
@@ -161,18 +153,41 @@ btnsound.play();
 });
 
 
-// زر join
+// نظام المهام Join → Check → Done
 document.addEventListener("click", function(e){
 
 if(e.target.classList.contains("task-link")){
 
-e.target.textContent = 'Check';
+// اول ضغط Join
+if(e.target.dataset.state !== "check"){
 
-setTimeout(function(){
+e.target.dataset.state = "check";
 
-e.target.innerHTML = `<img src="asesst/check.gif" width="23">`;
+e.target.textContent = "Check";
 
-},2000);
+}
+
+// ضغط Check
+else if(e.target.dataset.state === "check"){
+
+userBalance += 500;
+
+document.querySelector(".user-balance span").innerHTML =
+userBalance + `<img src="asesst/pepe.png" width="23" height="30">`;
+
+let notif = document.querySelector(".notifi");
+
+notif.style.display = "block";
+
+setTimeout(()=>{
+notif.style.display = "none";
+},3000);
+
+e.target.innerHTML = `<img src="asesst/check.gif" width="23"> Done`;
+
+e.target.dataset.state = "done";
+
+}
 
 }
 
@@ -199,16 +214,21 @@ copyBtn.innerHTML = `<img src="asesst/copy.png" width="26">`;
 });
 
 }
+
+
+// نظام اعلانات AdsGram
 let watchBtn = document.getElementById("watch");
 
 let adsWatched = 0;
-let userBalance = 0;
 
 watchBtn.addEventListener("click", startAds);
 
 function startAds(){
+
 adsWatched = 0;
+
 showAd();
+
 }
 
 function showAd(){
@@ -224,14 +244,12 @@ adsWatched++;
 
 if(adsWatched < 3){
 
-// انتظار 6 ثواني قبل الإعلان التالي
-setTimeout(() => {
+setTimeout(()=>{
 showAd();
-}, 6000);
+},6000);
 
 }else{
 
-// إعطاء المكافأة
 userBalance += 100;
 
 document.querySelector(".user-balance span").innerHTML =
@@ -239,16 +257,20 @@ userBalance + `<img src="asesst/pepe.png" width="23" height="30">`;
 
 document.querySelector(".user-ads h3").innerText++;
 
-document.querySelector(".notifi").style.display = "block";
+let notif = document.querySelector(".notifi");
+
+notif.style.display = "block";
 
 setTimeout(()=>{
-document.querySelector(".notifi").style.display = "none";
+notif.style.display = "none";
 },3000);
 
 }
 
-}).catch(() => {
+}).catch(()=>{
+
 console.log("Ad skipped");
+
 });
 
 }
