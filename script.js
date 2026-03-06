@@ -24,7 +24,7 @@ userPhoto.innerHTML = `<img src="${photo}">`;
 userPhoto.innerHTML = `<img src="asesst/user.png">`;
 }
 
-// اسم المستخدم
+// الاسم
 let usernameBox = document.querySelector(".user-name");
 
 usernameBox.innerHTML = `
@@ -51,7 +51,6 @@ let walletpage = document.getElementById("wallet");
 let gamepage = document.getElementById("game");
 let refalpage = document.getElementById("refal");
 
-// اظهار الصفحات
 function showpage(page){
 
 mainpage.style.display = 'none';
@@ -153,21 +152,36 @@ btnsound.play();
 });
 
 
-// نظام المهام Join → Check → Done
+// دالة الإشعارات
+function showNotification(text, img){
+
+let notif = document.querySelector(".notifi");
+
+notif.innerHTML = `
+<h3>${text} <img src="${img}" width="50"></h3>
+`;
+
+notif.style.display = "block";
+
+setTimeout(()=>{
+notif.style.display = "none";
+},3000);
+
+}
+
+
+// نظام المهام
 document.addEventListener("click", function(e){
 
 if(e.target.classList.contains("task-link")){
 
-// اول ضغط Join
 if(e.target.dataset.state !== "check"){
 
 e.target.dataset.state = "check";
-
 e.target.textContent = "Check";
 
 }
 
-// ضغط Check
 else if(e.target.dataset.state === "check"){
 
 userBalance += 500;
@@ -175,13 +189,7 @@ userBalance += 500;
 document.querySelector(".user-balance span").innerHTML =
 userBalance + `<img src="asesst/pepe.png" width="23" height="30">`;
 
-let notif = document.querySelector(".notifi");
-
-notif.style.display = "block";
-
-setTimeout(()=>{
-notif.style.display = "none";
-},3000);
+showNotification("Task Complete","asesst/check.gif");
 
 e.target.innerHTML = `<img src="asesst/check.gif" width="23"> Done`;
 
@@ -194,7 +202,7 @@ e.target.dataset.state = "done";
 });
 
 
-// نسخ رابط الاحالة
+// نسخ رابط الإحالة
 let copyBtn = document.getElementById("copy");
 
 if(copyBtn){
@@ -216,7 +224,7 @@ copyBtn.innerHTML = `<img src="asesst/copy.png" width="26">`;
 }
 
 
-// نظام اعلانات AdsGram
+// نظام AdsGram
 let watchBtn = document.getElementById("watch");
 
 let adsWatched = 0;
@@ -257,13 +265,7 @@ userBalance + `<img src="asesst/pepe.png" width="23" height="30">`;
 
 document.querySelector(".user-ads h3").innerText++;
 
-let notif = document.querySelector(".notifi");
-
-notif.style.display = "block";
-
-setTimeout(()=>{
-notif.style.display = "none";
-},3000);
+showNotification("Ads Watched","asesst/done.gif");
 
 }
 
