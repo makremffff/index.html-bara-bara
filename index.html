@@ -1,309 +1,167 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>faucet Game</title>
-	<link rel="stylesheet" href="style.css">
-	<link rel="stylesheet" href="all.css">
-<tag>
- <!--Tab to edit-->
-</tag>
-  <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <title></title>
+  <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
- 
-  <div id="loading" class="page">
-
- <img src="loading.gif" height="80" width="80" id="img">
-
-
-<span id="page-load"></span>
-
- 
-</div>
-
-
-
- 
- 
- 
-
-<div class="menub">
-  <button class="btn">Main <img src="home.png" ></button>
- 
- <button id="btn2" class="btn">Task <img src="assest/task2.png" ></button>
- 
- <button id="btn3" class="btn">Wallet <img src="assest/wallet.png" ></button>
-
- <a href="https://t.me/Harisawi" id="btn4" class="btn">Contact <img src="assest/support.png"  ></a>
-
- <audio id="soundbtn" src="sound/btn.mp3"></audio>
-</div>
-
-<audio id="bg-music" src="music.mp3" autoplay loop></audio>
-
-
-
-
-
-<div id="main" class="page">
-
-<div class="user-fhoto">
- 
- 
-</div>
-<div class="user-name">
-
-</div>
-
-<div class="balance-container">
   
-  <div class="user-balance">
- 
-   <img src="coins.png" width="30" height="30">
-  
-   <span id="adsbalance">0</span>
-   <span class="balance">Balance</span>
-
-</div>
-</div>
-<div class="taskbalance-container">
-<div class="task-balance">
- <img src="assest/task-balance.png" width="30" >
- <span id="taskbalance">0</span>
-  <span class="balance">Task-balance</span>
-
-</div>
-
-<div class="box-reward">
- <img id="boximg" src="assest/box.png" width="45" >
- <span id="openbox">OPEN</span>
- 
-</div>
-
-</div>
-
- <div class="ads">
-   
-   
-  
-   <audio id="soundads" src="sound/task.mp3"></audio>
-   
- 
-    <p id="adsnotifi">ADS WATCHED <img src="done.gif" width="40" height="40"></p>
- 
- 
-  <button id="adsbtn"><img src="ads.gif" width="50" height="50"></button>
-  
-   <button id="adsbtnn" class="btn" ></button>
-   
-  
-   
-  <div class="alert">
-  
-   
- 
-     
-  <div class="progres-ads">
-   <h4></h4>
- <span id="progres">100</span>  
-   
-  </div>
- </div>
-</div>
-
-
-
-
-
-</div>
-
-<div id="task" class="page">
-   
-
- 
- <input type="checkbox" id="check">
-
- <label for="check" id="barbtn"><img src="assest/more.gif" width="50" height=""></label>
-
-<nav class="bar">
-  
-    <a  id="addtask">+Task<img src="assest/task.gif" width="40" height="40"></a>
-   
-     <a id="btn5"  href="https://t.me/hhhahahkk">chat <img src="assest/chat.gif" width="40" height="40" ></a>
-
+  <div class="btn-bar">
+    <button class="btn" id="mainbtn" onclick="showpage(main)">
+      <img src="asesst/home.png">Home
+    </button>
     
-  <a id="sharebtn">invite<img src="assest/share.gif" width="40"></a>
-
-
+    <button class="btn" id="taskbtn" onclick="showpage(task)">
+      <img src="asesst/task.png">Task
+    </button>
+    
+    <button class="btn" id="walletbtn" onclick="showpage(wallet)">
+      <img src="asesst/wallet.png">Wallet
+    </button>
+    
+    <a href="#" class="btn">
+      <img src="asesst/support.png">Contact
+    </a>
+  </div>
+  <div class="notifi">
+   <h3>ADS WARCHED <img src="asesst/done.gif" width="50"></h3> 
+  </div>
   
- </nav>
-  
+  <section id="main" class="page">
+    
+    <div class="user-fhoto">
+      <img src="user.jpg">
+    </div>
+    
+    <div class="user-name">
+      <span style="color: #ffeedd; font-size: 20px;">♪WellCome♫</span>
+      <span>Ma love</span>
+    </div>
+    
+    <div class="user-balance">
+      <span>0<img src="asesst/pepe.png" width="23" height="30"></span>
+    </div>
+    
+    <div class="box-ads">
+      <img src="asesst/113.png" width="250">
+    </div>
+    
+    <div class="ADS">
+      <button id="watch"><img src="asesst/watch.gif" width="60" height="50"></button>
+    </div>
+    
+    <div class="user-ads">
+      <h3>0</h3>
+      <h4>ADS</h4>
+    </div>
+    
+    <div class="user-refal">
+      <h3>0</h3>
+      <h4>Refal</h4>
+    </div>
+    
+    <div class="game-page">
+      <img id="gamebtn" src="asesst/game.gif" width="50" onclick="showpage(game)">
+      <h4>Game</h4>
+    </div>
+    
+    <div class="refal-page">
    
-<div class="task-container">
-  <span class="header-task">Task <img src="telegram.png" width="30"></span>
-
- <div class="task-card">
-  <img class="taskimg" src="telegram.png" width="25">
-  <span class="task-name">Earn channel </span>
+     <img id="refalbtn" src="asesst/refal.gif" width="60" onclick="showpage(refal)" > 
+     <h4>invite</h4>
+    </div>
+    
+  </section>
   
-  <span class="task-prize">30 <img src="coins.png" width="20" ></span>
-
-  <a class="task-link" href="https://t.me/botbababab">Start</a>
+  <audio id="audio" src="sound/audio.mp3" autoplay loop></audio>
+  <audio id="clicksound" src="sound/click.mp3"></audio>
   
- </div>
- 
- 
-
-
-
-</div>
- 
-
-
-
-
-</div>
-
-
-
-<div id="wallet" class="page">
- 
- <div class="withdraw">
- 
- <form>
+  <section id="task" class="page">
+    <span class="task-header">Telegram Task </span>
+    
+    <div class="task-card">
+      <img class="task-img" src="asesst/telegram.png" width="25">
+      <span class="task-name">Earn channel</span>
+      <span class="task-prize">500 <img src="asesst/pepe.png" width="25" height="28"></span>
+      <a class="task-link" href="#">Join</a>
+    </div>
+    
+    <input type="checkbox" id="taskadd">
+    
+    <div class="addtaskbtn">
+      <label for="taskadd">ADD Task <img src="asesst/task-add.gif" width="30"></label>
+    </div>
+    
+    <button id="createtask">Create</button>
+    
+    <div class="add-container">
+      
+      <div class="task-balance">
+        <span>0<img src="asesst/star.png" width="20" height="18"></span>
+      </div>
+      
+      <div class="add-input">
+        <input type="text" id="taskname" required placeholder="Name">
+        <label for="">Task name</label>
+        
+        <input type="text" id="tasklink" required placeholder="Link">
+        <label for="">Task link</label>
+      </div>
+      
+      <a class="top-up" href="#">Top up your balance </a>
+    </div>
+    
+  </section>
   
-<input type="text" required
- placeholder="FaucetPay" id="email">
- 
-
-<h4>Enter FaucetPay@MAil</h4>
-
-  <img src="assest/wallet.gif" class="withdrawmg">
-
-
-<input type="number"
- required placeholder="Coin" id="coin">
-
-
- <h4>Min 300 Coin</h4>
- 
-  <img src="coins.png" class="withdrawmg">
+  <section id="wallet" class="page">
+    <div class="withdraw">
+      <input type="text" required id="faucetmail">
+      <label for="faucetmail">FaucetPay@📧</label>
+      <img src="asesst/wallet.gif" width="40">
+      
+      <input type="number" required id="amount">
+      <label for="amount">MIN 1000 🪙</label>
+      <img src="asesst/pepe.png" width="40">
+      
+      <button>SEND</button>
+    </div>
+  </section>
   
-<div class="btnSumbit">
-<button id="request" type="button">Send Request</button>
-
-</div>
- </form>
- <span id="adsbalancce"></span>
-
- </div>
- <div>
-
- <span class="rate">100Coin<img src="coins.png" width="20">=100Pepe<img src="pepe.png" width="15"  style="border-radius: px;"></span>
+  <section id="game" class="page">
  
- </div>
- <input type="checkbox" id="history">
- <label for="history" class="showhistory">Show history</label>
- <div class="withdraw-history">
+
+  </section>
   
- </div>
- <div class="withdraw-notifi">
- 
-  <span>withdraw send </span>
- </div>
-
-</div>
-
-
-
-
-
-<div id="share" class="page">
-
-
-<div class="refal-title">
-<img src="assest/refal2.gif" width="250" height="120">
-</div>
-
-<span class="refal-note">Earn 100 coin<img src="coins.png" width="10"> for evrey active refal</span>
-
-<div class="refal">
- <div class="active count">
-  <span>0</span>
   
-  <h5>Active</h5>
- </div>
- <div class="pending count">
-  <span>0</span>
-  <h5>Pending</h5>
- </div>
-
-</div>
-
-<div class="refal-link">
- 
- <span id="link">https://t.me/Bot_ad_watchbot/earn?startapp=ref_userId</span>
-</div>
-<div class="copy-link">
- <button id="copy"><img id="copyImg" src="https://files.catbox.moe/ojs42s.png" width="30"></button>
-</div>
-
-<div class="copynotifi">
- <span>Link Copied</span>
-</div>
-<input type="checkbox" id="my-refal" />
-<label for="my-refal" class="my-refalbtn">My refal</label>
-<div class="my-refal">
- <div class="refal-card">
-  <span class="refal-fhoto"></span>
-  <span class="refal-name">Ma love</span>
-  <span class="refal-ads">100 ADS </span>
-  <span class="refal-statu">ACTIVE</span>
- </div>
- 
-</div>
- </div>
-
-
- 
-<div id="addTask" class="page">
-
-<div class="addtask-notifi">
- <span>your Task Now active ✔  </span>
-</div>
-
-
-<div class="addtask-container">
- <input type="text" id="taskNameInput" required placeholder="Task name"
- >
- <label for="">input your channel name her</label>
- 
-<input type="text" id="taskLinkInput" required placeholder="Task link" >
-<label for="">input your channel link her</label>
-<button  id="creatTask">Add Task</button>
-
-<div class="note">
- <span> 300 user = 10k <img src="assest/task-balance.png" width="20"></span>
-</div>
-<div class="support">
- <span>if you want top up your task balance contact me her prise 10k coin for 1$</span>
- <a href="https://t.me/Harisawi">Contact me</a>
-</div>
-</div>
- 
- 
-</div>
- 
- 
- 
-
-		<script src="script.js">
-		 
-		</script>
-	
-		
+  
+  <section id="refal" class="page">
+ <h2>Invite To Earn</h2> 
+    <div class="copy-link">
+      <div class="refal-link">
+        <span>https://t.me/Bot_ad_watchbot/earn?startapp=ref_7741750541</span>
+   
+      <span id="copy"><img src="asesst/copy.png" width="26"></span>
+  
+      </div>
+      <div class="note">
+      <h4>note: Each invitation gives<span>500pepe</span></h4>
+     </div>
+     
+      
+    </div>
+    <div class="icon">
+      <img src="asesst/icon.png" width="350" >
+    </div>
+    <img id="icon" src="asesst/icon.png" width="350" >
+    
+  </section>
+  
+  <script src="script.js"></script>
+  
 </body>
+
 </html>
