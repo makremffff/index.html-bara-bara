@@ -204,13 +204,18 @@ let watchBtn = document.getElementById("watch");
 let adsWatched = 0;
 let userBalance = 0;
 
-watchBtn.addEventListener("click", showAd);
+watchBtn.addEventListener("click", startAds);
+
+function startAds(){
+adsWatched = 0;
+showAd();
+}
 
 function showAd(){
 
 let adController = window.Adsgram.init({
-  blockId: "int-20679",
-  debug: true
+blockId: "int-20679",
+debug: true
 });
 
 adController.show().then(() => {
@@ -219,13 +224,14 @@ adsWatched++;
 
 if(adsWatched < 3){
 
-// تشغيل اعلان ثاني
+// انتظار 6 ثواني قبل الإعلان التالي
+setTimeout(() => {
 showAd();
+}, 6000);
 
 }else{
 
-// اعطاء المكافأة
-adsWatched = 0;
+// إعطاء المكافأة
 userBalance += 100;
 
 document.querySelector(".user-balance span").innerHTML =
@@ -242,9 +248,7 @@ document.querySelector(".notifi").style.display = "none";
 }
 
 }).catch(() => {
-
 console.log("Ad skipped");
-
 });
 
-}
+}}
