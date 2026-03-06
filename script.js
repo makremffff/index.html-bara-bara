@@ -123,7 +123,9 @@ taskcard.innerHTML = `
 <img class="task-img" src="asesst/telegram.png" width="25">
 <span class="task-name">${taskname}</span>
 <span class="task-prize">500 <img src="asesst/pepe.png" width="25" height="28"></span>
-<a class="task-link" href="${tasklink}" target="_blank">Join</a>
+  <div class='task-link'>
+  <a  href="${tasklink}">Join</a>
+</div>`
 `;
 
 let taskContainer = document.getElementById("task");
@@ -196,7 +198,7 @@ e.target.textContent = "Check";
 // Check
 else if(e.target.dataset.state === "check"){
 
-e.target.textContent = "Checking...";
+e.target.textContent = "Checking";
 
 setTimeout(()=>{
 

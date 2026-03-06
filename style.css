@@ -238,7 +238,15 @@ linear-gradient(180deg, #0c0f2b 0%, #1a2250 50%, #05060f 100%);
   border-radius: 10px;
   text-decoration: none;
   color: white;
+  width: 25%;
+  text-align: center;
 
+}
+.task-link a{
+  color: white;
+  background: transparent;
+  box-shadow: 0 0 0 #000;
+  
 }
 .task-img {
   background: navy;
