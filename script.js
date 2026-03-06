@@ -50,13 +50,13 @@ let refalpage = document.getElementById("refal");
 
 function showpage(page){
 
-mainpage.style.display = 'none';
-taskpage.style.display = 'none';
-walletpage.style.display = 'none';
-gamepage.style.display = 'none';
-refalpage.style.display = 'none';
+mainpage.style.display = "none";
+taskpage.style.display = "none";
+walletpage.style.display = "none";
+gamepage.style.display = "none";
+refalpage.style.display = "none";
 
-page.style.display = 'block';
+page.style.display = "block";
 
 }
 
@@ -77,7 +77,7 @@ let i = 0;
 
 boximg.innerHTML = `<img src="${images[i]}" width="250">`;
 
-setInterval(function(){
+setInterval(()=>{
 
 i++;
 
@@ -90,8 +90,8 @@ boximg.innerHTML = `<img src="${images[i]}" width="250">`;
 },10000);
 
 
-// إشعارات
-function showNotification(text, img){
+// الإشعارات
+function showNotification(text,img){
 
 let notif = document.querySelector(".notifi");
 
@@ -109,56 +109,55 @@ notif.style.display = "none";
 
 
 // نظام المهام
-document.addEventListener("click", function(e){
+document.addEventListener("click",function(e){
 
-if(e.target.closest(".task-link a")){
+let taskLink = e.target.closest(".task-link a");
+
+if(!taskLink) return;
 
 e.preventDefault();
 
-let linkBtn = e.target;
-
-let taskCard = linkBtn.closest(".task-card");
-
+let taskCard = taskLink.closest(".task-card");
 let taskName = taskCard.querySelector(".task-name").innerText;
 
 let completedTasks = JSON.parse(localStorage.getItem("tasks_done")) || [];
 
 if(completedTasks.includes(taskName)){
-linkBtn.innerHTML = `<img src="asesst/check.gif" width="23"> Done`;
+taskLink.innerHTML = `<img src="asesst/check.gif" width="23"> Done`;
 return;
 }
 
 
 // Join
-if(!linkBtn.dataset.state){
+if(!taskLink.dataset.state){
 
-linkBtn.dataset.state = "check";
+taskLink.dataset.state = "check";
 
-window.open(linkBtn.href,"_blank");
+window.open(taskLink.href,"_blank");
 
-linkBtn.textContent = "Check";
+taskLink.textContent = "Check";
 
 }
 
 
 // Check
-else if(linkBtn.dataset.state === "check"){
+else if(taskLink.dataset.state === "check"){
 
 let count = 3;
 
-linkBtn.textContent = count;
+taskLink.textContent = count;
 
-let countdown = setInterval(()=>{
+let timer = setInterval(()=>{
 
 count--;
 
 if(count > 0){
 
-linkBtn.textContent = count;
+taskLink.textContent = count;
 
 }else{
 
-clearInterval(countdown);
+clearInterval(timer);
 
 userBalance += 500;
 
@@ -167,19 +166,17 @@ userBalance + `<img src="asesst/pepe.png" width="23" height="30">`;
 
 completedTasks.push(taskName);
 
-localStorage.setItem("tasks_done", JSON.stringify(completedTasks));
+localStorage.setItem("tasks_done",JSON.stringify(completedTasks));
 
 showNotification("Task Complete","asesst/check.gif");
 
-linkBtn.innerHTML = `<img src="asesst/check.gif" width="23"> Done`;
+taskLink.innerHTML = `<img src="asesst/check.gif" width="23"> Done`;
 
-linkBtn.dataset.state = "done";
+taskLink.dataset.state = "done";
 
 }
 
 },1000);
-
-}
 
 }
 
@@ -191,7 +188,7 @@ let copyBtn = document.getElementById("copy");
 
 if(copyBtn){
 
-copyBtn.addEventListener("click",function(){
+copyBtn.addEventListener("click",()=>{
 
 let link = document.querySelector(".refal-link span").innerText;
 
@@ -208,12 +205,12 @@ copyBtn.innerHTML = `<img src="asesst/copy.png" width="26">`;
 }
 
 
-// AdsGram
+// نظام AdsGram
 let watchBtn = document.getElementById("watch");
 
 let adsWatched = 0;
 
-watchBtn.addEventListener("click", startAds);
+watchBtn.addEventListener("click",startAds);
 
 function startAds(){
 
@@ -226,8 +223,8 @@ showAd();
 function showAd(){
 
 let adController = window.Adsgram.init({
-blockId: "int-20679",
-debug: true
+blockId:"int-20679",
+debug:true
 });
 
 adController.show().then(()=>{
