@@ -31,7 +31,7 @@ let usernameBox = document.querySelector(".user-name");
 
 usernameBox.innerHTML = `
 <span style="color:#ffeedd;font-size:20px;">♪WellCome♫</span>
-<span style="color:#ffffff;font-size:18px;"> ${fullname}</span>
+<span> ${fullname}</span>
 `;
 
 // رابط الإحالة
