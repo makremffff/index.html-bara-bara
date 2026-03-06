@@ -18,19 +18,20 @@ let userPhoto = document.querySelector(".user-fhoto");
 
 if(photo){
 userPhoto.innerHTML = `
-<img src="${photo}">
+<img src="${photo}" >
 `;
 }else{
 userPhoto.innerHTML = `
-<img src="asesst/user.png" width="80">
+<img src="asesst/user.png" >
 `;
 }
 
-// اسم المستخدم
+// الاسم + welcome كل واحد span
 let usernameBox = document.querySelector(".user-name");
 
 usernameBox.innerHTML = `
-<span style="color:#ffeedd;font-size:20px">${fullname}</span>
+<span style="color:#ffeedd;font-size:20px;">♪WellCome♫</span>
+<span style="color:#ffffff;font-size:18px;"> ${fullname}</span>
 `;
 
 // رابط الإحالة
@@ -85,9 +86,7 @@ let images = [
 
 let i = 0;
 
-boximg.innerHTML = `
-<img src="${images[i]}" width="250">
-`;
+boximg.innerHTML = `<img src="${images[i]}" width="250">`;
 
 setInterval(function(){
 
@@ -97,9 +96,7 @@ if(i >= images.length){
 i = 0;
 }
 
-boximg.innerHTML = `
-<img src="${images[i]}" width="250">
-`;
+boximg.innerHTML = `<img src="${images[i]}" width="250">`;
 
 },10000);
 
@@ -132,11 +129,8 @@ taskcard.classList = 'task-card';
 
 taskcard.innerHTML = `
 <img class="task-img" src="asesst/telegram.png" width="25">
-
 <span class="task-name">${taskname}</span>
-
 <span class="task-prize">500 <img src="asesst/pepe.png" width="25" height="28"></span>
-
 <a class="task-link" href="${tasklink}" target="_blank">Join</a>
 `;
 
