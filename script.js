@@ -125,7 +125,7 @@ taskcard.innerHTML = `
 <span class="task-prize">500 <img src="asesst/pepe.png" width="25" height="28"></span>
   <div class='task-link'>
   <a  href="${tasklink}">Join</a>
-</div>`
+</div>
 `;
 
 let taskContainer = document.getElementById("task");
