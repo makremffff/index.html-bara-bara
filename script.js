@@ -190,11 +190,60 @@ let link = document.querySelector(".refal-link span").innerText;
 
 navigator.clipboard.writeText(link);
 
-copyBtn.innerHTML = "✓";
+copyBtn.innerHTML = `<img src="asesst/approve.png" width="26">`;
 
 setTimeout(()=>{
 copyBtn.innerHTML = `<img src="asesst/copy.png" width="26">`;
 },2000);
+
+});
+
+}
+let watchBtn = document.getElementById("watch");
+
+let adsWatched = 0;
+let userBalance = 0;
+
+watchBtn.addEventListener("click", showAd);
+
+function showAd(){
+
+let adController = window.Adsgram.init({
+  blockId: "int-20679",
+  debug: true
+});
+
+adController.show().then(() => {
+
+adsWatched++;
+
+if(adsWatched < 3){
+
+// تشغيل اعلان ثاني
+showAd();
+
+}else{
+
+// اعطاء المكافأة
+adsWatched = 0;
+userBalance += 100;
+
+document.querySelector(".user-balance span").innerHTML =
+userBalance + `<img src="asesst/pepe.png" width="23" height="30">`;
+
+document.querySelector(".user-ads h3").innerText++;
+
+document.querySelector(".notifi").style.display = "block";
+
+setTimeout(()=>{
+document.querySelector(".notifi").style.display = "none";
+},3000);
+
+}
+
+}).catch(() => {
+
+console.log("Ad skipped");
 
 });
 
