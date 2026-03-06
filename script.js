@@ -175,25 +175,46 @@ document.addEventListener("click", function(e){
 
 if(e.target.classList.contains("task-link")){
 
-if(e.target.dataset.state !== "check"){
+let taskCard = e.target.closest(".task-card");
+let taskName = taskCard.querySelector(".task-name").innerText;
+
+let completedTasks = JSON.parse(localStorage.getItem("tasks_done")) || [];
+
+if(completedTasks.includes(taskName)){
+e.target.innerHTML = `<img src="asesst/check.gif" width="23"> Done`;
+return;
+}
+
+// Join
+if(!e.target.dataset.state){
 
 e.target.dataset.state = "check";
 e.target.textContent = "Check";
 
 }
 
+// Check
 else if(e.target.dataset.state === "check"){
+
+e.target.textContent = "Checking...";
+
+setTimeout(()=>{
 
 userBalance += 500;
 
 document.querySelector(".user-balance span").innerHTML =
 userBalance + `<img src="asesst/pepe.png" width="23" height="30">`;
 
+completedTasks.push(taskName);
+localStorage.setItem("tasks_done", JSON.stringify(completedTasks));
+
 showNotification("Task Complete","asesst/check.gif");
 
 e.target.innerHTML = `<img src="asesst/check.gif" width="23"> Done`;
 
 e.target.dataset.state = "done";
+
+},2000);
 
 }
 
