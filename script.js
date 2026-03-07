@@ -17,21 +17,17 @@ let photo = user.photo_url || "";
 let userPhoto = document.querySelector(".user-fhoto");
 
 if(photo){
-userPhoto.innerHTML = `
-<img src="${photo}" >
-`;
+userPhoto.innerHTML = `<img src="${photo}" >`;
 }else{
-userPhoto.innerHTML = `
-<img src="asesst/user.png" >
-`;
+userPhoto.innerHTML = `<img src="asesst/user.png" >`;
 }
 
-// الاسم + welcome كل واحد span
+// الاسم
 let usernameBox = document.querySelector(".user-name");
 
 usernameBox.innerHTML = `
 <span style="color:#ffeedd;font-size:20px;">♪WellCome♫</span>
-<span> ${fullname}</span>
+<span>${fullname}</span>
 `;
 
 // رابط الإحالة
@@ -45,14 +41,6 @@ refBox.innerHTML = refLink;
 
 }
 
-
-// ازرار الصفحات
-let mainbtn = document.getElementById("mainbtn");
-let taskbtn = document.getElementById("taskbtn");
-let walletbtn = document.getElementById("walletbtn");
-let gamebtn = document.getElementById("gamebtn");
-let refalbtn = document.getElementById("refalbtn");
-
 // الصفحات
 let mainpage = document.getElementById("main");
 let taskpage = document.getElementById("task");
@@ -60,7 +48,6 @@ let walletpage = document.getElementById("wallet");
 let gamepage = document.getElementById("game");
 let refalpage = document.getElementById("refal");
 
-// اظهار الصفحات
 function showpage(page){
 mainpage.style.display = 'none';
 taskpage.style.display = 'none';
@@ -70,7 +57,6 @@ walletpage.style.display = 'none';
 
 page.style.display = 'block';
 }
-
 
 // صور الاعلانات
 let boximg = document.querySelector(".box-ads");
@@ -131,8 +117,8 @@ taskcard.innerHTML = `
 <img class="task-img" src="asesst/telegram.png" width="25">
 <span class="task-name">${taskname}</span>
 <span class="task-prize">500 <img src="asesst/pepe.png" width="25" height="28"></span>
-  <div class='task-link'>
-  <a  href="${tasklink}">Join</a>
+<div class="task-link">
+<a href="${tasklink}" target="_blank">Join</a>
 </div>
 `;
 
@@ -142,6 +128,8 @@ taskContainer.appendChild(taskcard);
 
 document.getElementById("taskname").value = '';
 document.getElementById("tasklink").value = '';
+
+setupTasks();
 
 });
 
@@ -153,7 +141,6 @@ document.addEventListener("click", () => {
 audio.play();
 });
 
-
 let btnsound = document.getElementById("clicksound");
 
 let btns = document.querySelector(".btn-bar");
@@ -163,22 +150,73 @@ btnsound.play();
 });
 
 
-// زر join
-let joinbtn = document.querySelector(".task-link");
-joinbtn.addEventListener("click",function(){
-  joinbtn.innerHTML = `<span>Check</span>`
- 
+// نظام المهام
+let userBalance = 0;
 
-joinbtn.addEventListener("click",function(){
-  joinbtn.innerHTML = `
-  <img src='asesst/check.gif' width='23'>`
-})
-  
-  
+function setupTasks(){
+
+document.querySelectorAll(".task-card").forEach((task,index)=>{
+
+let btn = task.querySelector(".task-link a");
+
+if(!btn) return;
+
+let taskId = "task_"+index;
+
+// لو مكتملة
+if(localStorage.getItem(taskId)){
+btn.innerHTML = `<img src="asesst/check.gif" width="23">`;
+btn.removeAttribute("href");
+}
+
+// الضغط
+btn.onclick = function(e){
+
+if(localStorage.getItem(taskId)){
+e.preventDefault();
+return;
+}
+
+// Join
+if(btn.innerText === "Join"){
+
+btn.innerText = "Check";
+
+}
+
+// Check
+else if(btn.innerText === "Check"){
+
+e.preventDefault();
+
+// مكافأة
+userBalance += 500;
+
+document.querySelector(".user-balance span").innerHTML =
+userBalance + `<img src="asesst/pepe.png" width="23" height="30">`;
+
+// اشعار
+document.querySelector(".notifi").style.display = "block";
+
+setTimeout(()=>{
+document.querySelector(".notifi").style.display = "none";
+},3000);
+
+// حفظ
+localStorage.setItem(taskId,true);
+
+// صورة صح
+btn.innerHTML = `<img src="asesst/check.gif" width="23">`;
+
+}
+
+}
+
 });
 
+}
 
-
+setupTasks();
 
 
 // نسخ رابط الاحالة
@@ -201,10 +239,12 @@ copyBtn.innerHTML = `<img src="asesst/copy.png" width="26">`;
 });
 
 }
+
+
+// نظام مشاهدة الاعلانات
 let watchBtn = document.getElementById("watch");
 
 let adsWatched = 0;
-let userBalance = 0;
 
 watchBtn.addEventListener("click", startAds);
 
@@ -226,14 +266,12 @@ adsWatched++;
 
 if(adsWatched < 4){
 
-// انتظار 6 ثواني قبل الإعلان التالي
 setTimeout(() => {
 showAd();
 }, 6000);
 
 }else{
 
-// إعطاء المكافأة
 userBalance += 100;
 
 document.querySelector(".user-balance span").innerHTML =
