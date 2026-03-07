@@ -41,6 +41,7 @@ refBox.innerHTML = refLink;
 
 }
 
+
 // الصفحات
 let mainpage = document.getElementById("main");
 let taskpage = document.getElementById("task");
@@ -57,6 +58,23 @@ walletpage.style.display = 'none';
 
 page.style.display = 'block';
 }
+
+
+// دالة الاشعار
+function showNotification(text){
+
+let notifi = document.querySelector(".notifi h3");
+
+notifi.textContent = text;
+
+document.querySelector(".notifi").style.display = "block";
+
+setTimeout(()=>{
+document.querySelector(".notifi").style.display = "none";
+},3000);
+
+}
+
 
 // صور الاعلانات
 let boximg = document.querySelector(".box-ads");
@@ -169,11 +187,11 @@ btn.innerHTML = `<img src="asesst/check.gif" width="23">`;
 btn.removeAttribute("href");
 }
 
-// الضغط
 btn.onclick = function(e){
 
 if(localStorage.getItem(taskId)){
 e.preventDefault();
+showNotification("Task Already Completed");
 return;
 }
 
@@ -189,23 +207,15 @@ else if(btn.innerText === "Check"){
 
 e.preventDefault();
 
-// مكافأة
 userBalance += 500;
 
 document.querySelector(".user-balance span").innerHTML =
 userBalance + `<img src="asesst/pepe.png" width="23" height="30">`;
 
-// اشعار
-document.querySelector(".notifi").style.display = "block";
+showNotification("Task Complete +500");
 
-setTimeout(()=>{
-document.querySelector(".notifi").style.display = "none";
-},3000);
-
-// حفظ
 localStorage.setItem(taskId,true);
 
-// صورة صح
 btn.innerHTML = `<img src="asesst/check.gif" width="23">`;
 
 }
@@ -279,16 +289,14 @@ userBalance + `<img src="asesst/pepe.png" width="23" height="30">`;
 
 document.querySelector(".user-ads h3").innerText++;
 
-document.querySelector(".notifi").style.display = "block";
-
-setTimeout(()=>{
-document.querySelector(".notifi").style.display = "none";
-},3000);
+showNotification("Ads Watched +100");
 
 }
 
 }).catch(() => {
-console.log("Ad skipped");
+
+showNotification("Error Try Again");
+
 });
 
 }
