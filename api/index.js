@@ -1,81 +1,108 @@
 export default async function handler(req, res) {
 
+if (req.method !== "POST") {
+return res.status(405).json({ error: "Method Not Allowed" });
+}
+
 try {
 
-if (req.method !== "POST") {
-return res.status(405).json({ error: "Method not allowed" });
-}
+const { type, data } = req.body;
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if(!SUPABASE_URL || !SUPABASE_KEY){
-return res.status(500).json({ error:"Supabase ENV missing"});
-}
-
-const body = typeof req.body === "string"
-? JSON.parse(req.body)
-: req.body;
-
-const { type, data } = body;
-
 const headers = {
-apikey: SUPABASE_KEY,
-Authorization: `Bearer ${SUPABASE_KEY}`,
-"Content-Type": "application/json"
+"Content-Type": "application/json",
+"apikey": SUPABASE_KEY,
+"Authorization": `Bearer ${SUPABASE_KEY}`
 };
 
-if(type === "registerUser"){
+// ======================
+// CREATE TASK
+// ======================
 
-let r = await fetch(
-`${SUPABASE_URL}/rest/v1/users?id=eq.${data.id}`,
-{ headers }
-);
+if (type === "createTask") {
 
-let users = await r.json();
-
-if(users.length === 0){
-
-await fetch(`${SUPABASE_URL}/rest/v1/users`,{
-method:"POST",
+const response = await fetch(`${SUPABASE_URL}/rest/v1/tasks`, {
+method: "POST",
 headers,
-body:JSON.stringify({
-id:data.id,
-name:data.name,
-photo:data.photo,
-balance:0
+body: JSON.stringify({
+name: data.name,
+link: data.link,
+user_id: data.user,
+reward: 500
 })
 });
 
+if (!response.ok) {
+throw new Error("Create Task Failed");
 }
 
-return res.json({success:true});
+return res.status(200).json({ success: true });
 
 }
 
-if(type === "getBalance"){
+// ======================
+// COMPLETE TASK
+// ======================
 
-let r = await fetch(
-`${SUPABASE_URL}/rest/v1/users?id=eq.${data.userId}&select=balance`,
-{ headers }
-);
+if (type === "completeTask") {
 
-let user = await r.json();
-
-return res.json({
-balance:user[0]?.balance || 0
+const response = await fetch(`${SUPABASE_URL}/rest/v1/completed_tasks`, {
+method: "POST",
+headers,
+body: JSON.stringify({
+user_id: data.user,
+task_id: data.task,
+reward: 500
+})
 });
 
+if (!response.ok) {
+throw new Error("Task Complete Failed");
 }
 
-return res.json({success:true});
+return res.status(200).json({ success: true });
 
-}catch(err){
+}
 
-console.error("API ERROR:",err);
+// ======================
+// ADS REWARD
+// ======================
+
+if (type === "adsReward") {
+
+const response = await fetch(`${SUPABASE_URL}/rest/v1/ads_rewards`, {
+method: "POST",
+headers,
+body: JSON.stringify({
+user_id: data.user,
+reward: data.reward
+})
+});
+
+if (!response.ok) {
+throw new Error("Ads Reward Failed");
+}
+
+return res.status(200).json({ success: true });
+
+}
+
+// ======================
+// UNKNOWN ACTION
+// ======================
+
+return res.status(400).json({
+error: "Unknown Action"
+});
+
+} catch (err) {
+
+console.error(err);
 
 return res.status(500).json({
-error:err.message
+error: "Server Error"
 });
 
 }
