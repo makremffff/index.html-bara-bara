@@ -1,21 +1,32 @@
 export default async function handler(req, res) {
 
-if (req.method !== "POST") {
-return res.status(405).json({ error: "Method Not Allowed" });
-}
+try {
 
-const { type, data } = req.body;
+if (req.method !== "POST") {
+return res.status(405).json({ error: "Method not allowed" });
+}
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+return res.status(500).json({
+error: "Supabase ENV missing"
+});
+}
+
+const body =
+typeof req.body === "string"
+? JSON.parse(req.body)
+: req.body;
+
+const { type, data } = body;
 
 const headers = {
 apikey: SUPABASE_KEY,
 Authorization: `Bearer ${SUPABASE_KEY}`,
 "Content-Type": "application/json"
 };
-
-try {
 
 switch (type) {
 
@@ -32,25 +43,17 @@ case "watchAds":
 return watchAds(data);
 
 default:
-return res.status(400).json({ error: "Unknown action" });
-
-}
-
-} catch (err) {
-
-console.error(err);
-
-return res.status(500).json({
-error: "Server Error"
+return res.status(400).json({
+error: "Unknown action"
 });
 
 }
 
-// =========================
-// تسجيل مستخدم
-// =========================
+// =====================
+// register user
+// =====================
 
-async function registerUser(data) {
+async function registerUser(data){
 
 let r = await fetch(
 `${SUPABASE_URL}/rest/v1/users?id=eq.${data.id}`,
@@ -59,30 +62,30 @@ let r = await fetch(
 
 let users = await r.json();
 
-if (users.length === 0) {
+if(users.length === 0){
 
-await fetch(`${SUPABASE_URL}/rest/v1/users`, {
-method: "POST",
+await fetch(`${SUPABASE_URL}/rest/v1/users`,{
+method:"POST",
 headers,
-body: JSON.stringify({
-id: data.id,
-name: data.name,
-photo: data.photo,
-balance: 0
+body:JSON.stringify({
+id:data.id,
+name:data.name,
+photo:data.photo,
+balance:0
 })
 });
 
 }
 
-return res.json({ success: true });
+return res.json({success:true});
 
 }
 
-// =========================
-// جلب الرصيد
-// =========================
+// =====================
+// get balance
+// =====================
 
-async function getBalance(data) {
+async function getBalance(data){
 
 let r = await fetch(
 `${SUPABASE_URL}/rest/v1/users?id=eq.${data.userId}&select=balance`,
@@ -94,16 +97,16 @@ let result = await r.json();
 let balance = result[0]?.balance || 0;
 
 return res.json({
-balance: balance
+balance
 });
 
 }
 
-// =========================
-// إكمال مهمة
-// =========================
+// =====================
+// complete task
+// =====================
 
-async function completeTask(data) {
+async function completeTask(data){
 
 let check = await fetch(
 `${SUPABASE_URL}/rest/v1/tasks_completed?user_id=eq.${data.userId}&task_id=eq.${data.taskId}`,
@@ -112,79 +115,85 @@ let check = await fetch(
 
 let exist = await check.json();
 
-if (exist.length > 0) {
-
+if(exist.length > 0){
 return res.json({
-error: "Task already completed"
+error:"Task already completed"
 });
-
 }
 
-await fetch(`${SUPABASE_URL}/rest/v1/tasks_completed`, {
-method: "POST",
+await fetch(`${SUPABASE_URL}/rest/v1/tasks_completed`,{
+method:"POST",
 headers,
-body: JSON.stringify({
-user_id: data.userId,
-task_id: data.taskId
+body:JSON.stringify({
+user_id:data.userId,
+task_id:data.taskId
 })
 });
 
-let userReq = await fetch(
+let r = await fetch(
 `${SUPABASE_URL}/rest/v1/users?id=eq.${data.userId}&select=balance`,
 { headers }
 );
 
-let userData = await userReq.json();
+let user = await r.json();
 
-let newBalance = (userData[0].balance || 0) + 500;
+let newBalance = (user[0].balance || 0) + 500;
 
 await fetch(
 `${SUPABASE_URL}/rest/v1/users?id=eq.${data.userId}`,
 {
-method: "PATCH",
+method:"PATCH",
 headers,
-body: JSON.stringify({
-balance: newBalance
+body:JSON.stringify({
+balance:newBalance
 })
 }
 );
 
 return res.json({
-balance: newBalance
+balance:newBalance
 });
 
 }
 
-// =========================
-// مشاهدة إعلان
-// =========================
+// =====================
+// watch ads
+// =====================
 
-async function watchAds(data) {
+async function watchAds(data){
 
-let reward = 100;
-
-let userReq = await fetch(
+let r = await fetch(
 `${SUPABASE_URL}/rest/v1/users?id=eq.${data.userId}&select=balance`,
 { headers }
 );
 
-let userData = await userReq.json();
+let user = await r.json();
 
-let newBalance = (userData[0].balance || 0) + reward;
+let newBalance = (user[0].balance || 0) + 100;
 
 await fetch(
 `${SUPABASE_URL}/rest/v1/users?id=eq.${data.userId}`,
 {
-method: "PATCH",
+method:"PATCH",
 headers,
-body: JSON.stringify({
-balance: newBalance
+body:JSON.stringify({
+balance:newBalance
 })
 }
 );
 
 return res.json({
-balance: newBalance
+balance:newBalance
+});
+
+}
+
+}catch(err){
+
+console.error(err);
+
+return res.status(500).json({
+error: err.message
 });
 
 }
