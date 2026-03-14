@@ -6,10 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title></title>
   <link rel="stylesheet" href="style.css">
-<head>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
-  
+</head>
+
 <body>
   
   <div class="btn-bar">
@@ -36,12 +34,12 @@
   <section id="main" class="page">
     
     <div class="user-fhoto">
-      
+      <img src="user.jpg">
     </div>
     
     <div class="user-name">
-     
-      
+      <span style="color: #ffeedd; font-size: 20px;">♪WellCome♫</span>
+      <span>Ma love</span>
     </div>
     
     <div class="user-balance">
@@ -89,8 +87,8 @@
       <img class="task-img" src="asesst/telegram.png" width="25">
       <span class="task-name">Earn channel</span>
       <span class="task-prize">500 <img src="asesst/pepe.png" width="25" height="28"></span>
-       <div class="task-link">
-       <a href="#join">Join</a>
+     <div class="task-link">
+       <a href="#">Join</a>
      </div>
     </div>
     
@@ -131,8 +129,25 @@
       <label for="amount">MIN 1000 🪙</label>
       <img src="asesst/pepe.png" width="40">
       
-      <button>SEND</button>
+      <button id="sendwith">SEND</button>
     </div>
+    
+    <input type="checkbox" id="withdrawhistory" />
+    <label id="showhistory" for="withdrawhistory">History</label>
+ <div class="history">
+   
+   <div class="history-card">
+  <span class="date">18/18:20</span>
+ 
+  <span class="amountrequest">500 <img src="asesst/pepe.png" width="15" ></span>
+  
+  <span class="statu">pending</span>
+  </div>
+  
+  
+   
+ </div>
+    
   </section>
   
   <section id="game" class="page">
@@ -162,10 +177,10 @@
     </div>
     <img id="icon" src="asesst/icon.png" width="350" >
     
+    
   </section>
   
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="script.js"></script>
+  <script src="script.js"></script>
   
 </body>
 
