@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Tomato Farm</title>
+<!-- ✅ FIX: Telegram SDK must load FIRST before any inline script uses window.Telegram -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://sad.adsgram.ai/js/sad.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DynaPuff:wght@400..700&display=swap');
 
@@ -200,7 +203,7 @@ body::before {
   width: 100%;
   padding: 10px 14px 10px;
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
- ound: rgba(3,8,5,0.88);
+ backgrond: rgba(3,8,5,0.88);
   border-bottom: 1px solid rgba(255,255,255,0.36);
   backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(28px);
   border-radius: 20px;
@@ -392,16 +395,17 @@ body::before {
   display: flex; gap: 10px;
 }
 .farm-btn {
-  flex: 1; padding: 11px 8px;
+  flex: ; padding: 8px 8px;
   border: 1px solid rgba(0,152,234,0.22); border-radius: 13px;
   font-family: 'DynaPuff'; font-size: 0.76rem; font-weight: 700;
   cursor: pointer; color: #fff;
   display: flex; align-items: center; justify-content: center; gap: 5px;
   transition: all 0.15s; backdrop-filter: blur(8px);
-  translate: 0 45px;
+  translate: 60% 45px;
+  
 }
 .farm-btn:active { transform: scale(0.96); }
-.fb-water { background: rgba(0,200,0,0.4); color: var(--water); border-color: rgba(0,152,234,0.3); backdrop-filter: blur(20px); }
+.fb-water { background: rgba(0,20,700,0.4); color: var(--water); border-color: rgba(0,152,234,0.3); backdrop-filter: blur(20px); }
 .fb-water.active-mode { background: linear-gradient(135deg,rgba(0,152,234,0.42),rgba(0,90,160,0.52)); border-color: rgba(0,152,234,0.7); color: #fff; box-shadow: 0 0 14px rgba(0,152,234,0.3); }
 .fb-water:disabled { opacity: 0.3 !important; cursor: not-allowed; filter: grayscale(0.4); }
 .fb-water .w-badge {
@@ -410,7 +414,7 @@ body::before {
   color: #e1f5fe; min-width: 22px; text-align: center;
  
 }
-.fb-harvest { background: rgba(0,200,0,0.4); color: aqua; border-color: rgba(94,207,136,0.28); backdrop-filter: blur(20px); }
+.fb-harvest { background: rgba(0,20,700,0.4); color: aqua; border-color: rgba(94,207,136,0.28); backdrop-filter: blur(20px); }
 
 
 #farm-mode-hint {
@@ -1489,6 +1493,8 @@ body::before {
     <div class="farm-hud-left">
       <img class="farm-hud-avatar" id="hud-avatar" src="user.jpg" alt="user">
       <div class="farm-hud-balance">
+        <span class="farm-hud-bal-lbl" id="hud-username" style="color:rgba(245,198,62,0.85);font-size:0.52rem;letter-spacing:0.5px;">Player</span>
+        <span class="farm-hud-bal-lbl" id="hud-user-id" style="color:rgba(236,231,222,0.28);font-size:0.44rem;letter-spacing:0.3px;"></span>
         <span class="farm-hud-bal-lbl">Balance</span>
         <div class="farm-hud-bal-val">
           <span id="bal-val">0.0000</span>
@@ -1578,7 +1584,7 @@ body::before {
       <div class="task-title">Join Earn Channel</div>
       <div class="task-desc">Subscribe on Telegram to unlock rewards</div>
       <div class="task-meta">
-        <div class="task-reward">+10 🌱 Seeds</div>
+        <div class="task-reward">+0.005 <img class="ton-img-sm" src="asesst/toncoin.png" alt="TON"> TON</div>
       </div>
     </div>
     <div class="task-action">
@@ -1587,6 +1593,29 @@ body::before {
         <span id="task-txt-ec">Join</span>
       </button>
       <div class="task-status" id="task-status-ec">✅ Done</div>
+    </div>
+  </div>
+
+  <!-- NEW CHANNEL: E-Money Algeria -->
+  <div class="task-card pg-item" id="task-emoney-channel">
+    <div class="task-icon">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.43 13.67l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.718.889z"/>
+      </svg>
+    </div>
+    <div class="task-body">
+      <div class="task-title">E-Money Algeria</div>
+      <div class="task-desc">Join our partner channel to earn bonus TON</div>
+      <div class="task-meta">
+        <div class="task-reward">+0.005 <img class="ton-img-sm" src="asesst/toncoin.png" alt="TON"> TON</div>
+      </div>
+    </div>
+    <div class="task-action">
+      <button class="task-btn" id="task-btn-em" onclick="handleEMoneyTask()">
+        <div class="task-btn-progress" id="task-prog-em"></div>
+        <span id="task-txt-em">Join</span>
+      </button>
+      <div class="task-status" id="task-status-em">✅ Done</div>
     </div>
   </div>
 </div>
@@ -1932,30 +1961,122 @@ body::before {
 
 /* ═══════════════════════════
    TELEGRAM WEBAPP INIT
+   ✅ SDK يُحمَّل في <head> قبل هذا الكود
 ═══════════════════════════ */
-const tg      = window.Telegram?.WebApp;
-const tgUser  = tg?.initDataUnsafe?.user || {};
-const TG_ID   = tgUser.id || '';
 
-// ── Set user avatar ──
-(function setAvatar() {
-  const avatarEl = document.getElementById('hud-avatar');
-  if (!avatarEl) return;
-  const photo = tgUser.photo_url;
-  if (photo) {
-    avatarEl.src = photo;
-    avatarEl.onerror = () => { avatarEl.src = 'user.jpg'; };
+// --- Step 1: تفعيل WebApp وطلب expand ---
+const tg = (function() {
+  try {
+    const app = window.Telegram && window.Telegram.WebApp
+                ? window.Telegram.WebApp : null;
+    if (app) {
+      app.ready();    // أبلغ تلغرام إن الـ Mini App جاهز
+      app.expand();   // فتح الـ Mini App بالشاشة الكاملة
+    }
+    return app;
+  } catch(e) {
+    console.warn('[TG] WebApp init failed:', e);
+    return null;
   }
 })();
 
-// ── Set referral link ──
-(function setRefLink() {
-  const el = document.getElementById('ref-link');
-  if (!el) return;
-  const link = TG_ID
-    ? `https://t.me/tamatoFarm_bot/earn/earn?startapp=ref_${TG_ID}`
-    : 'https://t.me/tamatoFarm_bot/earn/earn?startapp=ref_';
-  el.value = link;
+// --- Step 2: جلب بيانات المستخدم ---
+// الطريقة الصحيحة: initDataUnsafe.user متاح مباشرة بعد ready()
+// ملاحظة: photo_url غير مضمونة في كل إصدارات تلغرام
+const tgUser = (function() {
+  try {
+    // ① الطريقة الأولى والأفضل: initDataUnsafe (object جاهز)
+    if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+      const u = tg.initDataUnsafe.user;
+      // ✅ تحقق إن البيانات كاملة وليست فارغة
+      if (u.id) return u;
+    }
+
+    // ② fallback: parse يدوي لـ initData (نص URL-encoded)
+    if (tg && tg.initData && tg.initData.length > 0) {
+      const params  = new URLSearchParams(tg.initData);
+      const userStr = params.get('user');
+      if (userStr) {
+        // initData مشفرة مرة واحدة فقط — لا حاجة لـ decodeURIComponent إضافي
+        const parsed = JSON.parse(userStr);
+        if (parsed && parsed.id) return parsed;
+      }
+    }
+    return null; // لا بيانات متاحة (مفتوح خارج تلغرام)
+  } catch(e) {
+    console.warn('[TG] User parse failed:', e);
+    return null;
+  }
+})();
+
+// ✅ قيم آمنة مع fallback لكل حقل
+const TG_ID       = tgUser?.id         ? String(tgUser.id)         : '';
+const TG_FIRST    = tgUser?.first_name ? String(tgUser.first_name)  : '';
+const TG_LAST     = tgUser?.last_name  ? String(tgUser.last_name)   : '';
+const TG_USERNAME = tgUser?.username   ? String(tgUser.username)    : '';
+// ⚠️ photo_url: متوفرة فقط في بعض إصدارات تلغرام وليس دائماً
+const TG_PHOTO    = tgUser?.photo_url  ? String(tgUser.photo_url)   : '';
+const TG_FULLNAME = [TG_FIRST, TG_LAST].filter(Boolean).join(' ')   || 'Player';
+
+// للديبق — احذفها في الإنتاج
+console.log('[TG] User:', { TG_ID, TG_FIRST, TG_LAST, TG_USERNAME, TG_PHOTO: !!TG_PHOTO });
+
+// --- Step 3: عرض الصورة بكل حالاتها ---
+(function setAvatar() {
+  const avatarEl = document.getElementById('hud-avatar');
+  if (!avatarEl) return;
+
+  // ② fallback: صورة مولّدة من الأحرف الأولى عبر ui-avatars
+  function tryInitialsAvatar() {
+    const initials = [TG_FIRST, TG_LAST].filter(Boolean).join('+') || TG_USERNAME || 'Player';
+    const url = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(initials)
+              + '&background=0098ea&color=fff&size=128&bold=true&rounded=true&format=png';
+    avatarEl.removeAttribute('crossOrigin'); // لا تضع crossOrigin مع CDN خارجي
+    avatarEl.onerror = function() {
+      // ③ آخر fallback: الصورة المحلية
+      avatarEl.onerror = null;
+      avatarEl.src = 'user.jpg';
+    };
+    avatarEl.src = url;
+  }
+
+  if (TG_PHOTO) {
+    // ① photo_url من تلغرام — بدون crossOrigin (Telegram CDN لا يدعمه)
+    avatarEl.removeAttribute('crossOrigin');
+    avatarEl.onerror = function() {
+      avatarEl.onerror = null;
+      tryInitialsAvatar(); // ← ارجع للـ initials إذا فشل
+    };
+    avatarEl.src = TG_PHOTO;
+  } else {
+    tryInitialsAvatar();
+  }
+})();
+
+// --- Step 4: تحديث HUD (اسم + ID + رابط الإحالة) ---
+(function setUserInfo() {
+  // ① اسم المستخدم في HUD — اسم أول فقط بدون @username أو ID
+  const nameEl = document.getElementById('hud-username');
+  if (nameEl) {
+    // نعرض الاسم الأول فقط، بدون @username
+    const display = TG_FIRST || 'Player';
+    nameEl.textContent = display;
+  }
+
+  // ② إخفاء عنصر الـ ID تماماً
+  const idEl = document.getElementById('hud-user-id');
+  if (idEl) {
+    idEl.style.display = 'none';
+    idEl.textContent = '';
+  }
+
+  // ③ رابط الإحالة
+  const refEl = document.getElementById('ref-link');
+  if (refEl) {
+    refEl.value = TG_ID
+      ? `https://t.me/tamatoFarm_bot/earn/earn?startapp=ref_${TG_ID}`
+      : 'https://t.me/tamatoFarm_bot/earn/earn?startapp=ref_UNKNOWN';
+  }
 })();
 
 const TOMATO  = { reward: 0.0001, growTime: 30 };
@@ -1967,7 +2088,6 @@ let referralBalance = 0.0;
 let referralFriends = 0;
 let seeds           = 3;
 let waterCount      = 3;
-let waterAdQueue    = 0;
 let day             = 1;
 let farmMode        = 'plant';
 let tickCount       = 0;
@@ -2614,79 +2734,203 @@ function harvestAll() {
   toast(`✂️ Harvested ${ready.length} tomato${ready.length > 1 ? 'es' : ''}!`);
 }
 
-const adCooldown = { 1: false, 3: false, w: false };
+/* ═══════════════════════════════════════════════════════
+   ADSGRAM — نظام الإعلانات الحقيقي
+   الإعلانات تُشغَّل ورا بعض تلقائياً (chain) بدون ضغط إضافي
+   Block IDs: استبدل YOUR_SEED_BLOCK_ID و YOUR_WATER_BLOCK_ID
+   بالـ blockId من لوحة تحكم Adsgram
+═══════════════════════════════════════════════════════ */
+const ADSGRAM_SEED_BLOCK_ID  = '20679';   // ← ضع blockId بتاع Seeds
+const ADSGRAM_WATER_BLOCK_ID = '20679';  // ← ضع blockId بتاع Water
 
+// Controllers — نُهيِّئها مرة واحدة
+let _adcSeed  = null;
+let _adcWater = null;
+
+function getAdcSeed() {
+  if (!_adcSeed && window.Adsgram) {
+    _adcSeed = window.Adsgram.init({ blockId: ADSGRAM_SEED_BLOCK_ID });
+  }
+  return _adcSeed;
+}
+
+function getAdcWater() {
+  if (!_adcWater && window.Adsgram) {
+    _adcWater = window.Adsgram.init({ blockId: ADSGRAM_WATER_BLOCK_ID });
+  }
+  return _adcWater;
+}
+
+const adCooldown = { seed: false, water: false };
+
+/* ── Seeds: يشغّل 3 إعلانات ورا بعض ثم يكافئ بـ 3 بذور ── */
 function watchAd(count) {
-  if (adCooldown[count]) return;
+  // count = 1 أو 3 — نحن نشغّل دائماً "count" إعلانات بشكل متسلسل
+  if (adCooldown.seed) return;
   const btnEl  = document.getElementById('ad-btn-' + count);
   const txtEl  = document.getElementById('txt-'    + count);
   const progEl = document.getElementById('prog-'   + count);
-  adCooldown[count] = true;
-  btnEl.disabled = true;
+
+  const adc = getAdcSeed();
+  if (!adc) {
+    // Adsgram لم يُحمَّل (خارج تيليغرام) — محاكاة للديفيلوب
+    _simulateAds(count, () => {
+      seeds += count;
+      updateStats();
+      playSound('reward');
+      _resetSeedBtn(count, btnEl, txtEl, progEl);
+      toast(`🌱 +${count} Seed${count > 1 ? 's' : ''} added!`);
+      showHint('ad-reward', `🌱 Seeds ready! Go back to Farm\nand tap a plot to plant 🍅`,
+        document.getElementById('nb-farm'), 0);
+    }, () => {
+      _resetSeedBtn(count, btnEl, txtEl, progEl);
+      toast('⚠️ Ad not available, try again later.');
+    });
+    return;
+  }
+
+  adCooldown.seed = true;
+  btnEl.disabled  = true;
   btnEl.classList.add('loading');
-  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> loading ad..</span>`;
+  txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> Loading ad 1/${count}…</span>`;
   progEl.style.width = '0%';
-  void progEl.offsetWidth;
-  setTimeout(() => {
-    seeds += count;
-    updateStats();
-    playSound('reward');
-    btnEl.classList.remove('loading');
-    btnEl.disabled = false;
-    progEl.style.width = '0%';
-    txtEl.textContent = count === 1 ? '▶ Watch Ad → Get 1 Seed' : '▶▶ Watch 3 Ads → Get 3 Seeds';
-    toast(`🌱 +${count} Seed${count > 1 ? 's' : ''} added!`);
-    showHint('ad-reward', `🌱 Seeds ready! Go back to Farm\nand tap a plot to plant 🍅`,
-      document.getElementById('nb-farm'), 0);
-    setTimeout(() => { adCooldown[count] = false; }, 4000);
-  }, count === 1 ? 2800 : 3200);
+
+  let watched = 0;
+
+  function showNextAd() {
+    adc.show()
+      .then(() => {
+        watched++;
+        if (watched < count) {
+          txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> Loading ad ${watched + 1}/${count}…</span>`;
+          // تشغيل الإعلان التالي فوراً بعد انتهاء الأول
+          showNextAd();
+        } else {
+          // كل الإعلانات اتمشاهدت ✅
+          seeds += count;
+          updateStats();
+          playSound('reward');
+          _resetSeedBtn(count, btnEl, txtEl, progEl);
+          toast(`🌱 +${count} Seed${count > 1 ? 's' : ''} added!`);
+          showHint('ad-reward', `🌱 Seeds ready! Go back to Farm\nand tap a plot to plant 🍅`,
+            document.getElementById('nb-farm'), 0);
+          setTimeout(() => { adCooldown.seed = false; }, 4000);
+        }
+      })
+      .catch(() => {
+        // المستخدم أغلق أو حصل خطأ
+        _resetSeedBtn(count, btnEl, txtEl, progEl);
+        adCooldown.seed = false;
+        if (watched > 0) toast(`🌱 Watched ${watched}/${count} ads — try again for full reward.`);
+        else toast('⚠️ Ad not available, try again later.');
+      });
+  }
+
+  showNextAd();
 }
 
+function _resetSeedBtn(count, btnEl, txtEl, progEl) {
+  btnEl.classList.remove('loading');
+  btnEl.disabled = false;
+  progEl.style.width = '0%';
+  txtEl.textContent = count === 1 ? '▶ Watch Ad → Get 1 Seed' : '▶▶ Watch 3 Ads → Get 3 Seeds';
+}
+
+/* ── Water: يشغّل 2 إعلانات ورا بعض ثم يكافئ بـ 3 مياه ── */
 function watchWaterAd() {
-  if (adCooldown.w) return;
+  if (adCooldown.water) return;
   const btnEl  = document.getElementById('ad-btn-w');
   const txtEl  = document.getElementById('txt-w');
   const progEl = document.getElementById('prog-w');
   const cntEl  = document.getElementById('water-ad-count');
-  adCooldown.w = true;
+  const TOTAL  = 2; // عدد الإعلانات المطلوبة
+
+  const adc = getAdcWater();
+  if (!adc) {
+    // محاكاة للديفيلوب
+    _simulateAds(TOTAL, () => {
+      _giveWaterReward(txtEl, progEl, cntEl, btnEl);
+    }, () => {
+      _resetWaterBtn(txtEl, progEl, btnEl);
+      toast('⚠️ Ad not available, try again later.');
+    });
+    return;
+  }
+
+  adCooldown.water = true;
   btnEl.disabled = true;
   btnEl.classList.add('loading-w');
   progEl.style.width = '0%';
-  void progEl.offsetWidth;
-  const nextQueue = waterAdQueue + 1;
-  txtEl.textContent = `📺 Watching ad ${nextQueue}/2…`;
-  setTimeout(() => {
-    waterAdQueue++;
-    if (cntEl) cntEl.textContent = waterAdQueue;
-    // update dots
-    for (let i = 1; i <= 2; i++) {
+
+  let watched = 0;
+
+  function _updateDots(n) {
+    for (let i = 1; i <= TOTAL; i++) {
       const d = document.getElementById('wdot-' + i);
-      if (d) d.classList.toggle('filled', i <= waterAdQueue);
+      if (d) d.classList.toggle('filled', i <= n);
     }
-    btnEl.classList.remove('loading-w');
-    progEl.style.width = '0%';
-    if (waterAdQueue >= 2) {
-      waterAdQueue = 0;
-      if (cntEl) cntEl.textContent = '0';
-      // reset dots
-      for (let i = 1; i <= 2; i++) {
-        const d = document.getElementById('wdot-' + i);
-        if (d) d.classList.remove('filled');
-      }
-      waterCount += 3;
-      updateStats();
-      playSound('reward');
-      txtEl.textContent = '💧 Watch 2 Ads → Get 3 Waters';
-      toast('💧 +3 Waters added! Go water your crops!');
-      showHint('water-reward', '💧 Water your crops to reduce\nthe harvest wait from 30s to 10s! 🍅',
-        document.getElementById('nb-farm'), 0);
-    } else {
-      txtEl.textContent = `💧 Watch 2 Ads → Get 3 Waters (1/2 done ✓)`;
-      toast('📺 Ad 1/2 done! Watch one more for 3 Waters.');
-    }
-    btnEl.disabled = false;
-    setTimeout(() => { adCooldown.w = false; }, 3000);
-  }, 2800);
+    if (cntEl) cntEl.textContent = n;
+  }
+
+  function showNextWaterAd() {
+    txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> Loading ad ${watched + 1}/${TOTAL}…</span>`;
+    adc.show()
+      .then(() => {
+        watched++;
+        _updateDots(watched);
+        if (watched < TOTAL) {
+          // الإعلان التالي فوراً
+          showNextWaterAd();
+        } else {
+          _giveWaterReward(txtEl, progEl, cntEl, btnEl);
+        }
+      })
+      .catch(() => {
+        _resetWaterBtn(txtEl, progEl, btnEl);
+        adCooldown.water = false;
+        if (watched > 0) toast(`📺 Watched ${watched}/${TOTAL} — try again to complete.`);
+        else toast('⚠️ Ad not available, try again later.');
+      });
+  }
+
+  showNextWaterAd();
+}
+
+function _giveWaterReward(txtEl, progEl, cntEl, btnEl) {
+  waterCount += 3;
+  updateStats();
+  playSound('reward');
+  _resetWaterBtn(txtEl, progEl, btnEl);
+  // reset dots
+  for (let i = 1; i <= 2; i++) {
+    const d = document.getElementById('wdot-' + i);
+    if (d) d.classList.remove('filled');
+  }
+  if (cntEl) cntEl.textContent = '0';
+  toast('💧 +3 Waters added! Go water your crops!');
+  showHint('water-reward', '💧 Water your crops to reduce\nthe harvest wait from 30s to 10s! 🍅',
+    document.getElementById('nb-farm'), 0);
+  setTimeout(() => { adCooldown.water = false; }, 3000);
+}
+
+function _resetWaterBtn(txtEl, progEl, btnEl) {
+  btnEl.classList.remove('loading-w');
+  btnEl.disabled = false;
+  progEl.style.width = '0%';
+  txtEl.textContent = '💧 Watch 2 Ads → Get 3 Waters';
+}
+
+/* ── محاكاة للإعلانات خارج تيليغرام (للتطوير فقط) ── */
+function _simulateAds(count, onSuccess, onError) {
+  let i = 0;
+  function next() {
+    i++;
+    setTimeout(() => {
+      if (i < count) { next(); }
+      else { onSuccess(); }
+    }, 1500);
+  }
+  next();
 }
 
 function copyLink() {
@@ -2770,7 +3014,7 @@ function toast(msg) {
 /* ═══════════════════════════
    TASKS
 ═══════════════════════════ */
-const taskState = { earnChannel: 'idle' }; // idle | joined | done
+const taskState = { earnChannel: 'idle', eMoneyChannel: 'idle' }; // idle | joined | done
 
 function handleEarnChannelTask() {
   if (taskState.earnChannel === 'done') return;
@@ -2781,12 +3025,12 @@ function handleEarnChannelTask() {
   const status = document.getElementById('task-status-ec');
 
   if (taskState.earnChannel === 'idle') {
-    window.open('https://t.me/YourEarnChannel', '_blank');
+    window.open('https://t.me/botbababab', '_blank');
     taskState.earnChannel = 'joined';
     txt.textContent  = 'Verify';
     btn.style.background  = 'linear-gradient(135deg,#f57f17,#e65100)';
     btn.style.boxShadow   = '0 3px 12px rgba(245,127,23,0.4)';
-    toast('📢 Joined! Tap Verify to claim your seeds.');
+    toast('📢 Joined! Tap Verify to claim your reward.');
     return;
   }
 
@@ -2810,10 +3054,54 @@ function handleEarnChannelTask() {
       status.classList.add('show');
       status.innerHTML = `
       <img src="asesst/vertify.png" width="22" >`
-      seeds += 10;
+      balance += 0.005; seeds += 0;
       updateStats();
       playSound('reward');
-      toast('🎉 +10 Seeds claimed! Go plant them!');
+      toast('🎉 +0.005 TON claimed! Check your balance!');
+      showSmartHint();
+    }, 3600);
+  }
+}
+
+function handleEMoneyTask() {
+  if (taskState.eMoneyChannel === 'done') return;
+
+  const btn    = document.getElementById('task-btn-em');
+  const txt    = document.getElementById('task-txt-em');
+  const prog   = document.getElementById('task-prog-em');
+  const status = document.getElementById('task-status-em');
+
+  if (taskState.eMoneyChannel === 'idle') {
+    window.open('https://t.me/tt_fhp', '_blank');
+    taskState.eMoneyChannel = 'joined';
+    txt.textContent  = 'Verify';
+    btn.style.background  = 'linear-gradient(135deg,#f57f17,#e65100)';
+    btn.style.boxShadow   = '0 3px 12px rgba(245,127,23,0.4)';
+    toast('📢 Joined E-Money Algeria! Tap Verify to claim.');
+    return;
+  }
+
+  if (taskState.eMoneyChannel === 'joined') {
+    btn.disabled = true;
+    btn.classList.add('verifying');
+    prog.style.width = '0%';
+    void prog.offsetWidth;
+    txt.innerHTML = `<img src="asesst/loading.gif" width="23" height="24">`;
+    txt.style.height = '7px';
+    txt.style.display = 'flex';
+    txt.style.justifyContent = 'center';
+    txt.style.alignItems = 'center';
+
+    setTimeout(() => {
+      btn.classList.remove('verifying');
+      taskState.eMoneyChannel = 'done';
+      btn.style.display = 'none';
+      status.classList.add('show');
+      status.innerHTML = `<img src="asesst/vertify.png" width="22">`;
+      balance += 0.005;
+      updateStats();
+      playSound('reward');
+      toast('🎉 +0.005 TON from E-Money Algeria!');
       showSmartHint();
     }, 3600);
   }
