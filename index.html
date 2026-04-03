@@ -2802,9 +2802,19 @@ function watchAd(count) {
       .then(() => {
         watched++;
         if (watched < count) {
-          txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> Loading ad ${watched + 1}/${count}…</span>`;
-          // تشغيل الإعلان التالي فوراً بعد انتهاء الأول
-          showNextAd();
+          // انتظر 6 ثواني قبل تشغيل الإعلان التالي
+          let remaining = 6;
+          txtEl.innerHTML = `<span class="loadAd">⏳ Next ad in ${remaining}s…</span>`;
+          const countdown = setInterval(() => {
+            remaining--;
+            if (remaining <= 0) {
+              clearInterval(countdown);
+              txtEl.innerHTML = `<span class="loadAd"><img src="asesst/loading.gif" width="23"> Loading ad ${watched + 1}/${count}…</span>`;
+              showNextAd();
+            } else {
+              txtEl.innerHTML = `<span class="loadAd">⏳ Next ad in ${remaining}s…</span>`;
+            }
+          }, 1000);
         } else {
           // كل الإعلانات اتمشاهدت ✅
           seeds += count;
@@ -2879,8 +2889,18 @@ function watchWaterAd() {
         watched++;
         _updateDots(watched);
         if (watched < TOTAL) {
-          // الإعلان التالي فوراً
-          showNextWaterAd();
+          // انتظر 6 ثواني قبل تشغيل الإعلان التالي
+          let remaining = 6;
+          txtEl.innerHTML = `<span class="loadAd">⏳ Next ad in ${remaining}s…</span>`;
+          const countdown = setInterval(() => {
+            remaining--;
+            if (remaining <= 0) {
+              clearInterval(countdown);
+              showNextWaterAd();
+            } else {
+              txtEl.innerHTML = `<span class="loadAd">⏳ Next ad in ${remaining}s…</span>`;
+            }
+          }, 1000);
         } else {
           _giveWaterReward(txtEl, progEl, cntEl, btnEl);
         }
